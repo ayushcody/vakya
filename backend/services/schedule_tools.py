@@ -9,6 +9,8 @@ is in its `tools`, or when it has schedules (services/schedules.py):
     book(schedule?, date, time?, nights?, name, phone)    book it (the turn loop makes the agent read it back first)
     cancel(booking_id)                                    cancel one of this front desk's own bookings
     find_booking(phone)                                   the caller's upcoming bookings (to cancel or change one)
+    queue_status(name?, phone?, schedule?)                today's token, how many are ahead, the expected time and the delay
+                                                          (services/delays.py; see docs/RUNNING_LATE.md)
 
 `schedule` is matched by name, loosely and in Hindi or English; with one schedule it can be left out. Dates and times arrive
 already worked out from the caller's words (services/when.py). Every answer comes from services/availability.Engine, the
@@ -22,9 +24,9 @@ from datetime import date, datetime
 from typing import Any, List, Optional, Tuple
 
 try:
-    from services import availability as av, schedule_bookings as sb, schedules as sch
+    from services import availability as av, delays, schedule_bookings as sb, schedules as sch
 except ImportError:  # pragma: no cover
-    from backend.services import availability as av, schedule_bookings as sb, schedules as sch
+    from backend.services import availability as av, delays, schedule_bookings as sb, schedules as sch
 
 SERVER = "schedules"
 LABEL = "Schedules (check availability, book and cancel on the front desk's own schedules)"
@@ -47,8 +49,10 @@ TOOLS = [
      "description": "Book a time or a stay. Use it only after check_availability said it is free.",
      "schema": {"type": "object",
                 "properties": {"schedule": _SCHEDULE, "date": _DATE, "time": _TIME, "nights": _NIGHTS,
-                               "name": {"type": "string", "description": "Caller's name"},
-                               "phone": {"type": "string", "description": "10 digits"}},
+                               "name": {"type": "string", "description": "Name of the person the booking is for"},
+                               "phone": {"type": "string", "description": "10 digits"},
+                               "relation": {"type": "string", "description": "how the person booked for is related to the caller (mother, father, son, daughter, wife, husband, self, ...); omit when the caller books for themselves"},
+                               "booked_by": {"type": "string", "description": "the caller's own name, only when booking for someone else"}},
                 "required": ["date", "name", "phone"]}},
     {"tool": "cancel",
      "description": "Cancel an upcoming booking and free its time. Ask the caller to confirm first.",
@@ -58,6 +62,14 @@ TOOLS = [
      "description": "Find the upcoming bookings made with a phone number.",
      "schema": {"type": "object", "properties": {"phone": {"type": "string", "description": "10 digits"}},
                 "required": ["phone"]}},
+    {"tool": "queue_status",
+     "description": "Where the caller stands in today's queue: their token, how many patients are ahead, about when they will "
+                    "be seen, and how late the doctor is running. Use it for 'how many before me', 'has the doctor come', "
+                    "'is he late'. Pass the phone number the booking was made with (best) and/or the caller's name.",
+     "schema": {"type": "object",
+                "properties": {"name": {"type": "string", "description": "Caller's name"},
+                               "phone": {"type": "string", "description": "10 digits, the number the booking was made with"},
+                               "schedule": _SCHEDULE}}},
 ]
 
 # Words callers use for what a schedule is called, mapped to the English the names are usually written in.
@@ -177,7 +189,8 @@ def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
         return False, "Which time? Pass the time as HH:MM."
     try:
         row = sb.create(schedule, day=day, at=at, name=args.get("name"), phone=args.get("phone"),
-                        nights=args.get("nights") if stay else None, caller=True, source="agent")
+                        nights=args.get("nights") if stay else None, caller=True, source="agent",
+                        relation=args.get("relation"), booked_by=args.get("booked_by"))
     except sb.BookingRefused as e:
         r = e.result
         before, after = _human(r["before"], stay), _human(r["after"], stay)
@@ -187,8 +200,12 @@ def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
         return False, e.message
     except sch.ScheduleError as e:
         return False, e.message
-    out = sb.public(row)
+    out = sb.public(row, sb.token_map())
     out["say"] = {"en": f"Booked. The booking id is {row['booking_id']}.", "hi": f"बुकिंग हो गई। बुकिंग आईडी {row['booking_id']} है।"}
+    if not stay and day == sch.now(schedule.get("timezone")).date():
+        late = delays.running_late_note(schedule)
+        if late:
+            out["running_late"] = late
     return True, out
 
 
@@ -204,7 +221,8 @@ def _find(agent_id: str, args: dict) -> Tuple[bool, Any]:
         rows = sb.find_upcoming(agent_id, args.get("phone"))
     except sb.BookingProblem as e:
         return False, e.message
-    return True, {"bookings": [sb.public(b) for b in rows]}
+    tokens = sb.token_map()
+    return True, {"bookings": [sb.public(b, tokens) for b in rows]}
 
 
 def _date(value: Any) -> Optional[date]:
@@ -230,6 +248,11 @@ def run(tool: str, args: dict, agent_id: str) -> Tuple[bool, Any]:
             return _cancel(agent_id, args)
         if tool == "find_booking":
             return _find(agent_id, args)
+        if tool == "queue_status":
+            try:
+                return delays.queue_status(agent_id, args.get("name"), args.get("phone"), args.get("schedule"))
+            except sb.BookingProblem as e:
+                return False, e.message
         schedule, problem = resolve_schedule(agent_id, args.get("schedule"))
         if schedule is None:
             return False, problem

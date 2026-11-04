@@ -9,6 +9,7 @@ import { BookingList } from "@/components/desk/BookingList";
 import { NeedsAttention } from "@/components/desk/NeedsAttention";
 import { RecentCalls } from "@/components/desk/RecentCalls";
 import { ScheduleGlance } from "@/components/desk/ScheduleGlance";
+import { TodayQueue } from "@/components/queue/TodayQueue";
 import { SetupChecklist } from "@/components/agents/AgentHeader";
 import { UsageTiles } from "@/components/usage/UsageTiles";
 import { isSameDay, isToday, madeToday, useBookings } from "@/components/desk/calls";
@@ -102,6 +103,8 @@ export default function DeskToday() {
             emptyText="Appointments that start today appear here, with the date and time the front desk read back."
           />
         </section>
+
+        <TodayQueue />
 
         <ScheduleGlance />
 

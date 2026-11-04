@@ -1,10 +1,12 @@
 # Caller Theatre
 
-Nine synthetic callers phone a front desk, and the score comes from what ended up in the booking system, not from how the call sounded. The page is `/theatre` (public) and `/desk/theatre` (in the app): a card per scenario, and each opens the call as bubbles with the tool calls, the audio when there is some, and the scorer's verdict with its reasons. Failures are shown as plainly as passes.
+Ten synthetic callers phone a front desk, and the score comes from what ended up in the booking system, not from how the call sounded. The page is `/theatre` (public) and `/desk/theatre` (in the app): a card per scenario, and each opens the call as bubbles with the tool calls, the audio when there is some, and the scorer's verdict with its reasons. Failures are shown as plainly as passes.
 
 **Synthetic callers, voices by Gnani Timbre, scored automatically** is the label of an audio run. Until the Gnani key exists, the run is a **text run (audio run pending)**: the callers' words are sent as typed text to the same turn endpoint, scoring is identical, and speech recognition, the caller voices and the line noise are not exercised. The audio run switches on by itself once `GNANI_API_KEY` is set (see "The two inputs").
 
-## The nine scenarios
+## The ten scenarios
+
+The tenth, `family-booking-clinic` (a son calls again and books for his mother), was added on 5 Nov: it passes in the text simulation (`simulate.py`, run by the tests) and has not been in a published run yet, so the results table below still covers the first nine.
 
 Data in `backend/bench/theatre/scenarios.json`. A caller is a list of *moves*; a move is spoken when its trigger matches what the agent just said, so a different reply gives a different next line (substrings and shared word lists, how many times it offered, whether it read a given number back). Days are the first open days of the coming week, picked from the front desk's own schedule when the run starts, so a closed day is never asked for.
 
@@ -90,7 +92,7 @@ Result files: `backend/bench/theatre/results/<timestamp>-<model mode>-<input>.js
 ## Offline checks
 
 * `runner.py --dry-run` validates the scenario file and shows what the app's own readers (`services/when.py` for days and times) make of each opening line, and calls nothing.
-* `simulate.py` runs every scenario in text, in about a second, against the real tool loop and a private schedule store with the scripted model, no API and no audio. `backend/tests/test_theatre.py` runs it for all nine, plus the loader, the branching, the scorer and the results API.
+* `simulate.py` runs every scenario in text, in about a second, against the real tool loop and a private schedule store with the scripted model, no API and no audio. `backend/tests/test_theatre.py` runs it for all ten, plus the loader, the branching, the scorer and the results API.
 
 ## Findings the theatre made while it was built
 

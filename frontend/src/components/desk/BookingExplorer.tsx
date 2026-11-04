@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { CalendarCheck, ShieldCheck } from "lucide-react";
 import { Badge, EmptyState } from "@/components/ui";
+import { bookedByWords } from "@/components/queue/queue";
 import { ListView, type ListColumn } from "@/components/ui/ListView";
 import { SOURCE_LABEL, SourceIcon } from "@/components/schedules/bookingWho";
 import { dayOfInstant, formatDay, formatTime } from "@/lib/formatDate";
@@ -43,6 +44,10 @@ function columns(deskName: (b: Booking) => string | null): ListColumn<Booking>[]
           <span title={nameOf(b)} className={cn("truncate text-sm font-medium text-text-primary", b.status === "cancelled" && "line-through decoration-text-secondary")}>
             {nameOf(b)}
           </span>
+          {b.token && b.status !== "cancelled" ? (
+            <span className="shrink-0 rounded-md bg-bg-elevated px-1.5 py-0.5 text-xs font-semibold tabular-nums text-text-secondary">Token {b.token}</span>
+          ) : null}
+          {bookedByWords(b) && <span title={bookedByWords(b)!} className="hidden min-w-0 truncate text-sm text-text-secondary sm:inline">· {bookedByWords(b)}</span>}
           {b.hasEvidence && b.status !== "cancelled" && (
             <span role="img" aria-label="Proof kept" title="Proof kept" className="shrink-0 text-accent-success">
               <ShieldCheck aria-hidden className="size-3.5" />

@@ -7,6 +7,7 @@ jest.mock("@/lib/api", () => ({ api: { get: jest.fn() }, ApiError: class ApiErro
 jest.mock("@/hooks/useApi", () => ({
   useHealth: () => ({ data: { llm: { active: "remote", model: "m1" }, supabase: { configured: false } }, isLoading: false }),
   useEngines: () => ({ data: [{ id: "timbre", name: "Timbre (Gnani)", available: true }], isLoading: false }),
+  useAgents: () => ({ data: [], isLoading: false }),
   useConsentMode: () => ({ data: { consent_mode: "tick", statement: "I agree.", retention_days: 180, contact: null }, isLoading: false }),
 }));
 const get = api.get as jest.Mock;

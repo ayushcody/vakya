@@ -89,6 +89,8 @@ export interface WeekCalendarProps {
   highlight: string[];
   compact: boolean;
   onOpenSlot: (slot: Slot, el: HTMLElement, following: Slot[]) => void;
+  /** When the schedule is running late: the time a booked slot of today is now expected, by slot start ("18:00" -> "6:40 pm"). */
+  expected?: Record<string, string>;
   onBlockRange: (start: string, end: string) => void;
 }
 
@@ -96,7 +98,7 @@ export interface WeekCalendarProps {
  * The week as a compact calendar: sticky time column and day headers, one row per slot, the now line, and
  * press-and-drag down a column to mark a range busy. Arrow keys move between slots; Enter opens the slot.
  */
-export function WeekCalendar({ schedule, days, data, loading, nowMs, highlight, compact, onOpenSlot, onBlockRange }: WeekCalendarProps) {
+export function WeekCalendar({ schedule, days, data, loading, nowMs, highlight, compact, onOpenSlot, onBlockRange, expected }: WeekCalendarProps) {
   const rowH = compact ? 40 : ROW_H;
   const gapH = GAP_H;
   const dayMap = useMemo(() => new Map((data?.days ?? []).map((d) => [d.date, d])), [data]);
@@ -440,7 +442,10 @@ export function WeekCalendar({ schedule, days, data, loading, nowMs, highlight, 
                         ) : state === "free" ? (
                           <span aria-hidden className="text-[var(--cell-accent)] opacity-0 transition-opacity group-hover/cell:opacity-100">+</span>
                         ) : (
-                          <span className="truncate">{joinUp ? "" : slotLabel(slot, cap)}</span>
+                          <span className="truncate">
+                            {joinUp ? "" : slotLabel(slot, cap)}
+                            {d === today.date && expected?.[isoHHMM(slot.start)] ? <span className="font-semibold"> · now about {expected[isoHHMM(slot.start)]}</span> : null}
+                          </span>
                         )}
                       </button>
                     ) : (
