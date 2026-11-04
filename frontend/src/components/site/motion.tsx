@@ -20,13 +20,12 @@ import {
   useInView,
   useMotionTemplate,
   useMotionValue,
-  useReducedMotion,
   useScroll,
   useSpring,
   useTransform,
   type Variants,
 } from "motion/react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 
 /** The site's deceleration curve (matches --s-ease in globals.css). */
 export const EASE = [0.22, 1, 0.36, 1] as const;
@@ -35,10 +34,24 @@ export const SOFT_SPRING = { stiffness: 150, damping: 20, mass: 0.4 };
 /** The spring for cards and buttons that lift. */
 export const LIFT_SPRING = { type: "spring", stiffness: 300, damping: 24 } as const;
 
-/** True when the visitor prefers reduced motion (or before hydration, so the server and first client render agree). */
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+/** null where the browser (or the test environment) has no matchMedia: treat that as "motion is fine". */
+function reducedQuery(): MediaQueryList | null {
+  return typeof window.matchMedia === "function" ? window.matchMedia(REDUCED_QUERY) : null;
+}
+function subscribeReduced(onChange: () => void) {
+  const mq = reducedQuery();
+  mq?.addEventListener("change", onChange);
+  return () => mq?.removeEventListener("change", onChange);
+}
+
+/** True when the visitor prefers reduced motion. It is always false on the server and during hydration, so the first
+ *  client render matches the server HTML; React then re-renders with the real value straight after hydration.
+ *  (motion's useReducedMotion reads the media query during the first client render, which made the server's hidden
+ *  initial styles mismatch the client and stick: the whole page stayed at opacity 0 for reduced-motion visitors.)
+ *  Components that only apply hidden styles on mount key their motion element on this value so they remount clean. */
 export function useStill(): boolean {
-  const reduced = useReducedMotion();
-  return reduced === true;
+  return useSyncExternalStore(subscribeReduced, () => reducedQuery()?.matches ?? false, () => false);
 }
 
 /* ------------------------------------------------------------------ split heading */
@@ -83,6 +96,7 @@ export function SplitHeading({ text, accent, break: br, immediate, delay = 0, as
     ));
   return (
     <Tag
+      key={still ? "still" : "moving"}
       id={id}
       className={className}
       variants={still ? undefined : lineVariants}
@@ -157,7 +171,7 @@ export function Stagger({ children, as = "div", className, ...rest }: { children
   const still = useStill();
   const Tag = motion[as];
   return (
-    <Tag className={className} variants={still ? undefined : staggerParent} initial={still ? false : "hidden"} whileInView="show" viewport={{ once: true, margin: "0px 0px -10% 0px" }} {...rest}>
+    <Tag key={still ? "still" : "moving"} className={className} variants={still ? undefined : staggerParent} initial={still ? false : "hidden"} whileInView="show" viewport={{ once: true, margin: "0px 0px -10% 0px" }} {...rest}>
       {children}
     </Tag>
   );
