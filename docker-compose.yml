@@ -1,0 +1,46 @@
+# `docker compose up` starts postgres + backend + frontend. Put GNANI_API_KEY and GEMINI_API_KEY in .env next to this file.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vakya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vakya_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-vakya}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vakya}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-python:3.11-slim}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vakya}:${POSTGRES_PASSWORD:-vakya_dev}@postgres:5432/${POSTGRES_DB:-vakya}
+    ports:
+      - "8020:8020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8020}
+    ports:
+      - "3010:3010"
+
+volumes:
+  pgdata:

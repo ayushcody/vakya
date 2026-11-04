@@ -1,0 +1,27 @@
+{
+  "_comment": "Retrieval test set. Each question names the document it is about and `gold`: any chunk containing one of these substrings counts as a hit. The eval script checks every gold string occurs in at least one chunk.",
+  "docs": {
+    "clinic": "fixtures/legacy_templates/clinic_receptionist.md"
+  },
+  "questions": [
+    {"doc": "clinic", "lang": "en", "q": "What time does the clinic open on Sunday?", "gold": ["Sunday: 10:00 AM to 1:00 PM"]},
+    {"doc": "clinic", "lang": "en", "q": "Which doctor sees children and on which days?", "gold": ["Dr. Rohan Deshmukh, Paediatrician"]},
+    {"doc": "clinic", "lang": "en", "q": "How much does a dentist consultation cost?", "gold": ["Dentist: ₹300 consultation"]},
+    {"doc": "clinic", "lang": "en", "q": "Can I cancel an appointment without paying anything?", "gold": ["There is no cancellation charge"]},
+    {"doc": "clinic", "lang": "en", "q": "Where is the nearest hospital with a 24-hour emergency room?", "gold": ["Lakeside General Hospital"]},
+    {"doc": "clinic", "lang": "en", "q": "Can the receptionist suggest a medicine for my fever?", "gold": ["cannot give medical advice"]},
+    {"doc": "clinic", "lang": "hi", "q": "रविवार को क्लिनिक कितने बजे खुलता है?", "gold": ["Sunday: 10:00 AM to 1:00 PM"]},
+    {"doc": "clinic", "lang": "hi", "q": "बच्चों के डॉक्टर किन दिनों में बैठते हैं?", "gold": ["Dr. Rohan Deshmukh, Paediatrician"]},
+    {"doc": "clinic", "lang": "hi", "q": "त्वचा के डॉक्टर की फीस कितनी है?", "gold": ["Dermatologist: ₹600"]},
+    {"doc": "clinic", "lang": "hi", "q": "सीने में तेज़ दर्द हो तो क्या करना चाहिए?", "gold": ["call 108 (ambulance) immediately"]},
+    {"doc": "clinic", "lang": "hi", "q": "ख़ून की जाँच की रिपोर्ट कब तक मिल जाती है?", "gold": ["Reports are ready the same day"]},
+    {"doc": "clinic", "lang": "hi", "q": "अपॉइंटमेंट कैंसिल करने के लिए कितने घंटे पहले बताना होगा?", "gold": ["at least 3 hours before the appointment"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Sunday ko clinic kab khulta hai?", "gold": ["Sunday: 10:00 AM to 1:00 PM"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Gynaecologist ki fees kitni hai?", "gold": ["Gynaecologist: ₹700"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Appointment cancel karna ho to kitne ghante pehle batana padta hai?", "gold": ["at least 3 hours before the appointment"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Payment UPI se ho sakta hai kya?", "gold": ["Payment is accepted by cash, UPI"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Pharmacy kitne baje tak khuli rehti hai?", "gold": ["The pharmacy inside the clinic is open"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Dentist kis din aate hain?", "gold": ["Dr. Imran Shaikh, Dentist"]},
+    {"doc": "clinic", "lang": "hinglish", "q": "Clinic ka address kya hai?", "gold": ["14 Lake View Road"]}
+  ]
+}

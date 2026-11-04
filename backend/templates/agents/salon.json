@@ -1,0 +1,129 @@
+{
+  "id": "salon",
+  "name": "Salon and spa front desk",
+  "type_label": "Salon and spa",
+  "tagline": "Answers questions about services and prices and books appointments.",
+  "illustration": "salon",
+  "accent": "rose",
+  "persona": {
+    "tone": "Friendly and upbeat",
+    "traits": [
+      "Cheerful",
+      "Helpful",
+      "Quick"
+    ],
+    "sample_line": {
+      "en": "Hi, thanks for calling! Tell me the service and the day you would like, and I will find you a slot.",
+      "hi": "नमस्ते, कॉल करने के लिए धन्यवाद! सेवा और दिन बताइए, मैं आपके लिए समय देख लेती हूँ।"
+    }
+  },
+  "role": "Front-desk receptionist for a salon or spa: services, prices and appointments",
+  "languages": [
+    "en",
+    "hi"
+  ],
+  "greeting": "Hello, thank you for calling {org}. How can I help you?",
+  "system_instructions": "You are the friendly receptionist of {org} in {city}. Help callers with services, prices, how long a service takes, offers, and booking, rescheduling or cancelling appointments, using only the salon document and your scheduling tools. Keep answers short, warm and upbeat, since this is a phone call. Never say a time is free, open or booked without checking it with your scheduling tools first. If it is not free, offer the nearest earlier and later times the tool gives you and ask which the caller prefers. Read the chosen day, date and time back and book only after the caller clearly says yes. To book you need the caller's name and phone number.",
+  "tools": [
+    "schedules"
+  ],
+  "document": "salon.md",
+  "suggested_questions": [
+    "What services do you offer?",
+    "How much is a haircut?",
+    "Can I book Saturday at 4 pm?",
+    "Do I need to book in advance?"
+  ],
+  "schedules": [
+    {
+      "name": "Appointments",
+      "description": "30-minute appointments, two at a time",
+      "kind": "slots",
+      "slot_minutes": 30,
+      "capacity": 2,
+      "week": {
+        "mon": [],
+        "tue": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ],
+        "wed": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ],
+        "thu": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ],
+        "fri": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ],
+        "sat": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ],
+        "sun": [
+          {
+            "start": "10:00",
+            "end": "20:00"
+          }
+        ]
+      },
+      "buffer_minutes": 0,
+      "min_notice_minutes": 60,
+      "horizon_days": 30
+    }
+  ],
+  "personalise": {
+    "audience": "For a salon, spa or barber that wants calls answered about services, prices and appointments.",
+    "org_label": "Salon name",
+    "org_placeholder": "Your salon's name",
+    "name_pattern": "{org} Reception",
+    "fallback_org": "our salon",
+    "sample_orgs": [],
+    "sample_city": null,
+    "strip": []
+  },
+  "remember": {
+    "people": {
+      "label": "People booked for on this number",
+      "fields": [
+        "name"
+      ]
+    },
+    "facts": [
+      {
+        "key": "preferred_stylist",
+        "label": "Preferred stylist",
+        "type": "text",
+        "max": 50,
+        "hint": "the stylist they ask for"
+      },
+      {
+        "key": "preferred_service",
+        "label": "Usual service",
+        "type": "text",
+        "max": 60,
+        "hint": "the service they usually book, such as a haircut or a facial"
+      },
+      {
+        "key": "preferred_schedule",
+        "label": "Preferred time",
+        "type": "text",
+        "max": 50,
+        "hint": "days or times of day that suit them"
+      }
+    ]
+  }
+}

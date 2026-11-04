@@ -1,0 +1,21 @@
+# Runtime state of ./vakya (pid files, logs)
+.vakya/
+# Local editor/agent run configuration
+.claude/launch.json
+# Playwright output
+frontend/test-results/
+frontend/playwright-report/
+.DS_Store
+*.tsbuildinfo
+# macOS, design-review and runtime caches
+**/.DS_Store
+.impeccable/
+frontend/.cache/
+
+# Local listening samples from trials (synthetic voices; not committed)
+trial-audio/
+
+# Pytest temp directory and Python cache
+.pytest_temp/
+__pycache__/
+*.py[cod]
