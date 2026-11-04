@@ -4,7 +4,7 @@ They live in the appointments store (mcp_servers/appointments.py) next to the ol
 Google Calendar sync, cancelling and the link to the call and its receipt all work for both. A schedule booking row adds:
 
     schedule_id, schedule_name, agent_id (the schedule's front desk), start and end (naive local ISO, the schedule's
-    timezone in `timezone`), nights (a stay), party, note, source "staff" | "agent"
+    timezone in `timezone`), nights (a stay), party, note, source "staff" | "agent" | "walk_in"
 
 and keeps the doctor-booking keys (`doctor`, `specialty`, `weekday`, `reason`) so the older tools still read the file.
 
@@ -106,7 +106,7 @@ def future_bookings(schedule_id: str, rows: Optional[List[dict]] = None) -> List
 
 def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: Any = None, note: Any = None,
            nights: Optional[int] = None, party: Optional[int] = None, caller: bool = False, source: str = "staff",
-           now: Optional[datetime] = None) -> dict:
+           now: Optional[datetime] = None, relation: Any = None, booked_by: Any = None) -> dict:
     """Book a time (`at` "HH:MM" on `day`) or a stay (`day` is the check-in date) and return the stored row. Raises
     BookingRefused when it is not free and BookingProblem for bad input. `caller=True` holds the booking to the minimum
     notice and the horizon (the agent); staff are not held to them."""
@@ -147,9 +147,26 @@ def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: An
             booking["party"] = party
         if text:
             booking["note"] = text
+        booking.update(_on_behalf(relation, booked_by, person))
         data["bookings"].append(booking)
     ap.sync_booking(booking["booking_id"])   # the calendar, after the booking is saved; a failure never undoes it
     return booking
+
+
+def _on_behalf(relation: Any, booked_by: Any, person: str) -> Dict[str, str]:
+    """`relation` (who the person booked for is to the caller: mother, son, ...) and `booked_by` (the caller's own name)
+    when the caller booked for someone else; nothing for a booking for themselves or a name that does not clean up."""
+    rel = re.sub(r"[^a-z ]", "", str(relation or "").lower()).strip()[:20]
+    if not rel or rel == "self":
+        return {}
+    out = {"relation": rel}
+    try:
+        by = clean_name(booked_by) if booked_by else ""
+    except BookingProblem:
+        by = ""
+    if by and by.casefold() != person.casefold():
+        out["booked_by"] = by
+    return out
 
 
 def cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = False) -> dict:
@@ -189,14 +206,59 @@ def find_upcoming(agent_id: str, phone: Any) -> List[dict]:
     return out
 
 
-def public(b: dict) -> Dict[str, Any]:
-    """A booking as the agent's tools show it: the id, the schedule, when and who (never the phone number)."""
+def token_map(rows: Optional[List[dict]] = None, now: Optional[datetime] = None) -> Dict[str, int]:
+    """{booking_id: token} for today's and later days' live time-slot bookings: a booking's token for its day is its place
+    (1-based) among that day's live bookings of its schedule ordered by start. Computed, never stored, so a cancellation
+    renumbers the rest the same way everywhere. Stays have no token."""
+    rows = _ap().all_bookings() if rows is None else rows
+    groups: Dict[tuple, List[tuple]] = {}
+    for b in rows:
+        if not b.get("schedule_id") or b.get("status") == "cancelled" or b.get("nights"):
+            continue
+        try:
+            start = datetime.fromisoformat(str(b["start"])).replace(tzinfo=None)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start.date() < (now or sch.now(b.get("timezone"))).date():
+            continue
+        groups.setdefault((b["schedule_id"], start.date()), []).append((start, sch._id_num(b["booking_id"]), b["booking_id"]))   # noqa: SLF001
+    out: Dict[str, int] = {}
+    for items in groups.values():
+        for i, (_s, _n, bid) in enumerate(sorted(items), start=1):
+            out[bid] = i
+    return out
+
+
+def public(b: dict, tokens: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    """A booking as the agent's tools show it: the id, the schedule, when and who (never the phone number). With `tokens`
+    (token_map) a booking of today or a later day has its `token`; `booked_by` and `relation` are passed on when the stored
+    row has them."""
     out = {"booking_id": b["booking_id"], "schedule": b.get("schedule_name"), "name": b["name"], "date": b["date"],
            "weekday": b.get("weekday"), "time": b["time"], "status": b["status"]}
     if b.get("nights"):
         out["nights"] = b["nights"]
         out["check_out"] = b["end"]
+    if tokens and tokens.get(b["booking_id"]):
+        out["token"] = tokens[b["booking_id"]]
+    for key in ("booked_by", "relation"):
+        if b.get(key):
+            out[key] = b[key]
     return out
+
+
+def create_walk_in(schedule: dict, *, name: Any, phone: Any = None, note: Any = None, now: Optional[datetime] = None) -> dict:
+    """A patient who walked in: staff book them into the first free slot after now today (source "walk_in"), so they have a
+    token like everyone else. Raises BookingProblem when the schedule has no free slot left today, and the errors of
+    `create`."""
+    if schedule["kind"] == "nights":
+        raise BookingProblem("NOT_TIME_SLOTS", "Walk-ins are for time-slot schedules.", "schedule_id")
+    current = now or sch.now(schedule.get("timezone"))
+    engine = engine_for(schedule, now=current)
+    slot = next((s for s in engine.slots(current.date()) if s.status in ("free", "booked") and s.remaining > 0), None)
+    if slot is None:
+        raise BookingProblem("NO_SLOT_LEFT", "There is no free slot left today for a walk-in.", "schedule_id")
+    return create(schedule, day=slot.start.date(), at=slot.start.strftime("%H:%M"), name=name, phone=phone, note=note,
+                  caller=False, source="walk_in", now=current)
 
 
 # ---------------------------------------------------------------------------------------------- who a booking is for
@@ -244,7 +306,7 @@ class Who:
 
     def fields(self, phone: Any, source: Any, conversation_id: Optional[str]) -> Dict[str, Any]:
         conv = self.conversation(conversation_id)
-        if source == "staff":
+        if source in ("staff", "walk_in"):
             kind = "staff"
         else:
             kind = {"missed_call": "missed_call", "web": "web", "phone": "phone"}.get((conv or {}).get("source"), "phone")

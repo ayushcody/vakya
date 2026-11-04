@@ -62,9 +62,9 @@ test("the list shows the name, number ending, language, people, last call and bo
   const row = await screen.findByRole("row", { name: /Sunita Sharma/ });
   expect(within(row).getByText("••••3210")).toBeInTheDocument();
   expect(within(row).getByText("Hindi")).toBeInTheDocument();
-  expect(within(row).getByText("Sunita Sharma, Rohan")).toBeInTheDocument();
+  expect(within(within(row).getByTestId("family-chips")).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Sunita", "Rohan · son"]);
   expect(within(screen.getByRole("grid", { name: "Callers" })).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(
-    ["Name", "Number ending", "Language", "People", "Last call", "Bookings"],
+    ["Name", "Number ending", "Language", "Family", "Last call", "Bookings"],
   );
   expect(screen.queryByTestId("caller-card")).toBeNull();   // nothing is open until a row is chosen
 });
@@ -132,7 +132,7 @@ test("the bookings of a card are fetched when the owner opens them", async () =>
   serve([sunita]);
   view();
   const card = await pick(/Sunita Sharma/);
-  expect(get.mock.calls.some(([p]) => String(p).includes("caller_ref="))).toBe(false);
+  expect(within(card).queryByTestId("caller-bookings")).toBeNull();   // the list stays closed until it is opened (the family card reads the same bookings for next and last)
   fireEvent.click(within(card).getByRole("button", { name: "Show bookings" }));
   expect(await within(card).findByTestId("caller-bookings")).toBeInTheDocument();
   fireEvent.click(within(card).getByRole("button", { name: "Hide bookings" }));
@@ -218,4 +218,99 @@ test("the What Vakya remembers panel shows this call's details first, then what 
 test("the panel says so when nothing is known yet", () => {
   render(<WhatVakyaRemembers profile={null} slots={null} title="Remembered" />);
   expect(screen.getByRole("region", { name: "Remembered" })).toHaveTextContent(/Nothing yet/);
+});
+
+// ---------------------------------------------------------------------------------- one number, the whole family
+
+const kulkarni: CallerProfile = {
+  ...sunita, id: "ref-rahul", caller_ref: "ref-rahul", display_name: "Rahul Kulkarni", number_masked: "••••4455", facts: [], follow_ups: [],
+  people: [
+    { name: "Sunita Kulkarni", relation: "mother", age_band: "senior", last_booked_at: now,
+      facts: [{ key: "preferred_doctor", label: "Preferred doctor", value: "Dr. Joshi" }], last_booking: { date: "2026-10-12", time: "10:00", purpose: "follow-up" } },
+    { name: "Rahul Kulkarni", relation: "self" },
+  ],
+  last_person: "Sunita Kulkarni",
+};
+const familyBookings = [
+  { id: "F1", name: "Sunita Kulkarni", service: "Dr. Joshi", reason: "follow-up", start: soon, date: soon.slice(0, 10), time: "17:00", status: "booked" },
+  { id: "F2", name: "Rahul Kulkarni", service: "Dr. Joshi", reason: "check-up", start: later, date: later.slice(0, 10), time: "09:00", status: "booked" },
+];
+function serveFamily(next: CallerProfile[] = [kulkarni]) {
+  get.mockReset().mockImplementation(async (path: string) => {
+    if (path.startsWith("/api/callers")) return { enabled: true, callers: next, total: next.length, limit: 200, offset: 0 };
+    if (path.startsWith("/api/bookings")) return { bookings: familyBookings };
+    return {};
+  });
+}
+
+test("the list shows the family as small chips with the relation", async () => {
+  serveFamily();
+  view();
+  const row = await screen.findByRole("row", { name: /Rahul Kulkarni/ });
+  expect(within(within(row).getByTestId("family-chips")).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Sunita · mother", "Rahul · self"]);
+});
+
+test("the details pane has a family card per person: relation, age band, usual details, last and next booking", async () => {
+  serveFamily();
+  view();
+  await pick(/Rahul Kulkarni/);
+  const family = await screen.findByTestId("family-card");
+  expect(within(family).getByRole("heading", { name: "One number, the whole family" })).toBeInTheDocument();
+  expect(within(family).getByText(/Is this for Sunita again, or for someone else\?/)).toBeInTheDocument();
+  const [mother, self] = within(family).getAllByTestId("family-person");
+  expect(within(mother).getByText("Sunita Kulkarni")).toBeInTheDocument();
+  expect(within(mother).getByText("Mother · 60+")).toBeInTheDocument();
+  expect(within(mother).getByText("Dr. Joshi")).toBeInTheDocument();
+  expect(within(mother).getByText(/12 Oct, 10 am · follow-up/)).toBeInTheDocument();
+  await waitFor(() => expect(within(mother).getByText(/5 pm · follow-up/)).toBeInTheDocument());   // the next booking, from /api/bookings
+  expect(within(self).getByText("Self")).toBeInTheDocument();
+  await waitFor(() => expect(within(self).getByText(/check-up/)).toBeInTheDocument());
+  expect(get.mock.calls.some(([p]) => String(p) === "/api/bookings?caller_ref=ref-rahul")).toBe(true);
+});
+
+test("the owner changes a person's relation from the family card", async () => {
+  serveFamily();
+  put.mockResolvedValue(kulkarni);
+  view();
+  await pick(/Rahul Kulkarni/);
+  const [mother] = await screen.findAllByTestId("family-person");
+  fireEvent.click(within(mother).getByRole("button", { name: "Edit Sunita Kulkarni" }));
+  fireEvent.change(within(mother).getByLabelText("Name"), { target: { value: "Sunita Joshi" } });
+  fireEvent.change(within(mother).getByLabelText("Relation to the caller"), { target: { value: "grandmother" } });
+  fireEvent.click(within(mother).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(put).toHaveBeenCalledWith("/api/callers/ref-rahul/people/Sunita%20Kulkarni", { name: "Sunita Joshi", relation: "grandmother", age_band: "senior" }));
+  expect(toast.success).toHaveBeenCalled();
+});
+
+test("a person the server refuses is shown with its reason and stays editable", async () => {
+  serveFamily();
+  put.mockRejectedValue(new Error("relation: use mother, father, son"));
+  view();
+  await pick(/Rahul Kulkarni/);
+  const [mother] = await screen.findAllByTestId("family-person");
+  fireEvent.click(within(mother).getByRole("button", { name: "Edit Sunita Kulkarni" }));
+  fireEvent.click(within(mother).getByRole("button", { name: "Save" }));
+  expect(await within(mother).findByRole("alert")).toHaveTextContent("relation: use mother, father, son");
+});
+
+test("the owner forgets one person after confirming; the caller stays", async () => {
+  serveFamily();
+  del.mockResolvedValue({ ...kulkarni, people: [kulkarni.people![1]] });
+  view();
+  await pick(/Rahul Kulkarni/);
+  const [mother] = await screen.findAllByTestId("family-person");
+  fireEvent.click(within(mother).getByRole("button", { name: "Forget Sunita Kulkarni" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("The caller and the rest of the family stay");
+  expect(del).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Forget Sunita" }));
+  await waitFor(() => expect(del).toHaveBeenCalledWith("/api/callers/ref-rahul/people/Sunita%20Kulkarni"));
+  expect(del).not.toHaveBeenCalledWith("/api/callers/ref-rahul");
+});
+
+test("a number with nobody booked for yet says so", async () => {
+  serveFamily([{ ...kulkarni, people: [] }]);
+  view();
+  await pick(/Rahul Kulkarni/);
+  expect(await screen.findByText(/Nobody yet\. When this number books for someone/)).toBeInTheDocument();
 });

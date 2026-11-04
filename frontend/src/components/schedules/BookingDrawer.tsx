@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import useSWR from "swr";
-import { CalendarClock, Fingerprint, Lock, Globe2, Repeat, Users, X } from "lucide-react";
+import { CalendarClock, Fingerprint, Lock, Globe2, Repeat, Ticket, UserRound, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Skeleton } from "@/components/ui";
 import { BookingTimeline } from "@/components/verify/BookingTimeline";
 import type { BookingEvidence, EvidenceItem } from "@/components/verify/types";
 import { errMessage } from "@/components/desk/format";
+import { bookedByWords } from "@/components/queue/queue";
 import { cancelBooking, useScheduleBookings, type Booking } from "@/components/desk/calls";
 import { api, ApiError } from "@/lib/api";
 import { APP_FONT_CLASSES } from "@/lib/appFonts";
@@ -153,6 +154,12 @@ export function BookingDrawer({ booking, onClose, onChanged }: { booking: Bookin
           <ul className="mt-3.5 space-y-2 text-sm text-text-primary">
             {count > 1 && (
               <li className="flex items-center gap-2"><Repeat aria-hidden className="size-4 shrink-0 text-text-secondary" />Returning caller · {ordinal(count)} booking</li>
+            )}
+            {booking.token ? (
+              <li className="flex items-center gap-2"><Ticket aria-hidden className="size-4 shrink-0 text-text-secondary" />Token {booking.token} of the day</li>
+            ) : null}
+            {bookedByWords(booking) && (
+              <li className="flex items-center gap-2"><UserRound aria-hidden className="size-4 shrink-0 text-text-secondary" />{bookedByWords(booking)!.replace(/^b/, "B")}</li>
             )}
             {otherNames.length > 0 && (
               <li className="flex items-center gap-2"><Users aria-hidden className="size-4 shrink-0 text-text-secondary" />Also booked on this number: {otherNames.join(", ")}</li>

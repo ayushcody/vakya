@@ -18,8 +18,8 @@ says so.
 | Ledger and budget | `backend/services/usage_ledger.py` | The rates, the append-only usage file, the budget guard, the summaries. |
 | Held lines | `backend/services/gnani_hold_lines.py` | The pre-rendered "one moment" and "I will call you back" lines (below). |
 | Provider logic | `backend/services/gnani.py` | Language-code maps, voices, keyterms, the audio glue, the acronym repair. |
-| Recognition | `backend/services/asr.py` | REST `POST /stt/v3`, `format=codemix`, model `GNANI_STT_MODEL`. `language_code` is the agent's languages (at most four, `hi-IN,en-IN`; `indic-auto` when unknown or on prisma-v2.5 with several). `keyterms` are `GNANI_KEYTERMS` plus the names and terms the agent's documents mention. `previous_text` is the caller's previous utterance. The detected language goes into the turn's hints. Browser recordings (webm) are re-encoded to WAV first. |
-| Voices | engine `timbre` | `POST /api/v1/tts/inference`. Talk page and web call: 24 kHz WAV. Phone: raw PCM16 at 8 kHz. Registered for hi, mr, bn, ta, te, kn, ml, gu, pa, en and `hi-en`. |
+| Recognition | `backend/services/asr.py` | REST `POST /stt/v3`, `format=codemix`, model `GNANI_STT_MODEL`. `language_code` is the agent's languages (at most four, `hi-IN,en-IN`; `indic-auto` when unknown or on prisma-v2.5 with several). `keyterms` are `GNANI_KEYTERMS`, the desk's learnt vocabulary, the words the expected answer brings (weekday and month names, yes and no) and the names and terms the agent's documents mention (at most 200 in all). `previous_text` is the caller's previous utterance (Gnani keeps its last 600 characters). `topic`, `speaker_names`, `enable_substitution` and `substitution_map` and the `X-API-Request-ID` header carry what the desk has learnt and what the caller is about to say: see [HEARING.md](HEARING.md). The detected language, `request_id` and `processing_time` go into the turn's hints. Browser recordings (webm) are re-encoded to WAV first. |
+| Voices | engine `timbre` | `POST /api/v1/tts/inference`. `language` is always named: `hi-IN`, `mr-IN`, `hi-en` and so on. With `auto` Gnani resolves Devanagari text to Hindi (https://docs.gnani.ai/api/TTS/tts-input-formating.md), so a Marathi reply would have its numbers read the Hindi way; `gnani.tts_language_code` therefore sends `mr-IN` for Marathi, and only an unknown language with Latin text is `auto`. Talk page and web call: 24 kHz WAV. Phone: raw PCM16 at 8 kHz. Registered for hi, mr, bn, ta, te, kn, ml, gu, pa, en and `hi-en`. |
 | Cloning | engine `timbre_clone` | The consent-verified recording is sent to `/api/v1/tts/voice-clone/embeddings`; the 768-number embedding is stored with the voice, sealed like the recording. Speaking uses `model: vachana-vc-v1` with `speaker_embedding`. The consent check and the receipts are untouched. |
 | Receipts | `backend/services/licences.py` | `engine_licence` is "Gnani AI API terms" for `timbre` and `timbre_clone`. |
 
@@ -183,9 +183,12 @@ Nothing has run against the real API with a valid key. The tests (`backend/tests
 `test_gnani_providers.py`, `test_gnani_gateway.py`, `test_gnani_hold_lines.py`, `test_usage_ledger.py`, `test_usage_api.py`) use
 `httpx.MockTransport` and fakes. Guessed, in one place each so a first failing call is a one-line fix in `gnani_client.py`:
 
-- **STT form fields.** `language_code`, `model`, `format`, `keyterms`, `previous_text` follow the documentation. A list of language
-  codes and the keyterms are sent comma-separated in one multipart field (`_stt_form`); the API may want a JSON array or repeated
-  fields.
+- **STT form fields.** `language_code`, `model`, `format`, `keyterms`, `previous_text`, `topic`, `speaker_names`, `enable_substitution` and
+  `substitution_map` follow https://docs.gnani.ai/api/STT/speech-to-text.md. The list fields (`keyterms`, `speaker_names`) are sent as
+  JSON arrays (the page allows JSON or comma-separated; JSON keeps a phrase with a comma whole), `substitution_map` as a JSON list of
+  `{"patterns": [...], "replacement": "..."}` with `enable_substitution` `"true"` (at most 10 rules), and `X-API-Request-ID` is a
+  header. A list of language codes stays comma-separated (the page's own example). Not yet proven against a live key: that every
+  multipart text field is read as written here, and what the API does with a rule that matches nothing.
 - **TTS body.** `{text, model, voice, language, speed, audio_config: {sample_rate, format}}`; for a cloned voice `voice` is dropped
   and `speaker_embedding` added with `model: vachana-vc-v1`. The reply is taken as the audio bytes (or a JSON body with base64
   under `audio`/`audio_content`/`audio_base64`/`data`).

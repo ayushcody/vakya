@@ -11,6 +11,7 @@ import { errMessage } from "@/components/desk/format";
 import { ListView } from "@/components/ui/ListView";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { FamilyCard } from "@/components/memory";
 import { CallerCard } from "../calls/CallerCard";
 import { CALLERS_KEY, type CallerProfile, type CallersResponse } from "../calls/callers";
 import { callerColumns, callerKey } from "./CallersList";
@@ -61,7 +62,7 @@ function CallersContent() {
     <PageHeader
       width="full"
       title="Callers"
-      description="What the front desk remembers about each caller, so a returning caller is greeted by name, in their language, and not asked for details they already gave. Pick a caller to edit anything, add a note for the next call, or forget them and the next call starts fresh."
+      description="One number, the whole family: what the front desk remembers about each caller and the people they book for, so a son ringing for his mother is greeted by name, in their language, and asked whether it is for her again. Pick a caller to edit anything, add a note for the next call, or forget them and the next call starts fresh."
     >
       {error && <ErrorState title="Could not load the callers" message={errMessage(error, "Check that the API is running.")} onRetry={() => mutate()} />}
       {isLoading && (
@@ -120,6 +121,7 @@ function CallersContent() {
                 onForgotten={async () => { setOpen(false); setSelected(null); await mutate(); }}
                 onChanged={() => mutate()}
               />
+              <FamilyCard key={`family-${chosen.id}`} className="mt-3" profile={chosen} onChanged={() => mutate()} />
             </aside>
           )}
         </div>

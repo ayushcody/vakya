@@ -109,6 +109,7 @@ def public_booking(b: dict, zone: ZoneInfo, who: Optional["sb.Who"] = None) -> D
         "schedule_id": b.get("schedule_id") or None, "schedule_name": b.get("schedule_name") or None,
         "nights": b.get("nights") or None, "party": b.get("party") or None, "note": b.get("note") or None,
         "evidence_id": b.get("evidence_id") or None, "has_evidence": bool(b.get("evidence_id")),
+        "booked_by": b.get("booked_by") or None, "relation": b.get("relation") or None,
         **(who.fields(b.get("phone"), b.get("source"), b.get("conversation_id")) if who is not None else {}),
     }
 

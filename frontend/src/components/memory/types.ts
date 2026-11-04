@@ -7,9 +7,14 @@ export interface CallerFact {
 
 export interface CallerPerson {
   name: string;
+  /** To the caller, in English: mother, father, son, daughter, wife, husband, ..., "self" (the caller) or "other". */
   relation?: string;
   age_band?: string;
   last_booked_at?: string;
+  /** This person's usual details (a usual doctor), as chips. */
+  facts?: CallerFact[];
+  /** The last booking made for this person. */
+  last_booking?: { date?: string; time?: string; purpose?: string };
 }
 
 export interface CallerProfile {
@@ -28,7 +33,7 @@ export interface CallerProfile {
   call_count: number;
   /** The details of the agent's trade (a preferred doctor, a party size), as chips. */
   facts?: CallerFact[];
-  /** The people booked for on this number (a mother booking for her son), and the last one booked for. */
+  /** The family of this number: the people booked for (a son booking for his mother), oldest first, and the last one booked for. */
   people?: CallerPerson[];
   last_person?: string | null;
   /** "phone", "web call" (the caller gave the number in a browser call: not verified) or "owner". */

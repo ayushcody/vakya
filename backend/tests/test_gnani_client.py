@@ -44,7 +44,7 @@ def test_transcribe_sends_the_documented_fields(api):
     assert req.headers["x-api-key-id"] == KEY
     body = body_of(req)
     for needle in ('name="audio_file"', 'name="language_code"', "hi-IN,en-IN", 'name="model"', "prisma-v3.0",
-                   'name="format"', "codemix", 'name="keyterms"', "Sunrise Clinic,OPD", 'name="previous_text"',
+                   'name="format"', "codemix", 'name="keyterms"', '["Sunrise Clinic", "OPD"]', 'name="previous_text"',
                    "book an appointment"):
         assert needle in body, needle
     assert out["text"] == "नमस्ते" and out["language"] == "hi-IN" and out["provider"] == "gnani"

@@ -180,6 +180,12 @@ def _schedules_and_bookings_private(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _hearing_private(monkeypatch, tmp_path):
+    """What a desk has learnt to hear (services/hearing.py) lives in a file under tmp_path, never backend/data."""
+    monkeypatch.setenv("VAKYA_HEARING_FILE", str(tmp_path / "hearing" / "hearing.json"))
+
+
+@pytest.fixture(autouse=True)
 def _no_real_calendar(monkeypatch):
     """No test books on the developer's real Google Calendar: a test that needs one fakes services/gcal itself."""
     monkeypatch.delenv("GOOGLE_CALENDAR_ID", raising=False)

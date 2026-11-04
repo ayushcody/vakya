@@ -898,6 +898,7 @@ class CallSession:
             run.asr_previous_agent_text = self.last_agent_text   # what Prisma's previous_text hint follows
             run.asr_previous_user_text = self.last_user_text     # for Gnani's previous_text hint
             run.asr_pre = asr_pre     # this recording's speech recognition, when the call already started it
+            run.asr_conversation_id = self.conversation_id   # the caller's known names and the request id (services/hearing.py)
             if inflight is not None:
                 inflight.run = run
             b.remember_stream_turn(turn_id, run.user_id)
@@ -1099,7 +1100,8 @@ class CallSession:
     def _start_precheck(self, pieces: List[bytes], wav: bytes) -> _Precheck:
         run = types.SimpleNamespace(agent=self.agent, user_id=self.claims["u"], storage_mode=self.claims["m"],
                                     asr_previous_agent_text=self.last_agent_text,
-                                    asr_previous_user_text=self.last_user_text)
+                                    asr_previous_user_text=self.last_user_text,
+                                    asr_conversation_id=self.conversation_id)
         task = asyncio.ensure_future(self.b.asr_for_turn(run, wav))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())   # (never "exception was never retrieved")
         self._pre = _Precheck(list(pieces), wav, task, time.monotonic())

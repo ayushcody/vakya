@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { api } from "@/lib/api";
+import { initialHearing, reduceHearing, type HearingState } from "@/components/hearing/liveHearing";
 import { clearToast, initialLive, reduceLive, type EventsResponse, type LiveState } from "@/lib/liveCall";
 
 type Action = { type: "events"; events: EventsResponse["events"] } | { type: "reset" } | { type: "toast_done" };
@@ -19,11 +20,18 @@ function reducer(state: LiveState, a: Action): LiveState {
  */
 export function useLiveEvents(agentId: string | null | undefined, enabled = true) {
   const [state, dispatch] = useReducer(reducer, undefined, initialLive);
+  // What the desk was listening for on each turn, and the corrections that probably ran (the `hearing` events).
+  const [hearing, dispatchHearing] = useReducer(
+    (h: HearingState, a: { events: unknown[] } | "reset") => (a === "reset" ? initialHearing() : reduceHearing(h, a.events)),
+    undefined,
+    initialHearing
+  );
   const seq = useRef(0); // the newest event seen, read by the polling loop (not by rendering)
 
   useEffect(() => {
     seq.current = 0;
     dispatch({ type: "reset" });
+    dispatchHearing("reset");
     if (!agentId || !enabled) return;
     let alive = true;
     const ctl = new AbortController();
@@ -42,9 +50,13 @@ export function useLiveEvents(agentId: string | null | undefined, enabled = true
           if (res.head < seq.current) {
             seq.current = 0;
             dispatch({ type: "reset" }); // the server restarted: its numbering began again
+            dispatchHearing("reset");
             continue;
           }
-          if (res.events.length) dispatch({ type: "events", events: res.events });
+          if (res.events.length) {
+            dispatch({ type: "events", events: res.events });
+            dispatchHearing({ events: res.events });
+          }
           seq.current = Math.max(seq.current, res.last_seq);
           // An answer with nothing in it that came back at once (a server that does not hold the request) must not turn
           // this loop into a busy one.
@@ -68,6 +80,9 @@ export function useLiveEvents(agentId: string | null | undefined, enabled = true
   }, [agentId, enabled]);
 
   const dismissToast = useCallback(() => dispatch({ type: "toast_done" }), []);
-  const push = useCallback((events: EventsResponse["events"]) => dispatch({ type: "events", events }), []);
-  return { state, dismissToast, push };
+  const push = useCallback((events: EventsResponse["events"]) => {
+    dispatch({ type: "events", events });
+    dispatchHearing({ events });
+  }, []);
+  return { state, hearing, dismissToast, push };
 }

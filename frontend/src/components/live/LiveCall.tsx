@@ -23,7 +23,7 @@ import { useLiveEvents } from "./useLiveEvents";
  * the booking toast shows on both.
  */
 export function LiveCall({ agentId }: { agentId: string }) {
-  const { state, dismissToast } = useLiveEvents(agentId);
+  const { state, hearing, dismissToast } = useLiveEvents(agentId);
   const schedules = useSchedules(agentId);
   const bookings = useScheduleBookings(null);
   const reduce = useReducedMotion();
@@ -76,7 +76,7 @@ export function LiveCall({ agentId }: { agentId: string }) {
             </div>
           </div>
         ) : (
-          <LiveTranscript lines={state.lines} now={now} maxHeight={wide ? "min(60vh, 38rem)" : "56vh"} />
+          <LiveTranscript lines={state.lines} now={now} maxHeight={wide ? "min(60vh, 38rem)" : "56vh"} agentId={agentId} hearing={hearing} />
         )}
       </div>
       <div className="mt-4 space-y-3 border-t border-border pt-4">

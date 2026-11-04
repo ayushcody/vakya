@@ -140,12 +140,17 @@ def collapse_spelled_acronyms(text: str) -> str:
 
 def transcribe(audio: bytes, *, filename: str = "audio.wav", content_type: str = "audio/wav",
                languages: Optional[Iterable[str]] = None, keyterms: Optional[Iterable[str]] = None,
-               previous_text: Optional[str] = None) -> dict:
+               previous_text: Optional[str] = None, topic: Optional[str] = None,
+               speaker_names: Optional[Iterable[str]] = None, substitution_map: Optional[Iterable[Any]] = None,
+               request_id: Optional[str] = None) -> dict:
     """One utterance through Prisma with the configured model and format. Blocking (run it in a thread). Returns the
-    client's dict with `language` mapped to the app's two-letter code (None when Gnani did not say)."""
+    client's dict with `language` mapped to the app's two-letter code (None when Gnani did not say). `topic`,
+    `speaker_names`, `substitution_map` (the desk's learnt corrections, services/hearing.py) and `request_id` are the
+    context fields of the page https://docs.gnani.ai/api/STT/speech-to-text.md; see gnani_client._stt_form."""
     out = client.transcribe(audio, language=stt_language_code(languages), model=stt_model(), fmt=stt_format(),
                             keyterms=merge_keyterms(env_keyterms(), keyterms or []), previous_text=previous_text,
-                            filename=filename, content_type=content_type)
+                            topic=topic, speaker_names=speaker_names, substitution_map=substitution_map,
+                            request_id=request_id, filename=filename, content_type=content_type)
     out["language"] = two_letter(out.get("language"))
     fixed = collapse_spelled_acronyms(out.get("text") or "")
     if fixed != out.get("text"):
@@ -159,12 +164,30 @@ def tts_model() -> str:
     return _env("GNANI_TTS_MODEL", DEFAULT_TTS_MODEL)
 
 
-def tts_language_code(language: str) -> str:
-    """Timbre's `language` for an app language code ("hi" -> "hi-IN", "hinglish" -> "hi-en", unknown -> "auto")."""
+_LANGUAGE_NAMES = {"marathi": "mr", "mar": "mr", "hindi": "hi", "hin": "hi", "english": "en", "eng": "en"}
+
+
+def tts_language_code(language: str, text: Optional[str] = None) -> str:
+    """Timbre's `language` for an app language code ("hi" -> "hi-IN", "mr" -> "mr-IN", "hinglish" -> "hi-en").
+
+    Never "auto" for Hindi or Marathi. With `language: auto` Gnani resolves Devanagari text to Hindi
+    (https://docs.gnani.ai/api/TTS/tts-input-formating.md), so a Marathi reply would have its numbers read the Hindi way;
+    Marathi therefore always names "mr-IN" explicitly. An unknown code is "auto", except that when the text is Devanagari
+    and carries Marathi function words (and more of them than Hindi ones) it is "mr-IN", and other Devanagari text is "hi-IN"."""
     low = str(language or "").strip().lower().replace("_", "-")
     if low in HINGLISH:
         return "hi-en"
-    return LANGUAGE_CODES.get(low.split("-")[0], "auto")
+    short = _LANGUAGE_NAMES.get(low, low.split("-")[0])
+    if short in LANGUAGE_CODES:
+        return LANGUAGE_CODES[short]
+    if text and any("\u0900" <= ch <= "\u097f" for ch in text):
+        try:
+            from services import call_events   # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import call_events   # noqa: PLC0415
+        lang, _sure = call_events.devanagari_language(text)
+        return LANGUAGE_CODES[lang]
+    return "auto"
 
 
 def voices() -> List[Tuple[str, str]]:
@@ -209,6 +232,6 @@ def synth(text: str, language: str, *, phone: bool = False, speaker_embedding: O
     path resamples to the call's rate; 8 kHz needs no change)."""
     rate, fmt = (PHONE_RATE, "raw") if phone else (PREVIEW_RATE, "wav")
     data = client.synthesize(text, voice=None if speaker_embedding else (voice or voice_for(language)),
-                             language=tts_language_code(language), speed=speed, sample_rate=rate, fmt=fmt,
+                             language=tts_language_code(language, text), speed=speed, sample_rate=rate, fmt=fmt,
                              model=tts_model(), speaker_embedding=speaker_embedding)
     return audio_to_float(data, fmt, rate)

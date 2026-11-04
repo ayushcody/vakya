@@ -48,7 +48,7 @@ def brain_for(data, n):
 
 def test_nine_scenarios_load_and_cover_what_was_asked(data):
     ss = data["scenarios"]
-    assert [s["n"] for s in ss] == list(range(1, 10))
+    assert [s["n"] for s in ss] == list(range(1, len(ss) + 1)) and len(ss) >= 9
     assert {s["template"] for s in ss} >= {"clinic", "salon", "hotel", "restaurant"}
     assert {s["language"] for s in ss} == {"mr", "hinglish", "hi", "en"}
     assert all(s["channel"]["codec"] == "g711" for s in ss)
@@ -242,7 +242,7 @@ def test_the_summary_counts_what_the_cards_show():
 
 # ------------------------------------------------- the scripted model, the real tool loop, every scenario in text
 
-@pytest.mark.parametrize("n", range(1, 10))
+@pytest.mark.parametrize("n", range(1, 11))
 def test_each_scenario_passes_in_text_against_the_real_tools(data, tmp_path, n):
     rec = simulate.simulate(by_n(data, n), data["vocab"], tmp_path, today=date.today())
     assert rec["verdict"]["pass"], rec["verdict"]["reason"] + "\n" + "\n".join(

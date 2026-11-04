@@ -11,6 +11,10 @@ rings again is greeted by name and not asked for what they already told us.
                                                             add_note (one more "ask next time" note) or follow_ups (the
                                                             notes that stay); a value Vakya never keeps (an identity number,
                                                             a card, an OTP, a password, a health condition) is a 422
+    PATCH  /api/callers/{number}/people/{name}              edit one person of the family: name (rename), relation (mother,
+                                                            father, son, daughter, wife, husband, ..., self, other, in English),
+                                                            age_band, facts; returns the whole profile
+    DELETE /api/callers/{number}/people/{name}              forget one person of the family, the rest stays
     DELETE /api/callers/{number}                            forget this caller: the profile is deleted at once
 
 Numbers are never returned in full: a profile carries `number_masked` ("••••3210") and an `id` (also `caller_ref`: the
@@ -103,6 +107,17 @@ class PersonIn(BaseModel):
     name: str = Field(..., max_length=60)
     relation: Optional[str] = Field(None, max_length=24)
     age_band: Optional[str] = Field(None, max_length=12)
+    facts: Optional[Dict[str, Optional[str]]] = None
+    last_booking: Optional[Dict[str, str]] = None
+
+
+class PersonEdit(BaseModel):
+    """One person of the family, edited from the desk: only the fields sent change."""
+    model_config = ConfigDict(extra="forbid")
+    name: Optional[str] = Field(None, max_length=60)
+    relation: Optional[str] = Field(None, max_length=24)
+    age_band: Optional[str] = Field(None, max_length=12)
+    facts: Optional[Dict[str, Optional[str]]] = None
 
 
 class CallerEdit(BaseModel):
@@ -136,6 +151,39 @@ async def edit_caller(number: str, body: CallerEdit, request: Request,
     if profile is None:
         raise AppError("NOT_FOUND", "No caller profile for that number", 404)
     log.info("caller profile edited by its owner")
+    return cp.public_view(profile)
+
+
+@router.put("/{number}/people/{person:path}")      # the web app's client has PUT; same as PATCH
+@router.patch("/{number}/people/{person:path}")
+async def edit_person(number: str, person: str, body: PersonEdit, request: Request,
+                      user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Rename a person of the family, change their relation to the caller or age band, or edit their usual details."""
+    mode = _store_mode(_mode(request))
+    key = _key(number)
+    patch: Dict[str, Any] = body.model_dump(exclude_unset=True)
+    patch = {k: v for k, v in patch.items() if v is not None or k in ("relation", "age_band")}
+
+    def work():
+        try:
+            return cp.edit_person(user_id, key, person, patch, mode)
+        except cp.ProfileEditError as e:
+            raise AppError("INVALID_CALLER_EDIT", str(e), 422) from None
+    profile = await _run(mode, work, "edit person") if cp.enabled() else None
+    if profile is None:
+        raise AppError("NOT_FOUND", "No such person on that number", 404)
+    return cp.public_view(profile)
+
+
+@router.delete("/{number}/people/{person:path}")
+async def forget_person(number: str, person: str, request: Request,
+                        user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Forget one person of the family (their name, relation, details and last booking); the caller and the others stay."""
+    mode = _store_mode(_mode(request))
+    key = _key(number)
+    profile = await _run(mode, lambda: cp.remove_person(user_id, key, person, mode), "forget person") if cp.enabled() else None
+    if profile is None:
+        raise AppError("NOT_FOUND", "No such person on that number", 404)
     return cp.public_view(profile)
 
 

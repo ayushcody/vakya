@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge, Button, EmptyState } from "@/components/ui";
 import { BookingDrawer } from "@/components/schedules/BookingDrawer";
 import { SOURCE_LABEL, SourceIcon } from "@/components/schedules/bookingWho";
+import { bookedByWords } from "@/components/queue/queue";
 import { errMessage } from "./format";
 import { appointmentLabel, cancelBooking, type Booking } from "./calls";
 
@@ -77,8 +78,10 @@ export function BookingList({
                 <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[15px] text-text-secondary">
                   {!b.fromCalls && <span className="font-medium text-text-primary">{appointmentLabel(b)}</span>}
                   {!!b.nights && b.nights > 0 && <span>{b.nights} night{b.nights === 1 ? "" : "s"}</span>}
+                  {b.token ? <Badge tone="secondary">Token {b.token}</Badge> : null}
                   {b.scheduleName && <Badge tone="primary">{b.scheduleName}</Badge>}
                   {who && <span>{who}</span>}
+                  {bookedByWords(b) && <span>{bookedByWords(b)}</span>}
                   {cancelled && <Badge tone="neutral">Cancelled</Badge>}
                   {b.practice && <Badge>Practice call</Badge>}
                   {b.hasEvidence && !cancelled && (

@@ -6,6 +6,7 @@ import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { Badge, Card, ErrorBoundary, PageHeader, Skeleton } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { useConsentMode, useEngines, useHealth } from "@/hooks/useApi";
+import { HearingSettings } from "@/components/hearing/HearingSettings";
 import { SpeechModelsCard } from "@/components/usage/SpeechModelsCard";
 import { api } from "@/lib/api";
 import { llmLabel } from "@/lib/llm";
@@ -124,6 +125,8 @@ function SettingsContent() {
             <Row label="Consent mode"><Status tone="neutral">Could not load</Status></Row>
           )}
         </Section>
+
+        <HearingSettings />
 
         <Section id="phone" title="Phone provider" intro="The line callers ring, and the provider that carries it. Numbers are masked.">
           {phone.isLoading ? (

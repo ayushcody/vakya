@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { ArrowLeft, Globe, Headphones, MessageCircle, Mic, Phone, PhoneForwarded, Repeat, Wrench, X } from "lucide-react";
 import { Badge, Button, Skeleton } from "@/components/ui";
 import type { ListColumn } from "@/components/ui/ListView";
+import { Misheard } from "@/components/hearing/Misheard";
 import { CallUsageLine } from "@/components/usage/CallUsageLine";
 import { formatCredits } from "@/components/usage/format";
 import type { CallUsage } from "@/components/usage/types";
@@ -188,6 +189,7 @@ function Transcript({ data }: { data: CallDetail }) {
             <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2 text-sm", agent ? "bg-bg-elevated text-text-primary" : "bg-accent-primary/10 text-text-primary")}>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-text-secondary">{agent ? data.agent_name : "Caller"}</p>
               <p className="mt-0.5 whitespace-pre-wrap break-words">{line.text}</p>
+              {!agent && data.agent_id && line.text.trim() && <Misheard agentId={data.agent_id} conversationId={data.id} turnIndex={i} text={line.text} />}
               {line.actions.map((a, j) => (
                 <p key={j} className={cn("mt-1.5 flex items-start gap-1.5 text-xs", a.ok ? "text-text-secondary" : "text-accent-error")}>
                   <Wrench aria-hidden className="mt-0.5 size-3 shrink-0" />

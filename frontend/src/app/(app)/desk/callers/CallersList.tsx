@@ -4,6 +4,7 @@ import { Repeat } from "lucide-react";
 import type { ListColumn } from "@/components/ui/ListView";
 import { cn } from "@/lib/utils";
 import { languageLabel, whenLabel } from "../calls/format";
+import { FamilyChips } from "@/components/memory";
 import type { CallerProfile } from "../calls/callers";
 
 const muted = "text-text-secondary";
@@ -46,7 +47,6 @@ export function callerColumns(booked: Record<string, number>): ListColumn<Caller
     },
     {
       id: "number", header: "Number ending", width: "124px", minWidth: 124, priority: 2,
-      stacked: { line: 2, slot: "fill" },
       sortValue: (p) => endingOf(p) || null,
       cell: (p) => <span className="block whitespace-nowrap text-sm tabular-nums text-text-primary">{endingOf(p) ? `••••${endingOf(p)}` : "—"}</span>,
     },
@@ -56,9 +56,10 @@ export function callerColumns(booked: Record<string, number>): ListColumn<Caller
       cell: (p) => <span className={cn("block truncate text-sm", muted)}>{languageLabel(p.preferred_language) ?? "—"}</span>,
     },
     {
-      id: "people", header: "People", width: "minmax(96px, 1fr)", minWidth: 96, priority: 5,
+      id: "people", header: "Family", width: "minmax(160px, 1.8fr)", minWidth: 160, priority: 5,
+      stacked: { line: 2, slot: "fill" },
       sortValue: (p) => peopleText(p).toLowerCase() || null,
-      cell: (p) => <span title={peopleText(p) || undefined} className={cn("block truncate text-sm", muted)}>{peopleText(p) || "—"}</span>,
+      cell: (p) => <FamilyChips people={p.people} />,
     },
     {
       id: "last", header: "Last call", width: "minmax(148px, 1.2fr)", minWidth: 148, required: true,

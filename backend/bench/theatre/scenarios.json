@@ -1006,6 +1006,111 @@
         "stop_after": "booking"
       },
       "max_turns": 6
+    },
+    {
+      "id": "family-booking-clinic",
+      "n": 10,
+      "title": "A son rings again and books for his mother",
+      "persona": "Rahul Kulkarni rang last week and booked for his mother, Sunita Kulkarni. He rings again with only his number and asks for the same time for his mother; the agent should know who it is for.",
+      "template": "clinic",
+      "org": "Green Valley Clinic",
+      "city": "Pune",
+      "agent_languages": [
+        "en",
+        "hi",
+        "mr"
+      ],
+      "language": "en",
+      "language_label": "English",
+      "voice": {
+        "speed": 1.0
+      },
+      "channel": {
+        "codec": "g711",
+        "snr_db": null
+      },
+      "tags": [
+        "English",
+        "family booking",
+        "returning caller",
+        "clinic"
+      ],
+      "caller": {
+        "name": "Sunita Kulkarni",
+        "name_tts": "Sunita Kulkarni",
+        "phone": "9822145678"
+      },
+      "setup": {
+        "existing_bookings": [
+          {
+            "date": "other",
+            "time": "11:00",
+            "name": "Sunita Kulkarni",
+            "phone": "caller"
+          }
+        ],
+        "full_slots": []
+      },
+      "target": {
+        "time": "11:00"
+      },
+      "moves": [
+        {
+          "id": "open",
+          "first": true,
+          "say": {
+            "text": "Hello, I need an appointment for my mother again, at the same time as last time, on {day}. My number is {phone}."
+          }
+        },
+        {
+          "id": "phone_again",
+          "max_uses": 2,
+          "when": {
+            "agent_any": [
+              "@asks_details"
+            ],
+            "agent_none": [
+              "@asks_confirm"
+            ]
+          },
+          "say": {
+            "text": "My number is {phone}."
+          }
+        },
+        {
+          "id": "yes",
+          "max_uses": 3,
+          "when": {
+            "agent_any": [
+              "@asks_confirm",
+              "?"
+            ]
+          },
+          "say": {
+            "text": "Yes, please book it."
+          }
+        }
+      ],
+      "expect": {
+        "bookings": [
+          {
+            "schedule": "Doctor consultations",
+            "date": "target",
+            "time": "11:00",
+            "name_any": [
+              "sunita",
+              "kulkarni"
+            ],
+            "phone": "caller"
+          }
+        ],
+        "recognised_by_name": [
+          "sunita",
+          "kulkarni"
+        ],
+        "stop_after": "booking"
+      },
+      "max_turns": 6
     }
   ]
 }

@@ -81,7 +81,7 @@ for _feature in (system, auth, voices, agents, documents, turns):
 # The routers that have their own module of routes (the optional hook `install` lets one add routes to the main app too, as
 # the phone router does for its public routes).
 for _name in ("templates", "consent", "verify", "warmup", "phone", "conversations", "privacy",
-              "system_resources", "web_call", "callers", "bookings", "schedules", "usage", "theatre"):
+              "system_resources", "web_call", "callers", "bookings", "schedules", "delays", "usage", "theatre", "hearing"):
     try:
         _mod = importlib.import_module(f"routers.{_name}")
         app.include_router(_mod.router)

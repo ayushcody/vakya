@@ -55,6 +55,11 @@ export interface ApiBooking {
   /** The proof of the booking (the caller's words, the read-back and the yes) was recorded. */
   has_evidence?: boolean;
   evidence_id?: string | null;
+  /** Today's and later days' place in the queue (backend/services/schedule_bookings.token_map), when the server sends it. */
+  token?: number | null;
+  /** Who made the booking for this person and how they are related ("Rahul", "son"), when the stored row says. */
+  booked_by?: string | null;
+  relation?: string | null;
 }
 
 export interface BookingsResponse {
@@ -92,6 +97,10 @@ export interface Booking {
   language?: string | null;
   receiptId?: string | null;
   hasEvidence?: boolean;
+  /** Token of the day for a time-slot booking of today or later (1-based by start time); see `withTokens`. */
+  token?: number | null;
+  bookedBy?: string | null;
+  relation?: string | null;
   practice: boolean;
   /** What the booking tool said (calls-derived fallback only), e.g. "booking A12 with Dr. Meera Kulkarni on Monday 2026-10-19 10:30". */
   lines: string[];
@@ -153,17 +162,45 @@ export function fromApiBooking(b: ApiBooking, agentName: string | null = null): 
     language: b.language ?? null,
     receiptId: b.receipt_id,
     hasEvidence: !!b.has_evidence,
+    token: b.token ?? null,
+    bookedBy: b.booked_by ?? null,
+    relation: b.relation ?? null,
     practice: false,
     lines: [],
     fromCalls: false,
   };
 }
 
+const idNumber = (id: string | null) => Number(/\d+/.exec(id ?? "")?.[0] ?? 0);
+
+/**
+ * Gives each live time-slot booking of today or a later day its token: its 1-based place among that day's live bookings of the
+ * same schedule, ordered by start (the rule of backend/services/schedule_bookings.token_map, so the desk and the phone agree).
+ * A token the server already sent is kept. Stays and bookings without a schedule have none.
+ */
+export function withTokens(list: Booking[], now: Date = new Date()): Booking[] {
+  const groups = new Map<string, Booking[]>();
+  for (const b of list) {
+    if (b.status !== "booked" || b.fromCalls || !b.scheduleId || !b.start || b.nights || !b.id) continue;
+    const day = b.start.slice(0, 10);
+    if (day < now.toLocaleDateString("en-CA", { timeZone: b.timezone || undefined })) continue;
+    const key = `${b.scheduleId}|${day}`;
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  const tokens = new Map<string, number>();
+  for (const rows of groups.values()) {
+    rows
+      .sort((a, b) => (a.start! < b.start! ? -1 : a.start! > b.start! ? 1 : idNumber(a.id) - idNumber(b.id)))
+      .forEach((b, i) => tokens.set(b.id!, i + 1));
+  }
+  return list.map((b) => (b.id && tokens.has(b.id) ? { ...b, token: b.token ?? tokens.get(b.id)! } : b));
+}
+
 /** The upcoming bookings of one schedule, or of every schedule when `scheduleId` is empty (GET /api/bookings). */
 export function useScheduleBookings(scheduleId: string | null | undefined, days = 30) {
   const key = `${bookingsKey(days)}${scheduleId ? `&schedule_id=${encodeURIComponent(scheduleId)}` : ""}`;
   const res = useSWR<BookingsResponse>(key, (p: string) => api.get<BookingsResponse>(p), quiet);
-  const data = useMemo<Booking[]>(() => (res.data?.bookings ?? []).map((b) => fromApiBooking(b)), [res.data]);
+  const data = useMemo<Booking[]>(() => withTokens((res.data?.bookings ?? []).map((b) => fromApiBooking(b))), [res.data]);
   return { data, isLoading: res.isLoading, error: res.error, mutate: res.mutate };
 }
 
@@ -215,7 +252,7 @@ export function useBookings(days = 30) {
   const data = useMemo<Booking[]>(() => {
     if (store.data) {
       const agentNames = new Map((calls.data?.calls ?? []).map((c) => [c.id, c.agent_name]));
-      return store.data.bookings.map((b) => fromApiBooking(b, (b.conversation_id && agentNames.get(b.conversation_id)) || null));
+      return withTokens(store.data.bookings.map((b) => fromApiBooking(b, (b.conversation_id && agentNames.get(b.conversation_id)) || null)));
     }
     return booked.map((c) => ({
       id: null,

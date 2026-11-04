@@ -192,7 +192,7 @@ def _clean_follow_ups(raw: Any) -> List[Dict[str, str]]:
 PEOPLE_MAX = 8
 FACTS_MAX = caller_memory.MAX_FACTS
 SOURCES = ("phone", "web call", "owner")
-_RELATIONS = set(caller_memory._RELATION_WORDS.values())
+_RELATIONS = set(caller_memory._RELATION_WORDS.values()) | {"self", "other"}
 
 
 def _clean_facts(raw: Any) -> Dict[str, str]:
@@ -210,7 +210,10 @@ def _clean_facts(raw: Any) -> Dict[str, str]:
 
 
 def _clean_people(raw: Any) -> List[Dict[str, Any]]:
-    """[{name, relation?, age_band?, last_booked_at?}]: the people booked for on this number (at most PEOPLE_MAX)."""
+    """[{name, relation?, age_band?, facts?, last_booking?, last_booked_at?}]: the people booked for on this number (at most
+    PEOPLE_MAX). `relation` is to the caller, stored in English (mother, father, son, daughter, wife, husband, self, other, ...).
+    An older profile has only name, relation, age_band and last_booked_at: it reads the same way and is written in this shape
+    the next time it is saved."""
     out: List[Dict[str, Any]] = []
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
@@ -228,6 +231,12 @@ def _clean_people(raw: Any) -> List[Dict[str, Any]]:
         booked = item.get("last_booked_at")
         if isinstance(booked, str) and _parse_iso(booked):
             person["last_booked_at"] = booked
+        facts = _clean_facts(item.get("facts"))
+        if facts:
+            person["facts"] = facts
+        last = _clean_booking(item.get("last_booking"))
+        if last:
+            person["last_booking"] = last
         out.append(person)
     return out[-PEOPLE_MAX:]
 
@@ -485,6 +494,15 @@ def fact_label(key: str) -> str:
     return key.replace("_", " ").capitalize()
 
 
+def public_person(person: Dict[str, Any]) -> Dict[str, Any]:
+    """One person of the family for the owner's screens: name, relation to the caller, age band, the usual details as labelled
+    chips and the last booking, each only when there is something to show."""
+    out = {k: person[k] for k in ("name", "relation", "age_band", "last_booked_at", "last_booking") if person.get(k)}
+    if person.get("facts"):
+        out["facts"] = [{"key": k, "label": fact_label(k), "value": v} for k, v in person["facts"].items()]
+    return out
+
+
 def public_view(profile: Dict[str, Any]) -> Dict[str, Any]:
     """A profile for the owner's screens: the number masked, the id (= `caller_ref`) for later calls."""
     days = retention_days()
@@ -498,7 +516,7 @@ def public_view(profile: Dict[str, Any]) -> Dict[str, Any]:
         "last_booking": profile.get("last_booking"), "follow_ups": profile.get("follow_ups") or [],
         "summary": profile.get("summary"), "call_count": profile.get("call_count") or 0,
         "facts": [{"key": k, "label": fact_label(k), "value": v} for k, v in (profile.get("facts") or {}).items()],
-        "people": profile.get("people") or [], "last_person": profile.get("last_person"),
+        "people": [public_person(x) for x in profile.get("people") or []], "last_person": profile.get("last_person"),
         "source": profile.get("source") or "phone",
         "calls": profile.get("calls") or [], "consent_note": CONSENT_NOTE, "retention_days": days,
         "expires_at": (last + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ") if last else None,
@@ -578,6 +596,21 @@ REMEMBER_NOTICE = {
 }
 
 
+def family_question(profile: Dict[str, Any], lang: str) -> Optional[str]:
+    """The question a returning caller who books for somebody else is asked in place of "how can I help?" (first name only, with
+    "ji" in Hindi and Marathi): None when the last booking was for the caller themselves or nobody is known."""
+    person = asked_person(profile)
+    if not person:
+        return None
+    first = person["name"].split()[0]
+    return {
+        "hi": f"क्या आज भी {first} जी के लिए बुक करना है, या किसी और के लिए?",
+        "mr": f"आज {first} जी यांच्यासाठीच बुक करायचे आहे का, की दुसऱ्या कोणासाठी?",
+        "hinglish": f"Kya aaj bhi {first} ji ke liye book karna hai, ya kisi aur ke liye?",
+        "en": f"Is this for {first} again, or for someone else?",
+    }.get(lang)
+
+
 def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Sequence[str]] = None,
                        today: Optional[date] = None, notice: bool = False) -> Optional[Tuple[str, str]]:
     """(language, words) the agent says to a known caller instead of its usual greeting, or None when the profile has
@@ -629,6 +662,7 @@ def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Se
             lead = f"{who}, last time you booked an appointment for {slot}."
         else:
             lead = f"{who}, welcome back."
+    ask = family_question(profile, lang) or ask
     return lang, " ".join(x for x in (lead, REMEMBER_NOTICE[lang] if notice else "", ask) if x)
 
 
@@ -657,6 +691,10 @@ def number_hint(number: Any) -> Optional[str]:
     return f"ending {digits[-4:]}" if len(digits) >= 4 else None
 
 
+AGE_WORDS = {"senior": "60+", "adult": "adult", "teen": "teen", "child": "child"}
+DOCTOR_KEYS = ("preferred_doctor", "usual_doctor", "doctor")
+
+
 def people_text(people: Sequence[Dict[str, Any]]) -> str:
     bits = []
     for p in people:
@@ -665,20 +703,73 @@ def people_text(people: Sequence[Dict[str, Any]]) -> str:
     return ", ".join(bits)
 
 
+def _short_date(iso: Optional[str]) -> str:
+    try:
+        d = datetime.strptime(str(iso), "%Y-%m-%d")
+    except ValueError:
+        return ""
+    return f"{d.day} {d.strftime('%b')}"
+
+
+def people_by_recency(people: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The people of a number, the one booked for last first. Stored oldest first; a person with no booking time keeps their
+    place by being treated as older than anybody with one."""
+    indexed = list(enumerate(people))
+    indexed.sort(key=lambda ip: (ip[1].get("last_booked_at") or "", ip[0]), reverse=True)
+    return [p for _i, p in indexed]
+
+
+def person_line(p: Dict[str, Any]) -> str:
+    """One person of the family for the prompt: "Sunita Kulkarni (mother, 60+, usually Dr. Joshi, last visit 12 Oct, follow-up)"."""
+    bits: List[str] = []
+    if p.get("relation"):
+        bits.append(p["relation"])
+    if p.get("age_band"):
+        bits.append(AGE_WORDS.get(p["age_band"], p["age_band"]))
+    facts = p.get("facts") or {}
+    doctor = next((facts[k] for k in DOCTOR_KEYS if facts.get(k)), None)
+    if doctor:
+        bits.append(f"usually {doctor}")
+    for k, v in facts.items():
+        if k not in DOCTOR_KEYS and len(bits) < 6:
+            bits.append(f"{k.replace('_', ' ')} {v}")
+    last = p.get("last_booking") or {}
+    when = _short_date(last.get("date"))
+    if when:
+        bits.append(f"last visit {when}" + (f", {last['purpose']}" if last.get("purpose") else ""))
+    return p["name"] + (f" ({', '.join(bits)})" if bits else "")
+
+
+def family_text(profile: Dict[str, Any], limit: int = 4) -> str:
+    """"This number usually books for: ..." (the family, newest first), or "" when nobody is booked for yet."""
+    people = people_by_recency(profile.get("people") or [])[:limit]
+    if not people:
+        return ""
+    return "this number usually books for: " + "; ".join(person_line(p) for p in people)
+
+
+def asked_person(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The person to offer first on a call: the last one booked for who is not the caller, else None."""
+    for p in people_by_recency(profile.get("people") or []):
+        if p.get("relation") != "self" and p.get("last_booked_at"):
+            return p
+    return None
+
+
 def block_text(profile: Dict[str, Any]) -> str:
-    """The compact "what we know about this caller" block for the caller's message of every turn of the call. Values are
-    caller data (cleaned, one line); the model is told to confirm what it knows in one short question rather than ask from
-    scratch, to read a booking back before it makes it, and never to read the block out."""
+    """The compact "what we know about this caller" block for the caller's message of every turn of the call. It leads with the
+    family (the people this number books for), then the caller's own details. Values are caller data (cleaned, one line);
+    the model is told to confirm what it knows in one short question rather than ask from scratch, to read a booking back
+    before it makes it, and never to read the block out."""
     parts: List[str] = []
+    family = family_text(profile)
+    if family:
+        parts.append(family + (f"; last booked for {profile['last_person']}" if profile.get("last_person") else ""))
     if profile.get("display_name"):
         parts.append(f"name {profile['display_name']}")
     if profile.get("preferred_language"):
         code = profile["preferred_language"]
         parts.append(f"usual language {language_policy.display_name(code)}")
-    people = profile.get("people") or []
-    if people:
-        parts.append(f"people booked for on this number: {people_text(people)}"
-                     + (f"; last booked for {profile['last_person']}" if profile.get("last_person") else ""))
     facts = profile.get("facts") or {}
     if facts:
         parts.append("usual: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in facts.items()))
@@ -696,16 +787,23 @@ def block_text(profile: Dict[str, Any]) -> str:
     if not parts:
         return ""
     hint = number_hint(profile.get("number"))
+    ask = asked_person(profile)
+    who = (ask["name"].split()[0] if ask else "")
+    family_rule = (f" When the booking is not yet for someone named, ask one short question in the caller's language, with a "
+                   f"respectful form (ji, or aai, aaji, mother, father as they say it): \"Is this for {who} ji again, or for "
+                   "someone else?\". Then book for whoever they name, and confirm that person's usual details only as far as "
+                   "they help this booking. Never volunteer one person's visits, doctor or details when the caller names "
+                   "someone else." if ask else "")
     return ("(What we know about this caller from earlier calls: " + "; ".join(parts) + "."
             + (f" The number on this line is {hint}." if hint else "")
             + " Never read it all out. Confirm what you know in one short question instead of asking from scratch (\"Same "
             "number as last time, " + (hint if hint and "x" in hint else "98xxxx3210") + "?\"), and read a booking back before "
-            "you make it. The caller may not be the same person: share nothing beyond what helps this call. If they ask to "
-            "be forgotten, use forget_me.)")
+            "you make it. The caller may not be the same person: share nothing beyond what helps this call."
+            + family_rule + " If they ask to be forgotten, use forget_me.)")
 
 
-# what a live call knows about its caller: conversation id -> {"block", "owner", "number"} (newest kept)
-_CONTEXT: "collections.OrderedDict[str, Dict[str, str]]" = collections.OrderedDict()
+# what a live call knows about its caller: conversation id -> {"block", "owner", "number", "names"} (newest kept)
+_CONTEXT: "collections.OrderedDict[str, Dict[str, Any]]" = collections.OrderedDict()
 _CONTEXT_MAX = 200
 
 
@@ -717,10 +815,38 @@ def set_context(conversation_id: Optional[str], profile: Optional[Dict[str, Any]
     if not block:
         return
     with _lock:
-        _CONTEXT[str(conversation_id)] = {"block": block, "owner": profile.get("owner", ""), "number": profile.get("number", "")}
+        _CONTEXT[str(conversation_id)] = {"block": block, "owner": profile.get("owner", ""), "number": profile.get("number", ""),
+                                          "names": names_of(profile)}
         _CONTEXT.move_to_end(str(conversation_id))
         while len(_CONTEXT) > _CONTEXT_MAX:
             _CONTEXT.popitem(last=False)
+
+
+KNOWN_NAMES_MAX = 4
+
+
+def names_of(profile: Dict[str, Any]) -> List[str]:
+    """The caller's usual name, then the people booked for (the latest first), without repeats, at most KNOWN_NAMES_MAX."""
+    out: List[str] = []
+    for n in [profile.get("display_name")] + [p.get("name") for p in people_by_recency(profile.get("people") or [])]:
+        if isinstance(n, str) and n.strip() and n.strip().lower() not in {o.lower() for o in out}:
+            out.append(n.strip())
+    return out[:KNOWN_NAMES_MAX]
+
+
+def known_names(conversation_id: Optional[str]) -> List[str]:
+    """The names to spell right in this live call's speech recognition (Gnani Prisma's `speaker_names`): the caller's usual
+    name and the people booked for on this number, the most recent first, at most four. Read from what the call opened with
+    (`set_context`): a dict lookup, no store read. [] when the call has no known caller, CALLER_PROFILES is off or anything
+    goes wrong. Never raises."""
+    try:
+        if not conversation_id or not enabled():
+            return []
+        with _lock:
+            names = (_CONTEXT.get(str(conversation_id)) or {}).get("names") or []
+            return [str(n) for n in names][:KNOWN_NAMES_MAX]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def prompt_block(conversation_id: Optional[str]) -> str:
@@ -778,6 +904,76 @@ def introduced_as(turns: Sequence[dict], name: Optional[str]) -> bool:
         for t in turns)
 
 
+# ---------------------------------------------------------------------------------------------------- family relations
+
+_REL_LATIN_WORDS = dict(caller_memory._RELATION_WORDS)
+_REL_LATIN_WORDS.update({"mummy": "mother", "mataji": "mother", "pitaji": "father", "aai": "mother", "aaji": "grandmother",
+                         "baba": "father", "vadil": "father", "bhabhi": "other", "chacha": "other",
+                         "bua": "other", "mama": "other", "mausi": "other"})
+# Devanagari stems: Marathi joins its postpositions to the word ("आईसाठी", "वडिलांसाठी"), so a stem is matched as a prefix
+_REL_DEVA_STEMS = (
+    ("मम्मी", "mother"), ("आई", "mother"), ("माँ", "mother"), ("मां", "mother"), ("माता", "mother"),
+    ("पिताजी", "father"), ("वडिल", "father"), ("वडील", "father"), ("बाबा", "father"), ("पापा", "father"), ("पिता", "father"),
+    ("मुलगा", "son"), ("मुलाल", "son"), ("मुलास", "son"), ("बेटे", "son"), ("बेटा", "son"),
+    ("मुलगी", "daughter"), ("मुलीस", "daughter"), ("मुलील", "daughter"), ("बेटी", "daughter"),
+    ("पत्नी", "wife"), ("बायको", "wife"), ("बीवी", "wife"), ("पति", "husband"), ("पती", "husband"), ("नवरा", "husband"),
+    ("नवऱ्या", "husband"), ("भाई", "brother"), ("भाऊ", "brother"), ("भावा", "brother"), ("बहन", "sister"), ("बहीण", "sister"),
+    ("बहिण", "sister"), ("दादी", "grandmother"), ("नानी", "grandmother"), ("आजी", "grandmother"), ("दादा", "grandfather"),
+    ("नाना", "grandfather"), ("आजोबा", "grandfather"),
+)
+_REL_POSSESSIVE_LATIN = re.compile(r"\b(?:my|mere|meri|mera|apne|apni|apna|majhya|majhi|maza|mazi)\s+(?:old\s+|elderly\s+)?(" +
+                                   "|".join(sorted(_REL_LATIN_WORDS, key=len, reverse=True)) + r")\b", re.IGNORECASE)
+_REL_POSSESSIVE_DEVA = re.compile(r"(?:मेरे|मेरी|मेरा|माझा|माझी|माझे|माझ्या|अपने|अपनी)\s+(\S+)")
+_SELF_WORDS = re.compile(r"\b(?:for myself|for me|myself|mere liye|apne liye|for self)\b|मेरे लिए|माझ्यासाठी", re.IGNORECASE)
+
+
+def _deva_relation(word: str) -> Optional[str]:
+    for stem, rel in _REL_DEVA_STEMS:
+        if word.startswith(stem):
+            return rel
+    return None
+
+
+def relation_in(text: str) -> Optional[str]:
+    """The relation the caller names in one message, in English: "for my mother" and "meri maa ke liye" give "mother", "माझ्या
+    आईसाठी" gives "mother", "मेरे पापा के लिए" gives "father", "for myself" gives "self". None when no relation is named. The
+    latest one in the message wins (the caller corrects themselves)."""
+    text = unicodedata.normalize("NFC", str(text or ""))
+    found: List[Tuple[int, str]] = []
+    for m in _REL_POSSESSIVE_LATIN.finditer(text):
+        found.append((m.start(), _REL_LATIN_WORDS[m.group(1).lower()]))
+    for m in _REL_POSSESSIVE_DEVA.finditer(text):
+        rel = _deva_relation(m.group(1))
+        if rel:
+            found.append((m.start(), rel))
+    for m in _SELF_WORDS.finditer(text):
+        found.append((m.start(), "self"))
+    return max(found)[1] if found else None
+
+
+def relation_of_call(turns: Sequence[dict]) -> Optional[str]:
+    """The relation the caller named last on the call (from what they said), or None."""
+    for t in reversed(list(turns)):
+        if t.get("role") == "user":
+            got = relation_in(str(t.get("text_content") or ""))
+            if got:
+                return got
+    return None
+
+
+def clean_relation(value: Any) -> Optional[str]:
+    """A relation word (English, Hindi, Marathi, romanised) as one of the stored English relations, or None."""
+    v = unicodedata.normalize("NFC", str(value or "")).strip().lower()
+    if not v:
+        return None
+    if v in _RELATIONS:
+        return v
+    if v in _REL_LATIN_WORDS:
+        return _REL_LATIN_WORDS[v]
+    return _deva_relation(v)
+
+
+
 def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_language: Optional[str] = None,
               *, note: Optional[str] = None, known_name: Optional[str] = None,
               schema: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
@@ -796,6 +992,7 @@ def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_langu
     form = form or {}
     booking: Optional[Dict[str, str]] = None
     booked_name: Optional[str] = None
+    booked_relation: Optional[str] = None
     cancelled = False
     booked_ok = False
     tool_failed = False
@@ -810,8 +1007,9 @@ def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_langu
                                           "purpose": args.get("reason") or form.get("reason")})
                 booked_ok, cancelled = booking is not None, False
                 booked_name = _clean("name", args.get("name")) if booked_ok else None
+                booked_relation = (args.get("relation") or args.get("booked_by")) if booked_ok else None
             elif name in CANCEL_BOOKING:
-                booking, cancelled, booked_ok, booked_name = None, True, False, None
+                booking, cancelled, booked_ok, booked_name, booked_relation = None, True, False, None, None
     agent_replies = [t for t in turns if t.get("role") == "agent"]
     gap = any(t.get("fallback") or kg.is_gap_reply(str(t.get("text_content") or "")) for t in agent_replies[1:])
     if booked_ok:
@@ -826,24 +1024,35 @@ def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_langu
         language = next((l for l in reversed(langs) if l), None)
     name = _clean("name", form.get("name"))
     person = _clean("name", form.get("person"))
-    relation = str(form.get("relation") or "").strip().lower() or None
+    relation = clean_relation(form.get("relation"))
     if known_name and name and not _same_name(name, known_name) and not introduced_as(turns, name):
         person = person or name          # a different name on a known number: who the booking is for
         name = known_name
     if person and name and _same_name(person, name) and person.lower() == name.lower():
         person, relation = None, None
+    # who the booking was for, and how they are related to the caller: what the booking tool was given (`relation` or
+    # `booked_by`), what the caller said ("for my mother", "माझ्या आईसाठी"), else what the form holds
+    told = clean_relation(booked_relation)
+    said = relation_of_call(turns)
+    named = told or (said if said != "self" else None) or relation
     for_whom = booked_name or person or None
+    if for_whom and named and named != "self" and name and _same_name(for_whom, name) and not introduced_as(turns, name):
+        # "for my mother": the name on the booking is the patient's, so it is not the caller's own name
+        name = known_name if known_name and not _same_name(known_name, for_whom) else None
+    relation = named or (said if said == "self" else None) or relation
     # the people of this call: who the booking was made for (named by the caller and/or by the tool) and who else was named
     entries: List[Dict[str, Any]] = []
     band = None
     spec_band = caller_memory.facts_of(form).get("age_band")
     if spec_band in caller_memory.AGE_BANDS:
         band = spec_band
+    own = bool(for_whom and (relation == "self" or (name and _same_name(for_whom, name) and relation is None)))
     if for_whom:
-        entries.append({"name": for_whom, "relation": relation if person and _same_name(person, for_whom) else None,
-                        "age_band": band, "booked": booked_ok})
+        entries.append({"name": for_whom, "relation": "self" if own else (relation if relation != "self" else None),
+                        "age_band": band, "booked": booked_ok, "booking": booking if booked_ok else None, "own": own})
     if person and not any(_same_name(person, e["name"]) for e in entries):
-        entries.append({"name": person, "relation": relation, "age_band": band, "booked": False})
+        entries.append({"name": person, "relation": relation if relation != "self" else None, "age_band": band,
+                        "booked": False, "own": False})
     # the trade details: those of the agent's schema, validated again; the age band belongs to the person
     facts: Dict[str, str] = {}
     for key, value in caller_memory.facts_of(form).items():
@@ -869,27 +1078,51 @@ def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_langu
         bits.append(form["other"])
     summary = ("; ".join(b for b in bits if b.strip()) or "asked a question and got an answer")
     return {"display_name": name, "preferred_language": language, "last_outcome": outcome, "booking": booking,
-            "cancelled": cancelled, "summary": summary[:SUMMARY_MAX], "facts": facts, "people": entries}
+            "cancelled": cancelled, "summary": summary[:SUMMARY_MAX], "facts": facts, "people": entries,
+            "person_facts": facts if any(e.get("booked") and not e.get("own") for e in entries) else {}}
 
 
-def _merge_people(old: Sequence[Dict[str, Any]], entries: Sequence[Dict[str, Any]], now: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """(people after the call, the person the last booking was for or None when this call booked nobody)."""
+def _same_person(a: str, b: str) -> bool:
+    """Is `b` the person `a` names more or less completely ("Sunita" and "Sunita Kulkarni")? One name's words are all in the other's."""
+    x, y = set(a.lower().split()), set(b.lower().split())
+    return bool(x and y and (x <= y or y <= x))
+
+
+def _merge_people(old: Sequence[Dict[str, Any]], entries: Sequence[Dict[str, Any]], now: str,
+                  person_facts: Optional[Dict[str, str]] = None) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """(people after the call, the person the last booking was for or None when this call booked nobody). A person booked for
+    moves to the end of the list (the list is oldest first, so the newest is last); their usual details (`person_facts`, the
+    trade's details of a booking made for somebody else) and their last booking are kept with them."""
     people = [dict(p) for p in old]
     last: Optional[str] = None
     for e in entries:
         name = _clean("name", e.get("name"), 60)
         if not name:
             continue
-        found = next((p for p in people if p["name"].lower() == name.lower()), None)
+        found = next((p for p in people if p["name"].lower() == name.lower()), None) or \
+            next((p for p in people if _same_person(p["name"], name)), None)
         if found is None:
             found = {"name": name}
             people.append(found)
-        if e.get("relation") in _RELATIONS:
-            found["relation"] = e["relation"]
+        elif len(name.split()) > len(found["name"].split()):
+            found["name"] = name         # "Sunita" is now known as "Sunita Kulkarni"
+        rel = e.get("relation")
+        if rel in _RELATIONS and not (rel == "other" and found.get("relation")):
+            found["relation"] = rel
         if e.get("age_band") in caller_memory.AGE_BANDS:
             found["age_band"] = e["age_band"]
         if e.get("booked"):
             found["last_booked_at"] = now
+            if e.get("booking"):
+                found["last_booking"] = dict(e["booking"])
+            if person_facts and not e.get("own"):
+                merged = dict(found.get("facts") or {})
+                for k, v in person_facts.items():
+                    merged.pop(k, None)
+                    merged[k] = v
+                found["facts"] = dict(list(merged.items())[-FACTS_MAX:])
+            people.remove(found)
+            people.append(found)
             last = found["name"]
     return people[-PEOPLE_MAX:], last
 
@@ -918,11 +1151,12 @@ def merge_call(existing: Optional[Dict[str, Any]], owner: str, number: str, upda
     p["follow_ups"] = [{"note": n, "at": now} for n in follow_ups]
     p["summary"] = update.get("summary")
     facts = dict(old.get("facts") or {}) if old else {}
-    for k, v in (update.get("facts") or {}).items():
+    for k, v in ({} if update.get("person_facts") else (update.get("facts") or {})).items():   # a booking for somebody else: the details are theirs
         facts.pop(k, None)
         facts[k] = v
     p["facts"] = dict(list(facts.items())[-FACTS_MAX:])
-    p["people"], last_person = _merge_people(old.get("people") or [], update.get("people") or [], now)
+    p["people"], last_person = _merge_people(old.get("people") or [], update.get("people") or [], now,
+                                             update.get("person_facts"))
     if last_person:
         p["last_person"] = last_person
     p["source"] = "phone" if source == "phone" or old.get("source") == "phone" else (old.get("source") or source)
@@ -1026,6 +1260,10 @@ def finish_call(*, owner: str, number: Optional[str], mode: str, conversation_id
                        schema=caller_memory.schema_for(agent))
     if update is None:
         return None
+    with _lock:
+        gone = set(_FORGOTTEN_PEOPLE.pop(str(conversation_id), set()))
+    if gone:      # asked to forget one person on this call: they are not written back by the same call
+        update["people"] = [e for e in update.get("people") or [] if str(e.get("name") or "").lower() not in gone]
     return record_call(owner, n, mode, update, conversation_id=conversation_id, returning=returning,
                        follow_ups=follow_ups, source=source)
 
@@ -1084,6 +1322,7 @@ def on_web_call_end(*, owner: str, mode: str, conversation_id: Optional[str], lo
 
 # conversations whose caller asked to be forgotten: nothing of them is written when the call ends
 _FORGOTTEN: "collections.OrderedDict[str, bool]" = collections.OrderedDict()
+_FORGOTTEN_PEOPLE: "collections.OrderedDict[str, set]" = collections.OrderedDict()   # conversation -> names asked to be forgotten
 _PENDING_FORGET: "collections.OrderedDict[str, int]" = collections.OrderedDict()   # conversation -> history length at the read-back
 _FORGET_MAX = 500
 
@@ -1093,8 +1332,11 @@ FORGET_TOOL = {
                     "hata do\", \"माझी माहिती काढून टाका\"). Step 1: call it with confirmed false; it tells you what to read "
                     "back. Read back, in the caller's language, that you will delete the name, details and notes you keep "
                     "for this number, and ask \"Shall I delete it?\". Step 2: only after the caller says yes in their next "
-                    "message, call it again with confirmed true. Never delete without that yes."),
-    "schema": {"type": "object", "properties": {"confirmed": {"type": "boolean"}}, "additionalProperties": False},
+                    "message, call it again with confirmed true. Never delete without that yes. When the caller asks to "
+                    "forget only one person (\"forget my father's details\", \"मेरी माँ की जानकारी हटाओ\"), pass `person` "
+                    "(the name or the relation as they said it): only that person is deleted, and the rest stays."),
+    "schema": {"type": "object", "properties": {"confirmed": {"type": "boolean"}, "person": {"type": "string", "maxLength": 60}},
+               "additionalProperties": False},
 }
 
 
@@ -1113,6 +1355,51 @@ def is_forgotten(conversation_id: Optional[str]) -> bool:
         return str(conversation_id) in _FORGOTTEN
 
 
+def _forget_person(cid: str, who: str, confirmed: bool, run: Any) -> Tuple[bool, Any]:
+    """`forget_me` for one person of the number ("forget my father's details"): the same two steps, the same yes, but only that
+    person is removed; the caller's profile, the rest of the family and this call stay."""
+    ctx = dict(_CONTEXT.get(cid) or {})
+    owner, number = ctx.get("owner") or getattr(run, "user_id", ""), ctx.get("number")
+    mode = getattr(run, "storage_mode", "local") or "local"
+    if not number or getattr(run, "source", None) not in ("phone", "missed_call"):
+        return False, ("NOT DONE: there is nobody on file for this call to remove a person from. Tell the caller, in their "
+                       "language, that nothing is kept about that person.")
+    try:
+        prof = lookup_any_age(owner, number, mode)
+    except Exception:  # noqa: BLE001
+        prof = None
+    person = find_person(prof, who) if prof else None
+    if person is None:
+        names = ", ".join(x["name"] for x in (prof or {}).get("people") or [])
+        return False, ("NOT DONE: no single person on this number matches \"" + who[:40] + "\"" +
+                       (f" (kept: {names})" if names else "") + ". Ask the caller, in their language, whose details they mean.")
+    key = f"{cid}|{person['name'].lower()}"
+    rows = len(getattr(run, "history", None) or [])
+    with _lock:
+        asked_at = _PENDING_FORGET.get(key)
+        if not confirmed or asked_at is None or rows <= asked_at:
+            _PENDING_FORGET[key] = rows if (not confirmed or asked_at is None) else asked_at
+            _PENDING_FORGET.move_to_end(key)
+            while len(_PENDING_FORGET) > _FORGET_MAX:
+                _PENDING_FORGET.popitem(last=False)
+            return False, (f"NOT DONE: first tell the caller, in their language, that you will delete everything you keep "
+                           f"about {person['name']} (name, details, last booking) and nobody else, and ask \"Shall I delete "
+                           "it?\". Call this tool again with confirmed true and the same person only after they say yes in "
+                           "their next message.")
+        _PENDING_FORGET.pop(key, None)
+        _FORGOTTEN_PEOPLE.setdefault(cid, set()).add(person["name"].lower())
+        while len(_FORGOTTEN_PEOPLE) > _FORGET_MAX:
+            _FORGOTTEN_PEOPLE.popitem(last=False)
+    done = None
+    try:
+        done = remove_person(owner, number, person["name"], mode)
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not delete a person of a caller profile on request: %s", e.__class__.__name__)
+    log.info("caller asked to forget one person (%s)", "deleted" if done else "none to delete")
+    return True, {"message": f"Deleted. Nothing about {person['name']} is kept, and nothing about them from this call will be. "
+                             "Everyone else stays. Tell the caller that, in their language."}
+
+
 def forget_run(tool: str, args: dict, run: Any) -> Tuple[bool, Any]:
     """Blocking (the tool thread): the `forget_me` tool. The first call, and any call before the caller has answered in a
     later turn, only says what to read back; the confirmed call deletes the number's profile (phone calls only: a web
@@ -1121,6 +1408,9 @@ def forget_run(tool: str, args: dict, run: Any) -> Tuple[bool, Any]:
     cid = str(getattr(run, "conversation_id", "") or "")
     if not cid:
         return False, "there is nothing to forget on this call"
+    who = str((args or {}).get("person") or "").strip()
+    if who:
+        return _forget_person(cid, who, bool((args or {}).get("confirmed")), run)
     confirmed = bool((args or {}).get("confirmed"))
     rows = len(getattr(run, "history", None) or [])
     with _lock:
@@ -1214,8 +1504,10 @@ def update_profile(owner: str, key: str, patch: Dict[str, Any], mode: str = "loc
         old = {x["name"].lower(): x for x in p.get("people") or []}
         people = _clean_people(patch["people"])
         for person in people:
-            if person["name"].lower() in old and old[person["name"].lower()].get("last_booked_at"):
-                person.setdefault("last_booked_at", old[person["name"].lower()]["last_booked_at"])
+            before = old.get(person["name"].lower()) or {}
+            for k in ("last_booked_at", "last_booking", "facts"):
+                if before.get(k) and k not in person:
+                    person[k] = before[k]
         p["people"] = people
     if "last_person" in patch:
         p["last_person"] = patch["last_person"]
@@ -1232,6 +1524,124 @@ def update_profile(owner: str, key: str, patch: Dict[str, Any], mode: str = "loc
     out = clean_profile(p)
     out["id"] = p.get("id") or profile_id(owner, out["number"])
     get_store(mode).put(out)
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------- one person of the family
+
+_PERSON_NOISE = re.compile(r"\b(?:my|the|his|her|their|details|data|information|info|about|of|ji|ka|ki|ke|ke liye|ko)\b|'s|’s|"
+                           r"[.,;!?]", re.IGNORECASE)
+
+
+def find_person(profile: Dict[str, Any], who: Any) -> Optional[Dict[str, Any]]:
+    """The person of this number a caller or the owner means by `who`: a name (full or first, any case) or a relation ("my
+    father", "आई", "मेरी माँ"). None when nobody matches or two people do (a mother and her son named alike are not guessed)."""
+    people = profile.get("people") or []
+    text = unicodedata.normalize("NFC", str(who or "")).strip().lower()
+    if not text or not people:
+        return None
+    cleaned = " ".join(_PERSON_NOISE.sub(" ", text).split())
+    for needle in dict.fromkeys(x for x in (text, cleaned) if x):
+        exact = [p for p in people if p["name"].lower() == needle]
+        if len(exact) == 1:
+            return exact[0]
+        first = [p for p in people if p["name"].lower().split()[0] == needle.split()[0]] if needle.split() else []
+        if len(first) == 1:
+            return first[0]
+    rel = clean_relation(cleaned) or relation_in(text) or next((clean_relation(w) for w in cleaned.split() if clean_relation(w)), None)
+    if rel:
+        hits = [p for p in people if p.get("relation") == rel]
+        if len(hits) == 1:
+            return hits[0]
+    return None
+
+
+def edit_person(owner: str, key: str, name: str, patch: Dict[str, Any], mode: str = "local") -> Optional[Dict[str, Any]]:
+    """The owner edits one person of a number: `patch` may hold name (rename), relation, age_band, facts ({key: value, or None
+    to remove}). Their last booking stays. Raises ProfileEditError for a value Vakya does not keep; None when the caller or the
+    person is not there. Blocking."""
+    prof = find(owner, key, mode)
+    if prof is None:
+        return None
+    person = next((x for x in prof.get("people") or [] if x["name"].lower() == str(name or "").strip().lower()), None)
+    if person is None:
+        return None
+    old_name = person["name"]
+    if "name" in patch:
+        new = _clean("name", patch["name"], 60)
+        if not new or any(c.isdigit() for c in new):
+            raise ProfileEditError("name: a name is plain letters with no digits, and Vakya does not keep identity numbers or health details.")
+        if any(x is not person and x["name"].lower() == new.lower() for x in prof["people"]):
+            raise ProfileEditError("name: that name is already on this number.")
+        person["name"] = new
+    if "relation" in patch:
+        raw = patch["relation"]
+        if raw in (None, ""):
+            person.pop("relation", None)
+        else:
+            rel = clean_relation(raw)
+            if rel is None:
+                raise ProfileEditError("relation: use mother, father, son, daughter, wife, husband, brother, sister, "
+                                       "grandmother, grandfather, friend, self or other.")
+            person["relation"] = rel
+    if "age_band" in patch:
+        band = str(patch["age_band"] or "").strip().lower()
+        if band and band not in caller_memory.AGE_BANDS:
+            raise ProfileEditError("age_band: use child, teen, adult or senior.")
+        if band:
+            person["age_band"] = band
+        else:
+            person.pop("age_band", None)
+    if isinstance(patch.get("facts"), dict):
+        facts = dict(person.get("facts") or {})
+        for k, v in patch["facts"].items():
+            if not caller_memory._FACT_KEY.fullmatch(str(k)):
+                raise ProfileEditError(f"{k}: a detail's name is lowercase letters, digits and underscores.")
+            if v in (None, ""):
+                facts.pop(str(k), None)
+                continue
+            val = _clean("other", v, 100)
+            if val is None or re.search(r"\d{9,}", re.sub(r"[ -]", "", val)):
+                raise ProfileEditError(f"{k}: Vakya does not keep identity numbers, card numbers, OTPs, passwords or health details.")
+            facts.pop(str(k), None)
+            facts[str(k)] = val
+        if len(facts) > FACTS_MAX:
+            raise ProfileEditError(f"At most {FACTS_MAX} details are kept per person.")
+        if facts:
+            person["facts"] = facts
+        else:
+            person.pop("facts", None)
+    if prof.get("last_person") == old_name:
+        prof["last_person"] = person["name"]
+    prof["updated_at"] = _now_iso()
+    out = clean_profile(prof)
+    out["id"] = prof.get("id") or profile_id(owner, out["number"])
+    get_store(mode).put(out)
+    return out
+
+
+def remove_person(owner: str, key: str, name: str, mode: str = "local") -> Optional[Dict[str, Any]]:
+    """Forget one person of a number (their name, relation, details and last booking); the caller and the rest of the family
+    stay. None when the caller or the person is not there. A live call stops mentioning them. Blocking."""
+    prof = find(owner, key, mode)
+    if prof is None:
+        return None
+    gone = str(name or "").strip().lower()
+    kept = [x for x in prof.get("people") or [] if x["name"].lower() != gone]
+    if len(kept) == len(prof.get("people") or []):
+        return None
+    prof["people"] = kept
+    if (prof.get("last_person") or "").lower() == gone:
+        prof["last_person"] = None
+    prof["updated_at"] = _now_iso()
+    out = clean_profile(prof)
+    out["id"] = prof.get("id") or profile_id(owner, out["number"])
+    get_store(mode).put(out)
+    with _lock:
+        for cid, ctx in list(_CONTEXT.items()):
+            if ctx.get("owner") == owner and ctx.get("number") == out["number"]:
+                _CONTEXT.pop(cid, None)
+                set_context(cid, out)
     return out
 
 

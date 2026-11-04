@@ -8,6 +8,8 @@ import { useSWRConfig } from "swr";
 import { Button, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { PageShell } from "@/components/ui/PageHeader";
 import { BookingExplorer } from "@/components/desk/BookingExplorer";
+import { LateBanner } from "@/components/queue/LateBanner";
+import { expectedBySlot, useToday } from "@/components/queue/queue";
 import { useScheduleBookings } from "@/components/desk/calls";
 import { useAgents } from "@/hooks/useApi";
 import { useNow } from "@/hooks/useNow";
@@ -139,6 +141,8 @@ function Loaded({ schedule }: { schedule: Schedule }) {
   }, [anchor, nights]);
   const slots = useSlots(anchor ? schedule.id : null, range.from, range.to);
   const bookings = useScheduleBookings(schedule.id);
+  const queue = useToday(nights ? null : schedule.id);
+  const expected = useMemo(() => expectedBySlot(queue.data), [queue.data]);
   const key = slotsKey(schedule.id, range.from, range.to);
   const upcoming = useMemo(
     () =>
@@ -297,6 +301,8 @@ function Loaded({ schedule }: { schedule: Schedule }) {
             </div>
           )}
 
+          {!nights && <LateBanner scheduleId={schedule.id} queue={queue.data} />}
+
           <Legend schedule={schedule} />
 
           {slots.error && !slots.data ? (
@@ -320,6 +326,7 @@ function Loaded({ schedule }: { schedule: Schedule }) {
               nowMs={now}
               highlight={highlight.map((h) => h.start)}
               compact={compact}
+              expected={expected}
               onOpenSlot={openSlot}
               onBlockRange={(s, e) => void block(s, e)}
             />

@@ -28,7 +28,7 @@ Settings: `CALL_HISTORY_TOKENS`, `CALL_NOTES_LLM` (on|off), `CALL_NOTES_MAX_CHAR
 | Field | What it holds |
 |---|---|
 | `display_name`, `preferred_language` | The caller's name and the language they use |
-| `people` | The people booked for on this number: `{name, relation?, age_band?, last_booked_at?}`, at most 8, and `last_person` (a mother ringing for her son keeps her own name and adds him) |
+| `people` | The family of the number, the people booked for: `{name, relation?, age_band?, facts?, last_booking?, last_booked_at?}`, at most 8, oldest first, and `last_person` (see "One number, the whole family" below) |
 | `facts` | The details of the agent's trade, `{key: value}`, at most 12 (below) |
 | `last_booking`, `last_outcome`, `summary` | The last booking that was not cancelled, how the last call went, one or two sentences made in code |
 | `follow_ups` | Up to three "ask next time" notes, set by the agent (`note_for_next_call`) or by the owner; asked on the next call, then dropped |
@@ -78,6 +78,45 @@ is also told not to return them:
 
 A call itself may hold such words in the conversation and its transcript; the profile never does.
 
+### One number, the whole family
+
+A son rings for his mother, a mother for her children. The number holds **the caller** (`display_name`, who usually rings) and
+**the people they book for**, each with:
+
+| Field | What it holds |
+|---|---|
+| `name` | As booked ("Sunita Kulkarni"); "Sunita" and "Sunita Kulkarni" are one person |
+| `relation` | To the caller, always stored in English: mother, father, son, daughter, wife, husband, brother, sister, grandmother, grandfather, friend, child, `self` (the caller booked for themselves) or `other`. Spoken in the caller's language |
+| `age_band` | child, teen, adult or senior (shown as "60+"); never an exact age |
+| `facts` | That person's usual details from the trade's `remember` schema (usual doctor, usual visit), kept with them and not with the caller |
+| `last_booking` | `{date, time, purpose}` of the last booking made for them |
+
+An older profile (name, relation, age band, last booked) reads as it is and is written in this shape the next time it is saved.
+
+**How it is learnt (end of call).** `read_call` takes who the booking was for from the booking tool's `name` (else the form's
+`person`), and how they are related from, in this order: a `relation` or `booked_by` argument of the booking tool (any word
+the model uses is turned into the English relation), what the caller said, else the form. What the caller says is read in
+English, Hindi and Marathi, with Marathi's joined endings: "for my mother" and "मेरी माँ के लिए" and "माझ्या आईसाठी" give
+mother, "mere papa ke liye" and "माझ्या वडिलांसाठी" give father, "for myself" gives self. The name on that booking is then the
+patient's, not the caller's, so it does not replace `display_name`; a caller who introduced themselves ("my name is ...") keeps
+their name. A booking for the caller is `self`. The trade's usual details of a booking made for somebody else go to that
+person. The person booked for moves to the end of the list.
+
+**How it is used.** The prompt block leads with the family, newest first, "This number usually books for: Sunita Kulkarni
+(mother, 60+, usually Dr. Joshi, last visit 12 Oct, follow-up); Rahul Kulkarni (self)", and tells the agent to ask one short
+question in the caller's language with a respectful form: "Is this for Sunita ji again, or for someone else?", and never to
+volunteer one person's visits, doctor or details when the caller names someone else. A returning caller whose last booking was
+for somebody else is greeted with that question in place of "how can I help?" (first name only). No question is asked on a
+number that only books for its caller.
+
+**Names for the speech engine.** `caller_profiles.known_names(conversation_id)` returns at most four names for the live call:
+the caller's usual name, then the people most recently booked for, no repeats. It reads what the call opened with (a dict
+lookup, no store read) and returns `[]` when the call has no known caller, profiles are off or anything fails; it never raises.
+
+**Forgetting one person.** `forget_me` takes an optional `person` (a name or a relation as the caller says it: "forget my
+father's details"): same read-back and yes, then only that person is removed, the rest of the family and the call stay, and the
+same call does not write them back. Unclear or ambiguous ("Asha" when two are named Asha) is asked about, not guessed.
+
 ## 3. Using it next time
 
 * **Greeting.** A known caller is greeted by name in their preferred language (when the agent speaks it, else the nearest it
@@ -98,7 +137,7 @@ A call itself may hold such words in the conversation and its transcript; the pr
   what it will delete, and deletes the number's profile only after a yes in the caller's next message. Nothing from that
   call is written either, and the rest of the call carries nothing. On a web call only the second part applies (the number was
   not verified, so an existing profile is not deleted by it).
-* **The owner.** The Callers page (`/desk/callers`) shows each caller: name, masked number, language, people, details as chips,
+* **The owner.** The Callers page (`/desk/callers`) shows each caller: name, masked number, language, the family as chips ("Sunita · mother") and one card per person (relation, age band, usual details, last and next booking, edit and remove), details as chips,
   last booking, bookings (upcoming first), call history and notes. The owner can edit names, details, people and notes inline,
   add a note for the next call, or forget the caller. `GET /api/callers`, `PUT|PATCH /api/callers/{id}` and `DELETE
   /api/callers/{id}`; an edit that holds something never kept is a 422 with the reason. A booking links to
