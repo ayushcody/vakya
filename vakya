@@ -13,6 +13,9 @@
 #                               (backend/bench/stress_report.py, results in docs/STRESS_REPORT.md)
 #   ./vakya warm              check the Gnani and Gemini keys, then ask the API to prepare its hold lines (the short phrases
 #                               played while a reply is being written) so the first call of a demo is not slower than the rest
+#   ./vakya demo [--add-bookings]
+#                             fill the desk with invented demo front desks and staff bookings so the Bookings pages are never
+#                               empty (needs ./vakya start; only adds, and copies backend/data to backend/data-backups first)
 #   ./vakya clean-web         delete frontend/.next (the web build cache) when the web app is not running
 # Windows: use vakya.ps1 in PowerShell.
 set -uo pipefail
@@ -286,6 +289,14 @@ cmd_stress() {
     (cd "$BACKEND" && exec .venv/bin/python bench/stress_report.py "$@")
 }
 
+cmd_demo() {
+    [[ -x "$BACKEND/.venv/bin/python" ]] || { bad "Not set up yet"; fix "./vakya setup"; exit 1; }
+    curl -fsS -o /dev/null "http://127.0.0.1:$API_PORT/api/health" 2>/dev/null \
+        || { bad "The API is not running on port $API_PORT"; fix "./vakya start, then ./vakya demo"; exit 1; }
+    (cd "$BACKEND" && exec .venv/bin/python scripts/demo_data.py --api "http://localhost:$API_PORT" \
+        --web "http://localhost:$WEB_PORT" "$@")
+}
+
 cmd_warm() {
     [[ $# -eq 0 ]] || { bad "./vakya warm takes no options (got: $*)"; exit 1; }
     [[ -x "$BACKEND/.venv/bin/python" ]] || { bad "Not set up yet"; fix "./vakya setup"; exit 1; }
@@ -537,6 +548,7 @@ case "${1:-}" in
     test)   cmd_test ;;
     stress) shift; cmd_stress "$@" ;;
     warm)   shift; cmd_warm "$@" ;;
+    demo)   shift; cmd_demo "$@" ;;
     clean-web) cmd_clean_web ;;
     *) sed -n '2,/^# Windows/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//' ;;
 esac

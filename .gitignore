@@ -1,5 +1,7 @@
 # Runtime state of ./vakya (pid files, logs)
 .vakya/
+# Copies of backend/data made by ./vakya demo before it writes
+backend/data-backups/
 # Local editor/agent run configuration
 .claude/launch.json
 # Playwright output

@@ -17,6 +17,7 @@ A phone front desk for Indian small businesses (clinics, hotels, salons, restaur
 ./vakya status
 ./vakya stop
 ./vakya doctor
+./vakya demo         # invented clinic + hotel desks with staff bookings, so Bookings is never empty (adds only; backs up backend/data first)
 ```
 
 Keys go in `backend/.env` (never commit it): `GNANI_API_KEY`, `GEMINI_API_KEY`, `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID`, `PHONE_ALLOWED_NUMBERS`, `PUBLIC_BASE_URL` (a fixed HTTPS tunnel address for the phone line). `GET /api/ready` says what is missing without spending credits.
