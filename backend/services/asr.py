@@ -9,10 +9,10 @@ from typing import Optional
 
 try:
     from core.validation import sniff_audio_kind
-    from services import gnani, synthesis
+    from services import gnani, hearing, synthesis
 except ImportError:  # pragma: no cover
     from backend.core.validation import sniff_audio_kind
-    from backend.services import gnani, synthesis
+    from backend.services import gnani, hearing, synthesis
 
 log = logging.getLogger("vakya")
 
@@ -42,11 +42,17 @@ async def _gnani_speech_to_text(audio_bytes: bytes, kind: str, language: Optiona
     languages = hints.get("asr_languages") or ([language] if language else None)
     out = await asyncio.to_thread(
         lambda: gnani.transcribe(payload, filename=f"audio.{ext}", content_type=ctype, languages=languages,
-                                 keyterms=hints.get("keyterms"), previous_text=hints.get("previous_text")))
+                                 keyterms=hints.get("keyterms"), previous_text=hints.get("previous_text"),
+                                 topic=hints.get("topic"), speaker_names=hints.get("speaker_names"),
+                                 substitution_map=hints.get("substitution_map"), request_id=hints.get("request_id")))
     hints["detected_language"] = out.get("language")
+    hints["detected_language_code"] = out.get("detected_language_code")   # Gnani's own code ("hi-IN"), as it came back
+    hints["request_id"] = out.get("request_id") or hints.get("request_id")  # the X-API-Request-ID Gnani echoed
+    hints["processing_time"] = out.get("processing_time")                    # seconds Gnani spent, upload excluded
     hints["prompt_used"] = False
     hints["segments"] = None   # Prisma gives no per-segment confidence: the turn's confidence is "unknown"
     hints["provider"] = "gnani"
+    hearing.after_transcript(hints, out["text"])   # which learnt corrections probably ran (an event each)
     return out["text"]
 
 

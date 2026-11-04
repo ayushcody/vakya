@@ -2,7 +2,8 @@
 
 Every spoken turn (the browser web call, the owner's own turns and the phone call: they all run `turn_event_stream` or
 `turn_blocking`) appends events here as it goes: what the caller said and in which language, each scheduling tool call and
-its result, each sentence the agent speaks, a booking being made. The desk's live screen (components/live/) and the phone
+its result, each sentence the agent speaks, a booking being made, and what the desk is listening for and which learnt correction ran
+(`hearing`: kind "listening" or "corrected", with a one-line `label`; services/hearing.py). The desk's live screen (components/live/) and the phone
 monitor subscribe to them: nothing is polled from the database and nothing here is stored for good.
 
 The log is in memory (a ring of the latest events per front desk), thread safe (tools run in worker threads) and bounded.
@@ -27,7 +28,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 RING = 600                    # events kept per front desk
 MAX_AGENTS = 64               # front desks kept (the least recently used one goes)
-EVENT_TYPES = ("caller", "tool", "agent", "booking", "turn_end")
+EVENT_TYPES = ("caller", "tool", "agent", "booking", "turn_end", "hearing")
 
 _lock = threading.RLock()
 _cond = threading.Condition(_lock)

@@ -17,7 +17,7 @@ try:
     from core.errors import AppError
     from services import (
         agent_prompt, agent_store, asr, caller_memory, caller_profiles, canned_reply, fact_sheet, gnani, gnani_gateway, grounding,
-        hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
+        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
         speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
     )
     from services import booking_evidence, call_events, call_notes
@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover
     from backend.core.errors import AppError
     from backend.services import (
         agent_prompt, agent_store, asr, caller_memory, caller_profiles, canned_reply, fact_sheet, gnani, gnani_gateway, grounding,
-        hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
+        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
         speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
     )
     from backend.services import booking_evidence, call_events, call_notes
@@ -160,19 +160,27 @@ async def turn_begin(request: Request, agent_id: str, user_id: str, *, storage_m
 
 def gnani_turn_hints(run: Any, hints: dict, qu: Any) -> None:
     """What Prisma is told about this turn: the agent's languages, its names and terms as keyterms (the entities the
-    agent's documents mention), and what the caller said last (`previous_text`)."""
+    agent's documents mention), what the caller said last (`previous_text`), and, from services/hearing.py, what the desk
+    has learnt (its vocabulary and substitution rules), what the caller is about to say (`expecting`: a name, a day or
+    time, digits, a yes or no, read from the desk's last reply) with a matching `topic`, the names already heard on this
+    call (`speaker_names`) and the request id (`X-API-Request-ID`)."""
     hints["asr_languages"] = [str(x) for x in ((run.agent or {}).get("supported_languages") or [])]
+    entities: List[str] = []
     try:
         profile = qu.get_profile(run.agent, run.user_id, run.storage_mode)
-        hints["keyterms"] = gnani.keyterms_from_entities(profile.lexicon.entities) if profile is not None else []
+        entities = gnani.keyterms_from_entities(profile.lexicon.entities) if profile is not None else []
     except Exception as e:  # noqa: BLE001 - a hint, never a reason to fail the turn
         log.debug("no keyterms for this turn: %s", e)
-        hints["keyterms"] = []
+    hints["keyterms"] = entities
     previous = getattr(run, "asr_previous_user_text", None)
     if not previous:
         previous = next((h.get("text_content") for h in reversed(getattr(run, "history", None) or [])
                          if h.get("role") == "user"), None)
     hints["previous_text"] = previous or None
+    try:
+        hearing.prepare_turn_hints(run, hints, entities, env_terms=len(gnani.env_keyterms()))
+    except Exception as e:  # noqa: BLE001 - what the desk has learnt helps; it never fails a turn
+        log.debug("no hearing hints for this turn: %r", e)
 
 
 async def asr_for_turn(run: Any, file_bytes: bytes) -> Tuple[str, dict]:
@@ -222,6 +230,10 @@ async def turn_asr(run: TurnRun, file_bytes: bytes) -> float:
         # giving details, routers/phone.py): its result is this turn's, with the hints it was made under.
         try:
             user_text, hints = await pre
+            h = (hints or {}).get("_hearing")
+            if isinstance(h, dict) and not callable(h.get("emit")) and callable(getattr(run, "emit", None)):
+                h["emit"] = run.emit        # made before the turn began: its "Listening for" event goes out now
+            hearing.emit_listening(hints or {})
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - recognise it again
@@ -633,7 +645,9 @@ def turn_messages(run: TurnRun) -> List[dict]:
         reply_line=language_policy.turn_note(run.language_decision, supported,
                                              agent_prompt.LANGUAGE_NAMES.get(run.language, run.language)))
     known = caller_profiles.prompt_block(getattr(run, "conversation_id", None))   # a returning phone caller (services/caller_profiles.py)
-    extra = "\n".join(x for x in (notes, known) if x)
+    from services import delays  # noqa: PLC0415
+    late = delays.prompt_block(run.agent.get("id"), getattr(run, "conversation_id", None))   # running late today, and a call the desk placed to say so (services/delays.py)
+    extra = "\n".join(x for x in (notes, known, late) if x)
     messages.append({"role": "user", "content": content + ("\n" + extra if extra else "")})
     return messages
 

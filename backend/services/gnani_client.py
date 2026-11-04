@@ -26,6 +26,7 @@ import base64
 import json
 import logging
 import os
+import re
 import threading
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
 
@@ -143,7 +144,8 @@ def _retry_after(resp: "httpx.Response") -> Optional[float]:
 def _request(method: str, path: str, **kw) -> "httpx.Response":
     offline.block("Gnani AI speech")
     try:
-        resp = _client().request(method, base_url() + path, headers=_headers(),
+        headers = {**kw.pop("headers", {}), **_headers()}
+        resp = _client().request(method, base_url() + path, headers=headers,
                                  timeout=kw.pop("timeout", None) or timeout_s(), **kw)
     except AppError:
         raise
@@ -165,40 +167,111 @@ def _request(method: str, path: str, **kw) -> "httpx.Response":
 
 # ------------------------------------------------------------------------------------------ speech recognition
 
+MAX_SUBSTITUTION_RULES = 10     # https://docs.gnani.ai/api/STT/speech-to-text.md: substitution_map holds at most 10 rules
+MAX_SPEAKER_NAMES = 4           # speaker_names takes 1 to 4 names
+MAX_TOPIC_CHARS = 1600          # topic: non-empty, at most 1,600 characters
+MAX_PREVIOUS_TEXT_CHARS = 600   # previous_text: the last 600 characters are kept
+REQUEST_ID_HEADER = "X-API-Request-ID"
+
+
+def _clean_list(values: Optional[Iterable[str]], limit: int) -> List[str]:
+    out: List[str] = []
+    for v in values or []:
+        t = str(v or "").strip()
+        if t and t not in out:
+            out.append(t)
+    return out[:limit]
+
+
+def substitution_rules(rules: Optional[Iterable[Any]]) -> List[dict]:
+    """The `substitution_map` rules Gnani wants, `[{"patterns": [...], "replacement": "..."}]`, from rules written either
+    that way or as `{"heard": ..., "meant": ...}` (the desk's hearing store, services/hearing.py). Empty or malformed rules are
+    dropped and at most 10 are kept."""
+    out: List[dict] = []
+    for r in rules or []:
+        if not isinstance(r, dict):
+            continue
+        patterns = r.get("patterns") if isinstance(r.get("patterns"), list) else [r.get("heard")]
+        replacement = r.get("replacement") if "replacement" in r else r.get("meant")
+        pats = _clean_list(patterns, 20)
+        rep = str(replacement or "").strip()
+        if pats and rep:
+            out.append({"patterns": pats, "replacement": rep})
+    return out[:MAX_SUBSTITUTION_RULES]
+
+
 def _stt_form(language: str, model: str, fmt: str, keyterms: Optional[Iterable[str]], topic: Optional[str],
-              previous_text: Optional[str]) -> Dict[str, str]:
-    """GUESS: multi-valued fields (a list of language codes, keyterms) are sent comma-separated in one form field."""
+              previous_text: Optional[str], speaker_names: Optional[Iterable[str]] = None,
+              substitution_map: Optional[Iterable[Any]] = None) -> Dict[str, str]:
+    """The multipart text fields of `POST /stt/v3` (https://docs.gnani.ai/api/STT/speech-to-text.md). Encodings as documented:
+    `keyterms` and `speaker_names` are JSON arrays of strings (the page also accepts comma-separated; JSON keeps a phrase
+    with a comma whole), at most 200 and 4; `topic` non-empty text of at most 1,600 characters; `previous_text` non-empty,
+    Gnani keeps its last 600 characters; `enable_substitution` the string "true" and `substitution_map` a JSON list of
+    `{"patterns": [..], "replacement": ".."}` (at most 10 rules), sent together and only when there is a rule. Empty values are
+    left out (the page says a value outside its limits is a 400 INVALID_CONTEXT)."""
     form = {"language_code": language, "model": model, "format": fmt}
-    terms = [t.strip() for t in (keyterms or []) if t and t.strip()][:MAX_KEYTERMS]
+    terms = _clean_list(keyterms, MAX_KEYTERMS)
     if terms:
-        form["keyterms"] = ",".join(terms)
+        form["keyterms"] = json.dumps(terms, ensure_ascii=False)
+    topic = (topic or "").strip()
     if topic:
-        form["topic"] = topic
-    if previous_text:
-        form["previous_text"] = previous_text.strip()[:500]
+        form["topic"] = topic[:MAX_TOPIC_CHARS]
+    prev = (previous_text or "").strip()
+    if prev:
+        form["previous_text"] = prev[-MAX_PREVIOUS_TEXT_CHARS:]
+    names = _clean_list(speaker_names, MAX_SPEAKER_NAMES)
+    if names:
+        form["speaker_names"] = json.dumps(names, ensure_ascii=False)
+    rules = substitution_rules(substitution_map)
+    if rules:
+        form["enable_substitution"] = "true"
+        form["substitution_map"] = json.dumps(rules, ensure_ascii=False)
     return form
 
 
 def transcribe(audio: bytes, *, language: str = "indic-auto", model: str = "prisma-v3.0", fmt: str = "codemix",
                keyterms: Optional[Iterable[str]] = None, topic: Optional[str] = None,
                previous_text: Optional[str] = None, filename: str = "audio.wav",
-               content_type: str = "audio/wav", lane: Optional[str] = None) -> dict:
+               content_type: str = "audio/wav", lane: Optional[str] = None,
+               speaker_names: Optional[Iterable[str]] = None, substitution_map: Optional[Iterable[Any]] = None,
+               request_id: Optional[str] = None) -> dict:
     """One utterance (wav/mp3/ogg/flac, at most 30 s) to text. Returns the API's JSON plus normalised keys: `text`
-    (stripped, "" when none), `language` (detected_language_code, or None) and `provider` ("gnani"). Blocking: call it
-    with asyncio.to_thread from async code. Goes through the gateway (cache, queue, retries, breaker, ledger)."""
-    terms = [t.strip() for t in (keyterms or []) if t and t.strip()][:MAX_KEYTERMS]
-    key = gateway.cache_key("stt", language, model, fmt, terms, topic, previous_text, blobs=(audio,))
+    (stripped, "" when none), `language` (detected_language_code, or None), `request_id` (what Gnani echoed from our
+    `X-API-Request-ID` header, else the id it made), `processing_time` (seconds, or None) and `provider` ("gnani"). Blocking:
+    call it with asyncio.to_thread from async code. Goes through the gateway (cache, queue, retries, breaker, ledger). The
+    request id is a correlation label only: it is not part of the cache key."""
+    terms = _clean_list(keyterms, MAX_KEYTERMS)
+    names = _clean_list(speaker_names, MAX_SPEAKER_NAMES)
+    rules = substitution_rules(substitution_map)
+    key = gateway.cache_key("stt", language, model, fmt, terms, topic, previous_text, names, rules, blobs=(audio,))
     return gateway.execute(
         "stt", lambda: _transcribe_raw(audio, language=language, model=model, fmt=fmt, keyterms=terms, topic=topic,
-                                       previous_text=previous_text, filename=filename, content_type=content_type),
+                                       previous_text=previous_text, filename=filename, content_type=content_type,
+                                       speaker_names=names, substitution_map=rules, request_id=request_id),
         units={"seconds": gateway.audio_seconds(audio)}, lane=lane, key=key,
         size=lambda r: len(json.dumps(r, default=str)), configured=configured())
 
 
+def request_id_for(conversation_id: Optional[str], turn: Optional[Any] = None) -> Optional[str]:
+    """The correlation id Vakya sends as `X-API-Request-ID` and Gnani echoes as `request_id`: "<conversation id>:<turn>"
+    (printable ASCII only, at most 100 characters), or None when neither part is known."""
+    def part(value: Any, limit: int) -> str:
+        return re.sub(r"[^A-Za-z0-9_.\-]", "", str(value if value is not None else ""))[:limit]
+    parts = [x for x in (part(conversation_id, 70), part(turn, 20)) if x]
+    return ":".join(parts) or None
+
+
 def _transcribe_raw(audio: bytes, *, language: str, model: str, fmt: str, keyterms: Optional[Iterable[str]],
-                    topic: Optional[str], previous_text: Optional[str], filename: str, content_type: str) -> dict:
+                    topic: Optional[str], previous_text: Optional[str], filename: str, content_type: str,
+                    speaker_names: Optional[Iterable[str]] = None, substitution_map: Optional[Iterable[Any]] = None,
+                    request_id: Optional[str] = None) -> dict:
+    extra = {}
+    rid = (request_id or "").strip()
+    if rid:
+        extra["headers"] = {REQUEST_ID_HEADER: rid}
     resp = _request("POST", STT_PATH, files={"audio_file": (filename, audio, content_type)},
-                    data=_stt_form(language, model, fmt, keyterms, topic, previous_text))
+                    data=_stt_form(language, model, fmt, keyterms, topic, previous_text, speaker_names, substitution_map),
+                    **extra)
     try:
         data = resp.json()
     except ValueError as e:
@@ -207,8 +280,12 @@ def _transcribe_raw(audio: bytes, *, language: str, model: str, fmt: str, keyter
     if not isinstance(data, dict):
         raise AppError("PROVIDER_ERROR", "Gnani AI returned an unexpected speech-recognition reply.", 502,
                        {"provider": "gnani"})
+    proc = data.get("processing_time")
     return {**data, "text": str(data.get("text") or "").strip(),
-            "language": data.get("detected_language_code") or None, "provider": "gnani"}
+            "language": data.get("detected_language_code") or None,
+            "request_id": data.get("request_id") or rid or None,
+            "processing_time": proc if isinstance(proc, (int, float)) and not isinstance(proc, bool) else None,
+            "provider": "gnani"}
 
 
 # --------------------------------------------------------------------------------------------- speech synthesis

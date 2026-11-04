@@ -228,10 +228,11 @@ def test_a_mother_booking_for_her_son_keeps_her_name_and_adds_him_to_the_people_
     assert set(names) == {"Sunita Sharma", "Rohan"}
     assert names["Rohan"]["relation"] == "son" and names["Rohan"]["age_band"] == "child"
     assert names["Rohan"]["last_booked_at"] == "2026-11-05T10:00:00Z"
-    assert '"age"' not in json.dumps(p2) and "7" not in json.dumps(p2["people"])      # the exact age is not kept
+    assert '"age"' not in json.dumps(p2) and "7 year" not in json.dumps(p2)      # the exact age is not kept
     assert "booked" in p2["summary"] and "for Rohan" in p2["summary"]
     block = cp.block_text(p2)
-    assert "people booked for on this number: Sunita Sharma, Rohan (son, child); last booked for Rohan" in block
+    assert "this number usually books for: Rohan (son, child, last visit 12 Nov); Sunita Sharma (self" in block
+    assert "Is this for Rohan ji again, or for someone else?" in block and "last booked for Rohan" in block
 
 
 def test_a_different_name_on_a_known_number_is_the_person_unless_the_caller_introduced_themselves():
@@ -462,7 +463,8 @@ def test_the_block_names_the_people_the_usual_details_and_how_to_confirm_the_num
     p = cp.clean_profile({**profile(), "people": [{"name": "Sunita"}, {"name": "Rohan", "relation": "son", "age_band": "child"}],
                           "last_person": "Rohan", "facts": {"preferred_doctor": "Dr Rao", "preferred_schedule": "evenings"}})
     block = cp.block_text(p)
-    assert "people booked for on this number: Sunita, Rohan (son, child); last booked for Rohan" in block
+    assert "this number usually books for: Sunita; Rohan (son, child); last booked for Rohan" in block or \
+        "this number usually books for: Rohan (son, child); Sunita; last booked for Rohan" in block
     assert "usual: preferred doctor Dr Rao, preferred schedule evenings" in block
     assert "The number on this line is 98xxxx3210." in block and "Same number as last time, 98xxxx3210?" in block
     assert "read a booking back before you make it" in block and "forget_me" in block

@@ -122,7 +122,7 @@ def test_a_long_list_is_shortened(clock):
 def test_booking_writes_the_row_for_this_front_desk(clinic):
     ok, v = book()
     assert ok and v == {"booking_id": "A10", "schedule": "Doctor consultations", "name": "Priya Sharma", "date": THURSDAY,
-                        "weekday": "Thursday", "time": "18:00", "status": "booked", "say": v["say"]}
+                        "weekday": "Thursday", "time": "18:00", "status": "booked", "token": 1, "say": v["say"]}
     assert "A10" in v["say"]["en"] and "phone" not in v
     row = next(b for b in st.sb._ap().all_bookings() if b["booking_id"] == "A10")
     assert row["agent_id"] == AGENT and row["schedule_id"] == "S1" and row["source"] == "agent" and row["phone"] == "9876543210"
@@ -261,7 +261,7 @@ def test_the_agent_is_given_the_scheduling_tools_and_the_rule(desk, monkeypatch)
     say(rig, agent["id"], "hi")
     first = model.requests[0]
     assert [t["function"]["name"] for t in first["tools"]] == \
-        ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "forget_me"]
+        ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "queue_status", "forget_me"]
     system = first["messages"][0]["content"]
     assert "never say a time is free" in system and "`before` and `after`" in system and "Shall I book it?" in system
 
@@ -290,7 +290,7 @@ def test_the_doctor_list_tool_gives_way_to_the_schedules(rig, monkeypatch, tmp_p
     finally:
         h.close()
     names = [t["function"]["name"] for t in model.requests[0]["tools"]]
-    assert names == ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "forget_me"]
+    assert names == ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "queue_status", "forget_me"]
 
 
 def test_checking_a_taken_time_offers_before_and_after(desk, monkeypatch):

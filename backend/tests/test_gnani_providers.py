@@ -172,7 +172,9 @@ def test_turn_hints_carry_languages_keyterms_and_the_previous_utterance(backend_
                                              {"role": "user", "text_content": "doosra sawaal"}])
         hints = {}
         backend_mod.gnani_turn_hints(run, hints, qu)
-        assert hints == {"asr_languages": ["hi", "en"], "keyterms": ["Shivajinagar"], "previous_text": "doosra sawaal"}
+        assert hints["asr_languages"] == ["hi", "en"] and hints["previous_text"] == "doosra sawaal"
+        assert hints["keyterms"] == ["Shivajinagar"] and hints["expecting"] == "open" and hints["speaker_names"] == []
+        assert hints["substitution_map"] == [] and "front desk" in hints["topic"]
         run.asr_previous_user_text = "phone caller said this"        # the phone call tracks it itself
         backend_mod.gnani_turn_hints(run, hints, qu)
         assert hints["previous_text"] == "phone caller said this"

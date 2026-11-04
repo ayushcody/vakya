@@ -187,3 +187,11 @@ Example: `"Mon to Sat 10 to 1 and 5 to 9, Sunday closed"` →
 | `institute` | "Campus visits and counselling", 30 min, Mon to Sat 10:00 to 17:00 |
 | `service_centre` | "Service slots", 60 min, Mon to Sat 9:00 to 18:00, 3 at a time |
 | `fitness` | "Trial sessions", 60 min, every day 6:00 to 10:00 and 17:00 to 21:00, 5 at a time |
+
+### Demo data
+
+`./vakya demo` (needs `./vakya start`) fills an empty desk so the Bookings pages never open empty: a clinic front desk ("Green Valley Clinic") and a hotel front desk ("Palm Grove Residency") made from the templates through `POST /api/agents/from-template`, then about a dozen staff bookings on the clinic's slots across today and the next six days (always inside opening hours, Sundays skipped), two blocked ranges, and five stays of 1 to 3 nights on the hotel's Rooms schedule. Everything is made up (invented names, some in Devanagari, phone numbers from the `+91 98765 00xxx` test block) and every row has source `staff`: no calls, transcripts, proof of booking or caller profiles are created. It only adds: before the first write it copies `backend/data/` to `backend/data-backups/<YYYY-MM-DD-HHMM>/` (ignored by git) and prints that path. Run again, it finds the desks by name and makes nothing new; `./vakya demo --add-bookings` tops up days that have no booking. Code: `backend/scripts/demo_data.py`, tests `backend/tests/test_demo_data.py`.
+
+### Running late and tokens
+
+A time-slot schedule can say it is running late today, and every booking of the day has a token (its place by start time). The phone agent answers "how many before me?" from them. See [RUNNING_LATE.md](RUNNING_LATE.md).

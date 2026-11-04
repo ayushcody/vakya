@@ -4,6 +4,9 @@ import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
 import { CalendarCheck, CalendarSearch, CalendarX, Check, CircleAlert, Loader2, Search, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ListeningChip } from "@/components/hearing/ListeningChip";
+import { Misheard } from "@/components/hearing/Misheard";
+import type { HearingState } from "@/components/hearing/liveHearing";
 import { languageNote, type Line, type ToolEvent, type WordLang } from "@/lib/liveCall";
 
 /** A soft underline per language, in the page's own colours; a word whose language we cannot tell gets a dotted grey one. */
@@ -175,14 +178,23 @@ function AgentBlock({ lines, now }: { lines: Extract<Line, { kind: "agent" }>[];
 }
 
 /** The transcript of the call: the caller's and the front desk's words in large type, tool-call chips between them. */
-export function LiveTranscript({ lines, now, className, maxHeight }: { lines: Line[]; now: number; className?: string; maxHeight?: string }) {
+export function LiveTranscript({ lines, now, className, maxHeight, agentId, hearing }: {
+  lines: Line[];
+  now: number;
+  className?: string;
+  maxHeight?: string;
+  /** With the front desk's id each caller line gets a "Misheard?" action that teaches that desk (components/hearing). */
+  agentId?: string;
+  /** The `hearing` events by turn: what the desk was listening for, shown with the caller's line of that turn. */
+  hearing?: HearingState;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   // Follow the call by scrolling this box only: scrolling the page under the person watching would move the calendar away.
   useEffect(() => {
     const el = box.current;
     if (el && el.scrollTo) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
-  }, [lines.length, reduce]);
+  }, [lines.length, hearing?.lastSeq, reduce]);
 
   // Consecutive sentences of the front desk read as one paragraph.
   const blocks: ({ kind: "agent"; lines: Extract<Line, { kind: "agent" }>[] } | Exclude<Line, { kind: "agent" }>)[] = [];
@@ -192,6 +204,10 @@ export function LiveTranscript({ lines, now, className, maxHeight }: { lines: Li
     else if (l.kind === "agent") blocks.push({ kind: "agent", lines: [l] });
     else blocks.push(l);
   }
+
+  // A turn the desk is listening to whose line has not arrived yet: its "Listening for" chip stands at the end.
+  const spoken = new Set(lines.flatMap((l) => (l.kind === "caller" && l.event.turn_id ? [l.event.turn_id] : [])));
+  const waiting = hearing ? hearing.order.filter((t) => !spoken.has(t)).slice(-1).flatMap((t) => hearing.byTurn[t] ?? []) : [];
 
   return (
     <div ref={box} role="log" aria-live="polite" aria-label="Call transcript" style={{ maxHeight }} className={cn("space-y-5", maxHeight && "overflow-y-auto pr-1 [scrollbar-width:thin]", className)}>
@@ -209,9 +225,22 @@ export function LiveTranscript({ lines, now, className, maxHeight }: { lines: Li
             <p lang={e.language === "hi" || e.language === "mr" ? e.language : undefined} className="text-[1.625rem] leading-[1.45] text-text-primary">
               <Words words={e.words} text={e.text} />
             </p>
+            {(hearing?.byTurn[e.turn_id ?? ""] ?? []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(hearing?.byTurn[e.turn_id ?? ""] ?? []).map((h) => <ListeningChip key={h.seq} event={h} />)}
+              </div>
+            )}
+            {agentId && e.conversation_id && !e.typed && (
+              <Misheard agentId={agentId} conversationId={e.conversation_id} text={e.text} />
+            )}
           </div>
         );
       })}
+      {waiting.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {waiting.map((h) => <ListeningChip key={h.seq} event={h} />)}
+        </div>
+      )}
     </div>
   );
 }
