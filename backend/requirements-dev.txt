@@ -1,0 +1,7 @@
+-r requirements.txt
+# Tests and benchmarks
+pytest
+pytest-asyncio
+jiwer
+requests
+tiktoken

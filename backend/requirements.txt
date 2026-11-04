@@ -1,0 +1,39 @@
+# Vakya backend requirements.   pip install -r requirements.txt
+# Nothing here runs a model on this machine: speech is Gnani AI's (Prisma, Timbre, voice cloning), the language model and the
+# embeddings are Google's Embeddings, all over HTTPS. Python 3.10 or newer (3.12 tested).
+
+# API server / platform
+fastapi>=0.110
+uvicorn[standard]
+python-multipart
+python-dotenv
+PyJWT
+httpx
+websockets   # Gnani realtime recognition (services/gnani_client.StreamingRecognizer); uvicorn[standard] pulls it in too
+supabase
+structlog
+bcrypt
+psutil
+slowapi
+cryptography   # Ed25519 receipt signatures and the sealed voice files
+jsonschema     # tool arguments are checked against the tool's schema
+
+# Audio plumbing: reading and writing WAV, decoding uploads, resampling the 8 kHz phone line
+numpy>=2.0.0
+soundfile>=0.13.0
+librosa>=0.10.0
+scipy
+soxr
+
+# Documents and knowledge search (the embeddings are Embeddings's; the keyword search is built in)
+pypdf
+rapidfuzz>=3.0      # fuzzy name matching for the recognised words (difflib is the fallback)
+indic_transliteration   # Devanagari to Roman for names and for scoring Hinglish
+
+# Model Context Protocol: agent tools (services/tools.py is the client, mcp_servers/ the local servers). Works with the
+# 1.x and 2.x SDKs.
+mcp>=1.12
+
+# C2PA manifest on generated clips (services/c2pa_manifest.py; MIT OR Apache-2.0). Optional: without it C2PA_MANIFEST=on is
+# inert and clips are still labelled and receipted.
+c2pa-python>=0.38

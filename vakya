@@ -1,0 +1,542 @@
+#!/usr/bin/env bash
+# Vakya: one command to set up, run and check the whole studio on macOS or Linux.
+#   ./vakya setup             install everything (backend/.venv from backend/requirements-dev.txt, the frontend packages)
+#   ./vakya start             start the API (port 8020) and the web app (port 3010) in the background; a web build
+#                               cache from older code (frontend/.next) is cleared first. VAKYA_API_PORT / VAKYA_WEB_PORT
+#                               change the ports
+#   ./vakya stop              stop both
+#   ./vakya status            what is running (and the phone tunnel, once Vobiz is set up)
+#   ./vakya doctor            check the machine and the running app, with a fix for every problem
+#   ./vakya logs [api|web]    follow the logs
+#   ./vakya test              run the backend and frontend test suites
+#   ./vakya stress [opts]     the acoustic-stress report card: task completion under 8 kHz, noise and codecs
+#                               (backend/bench/stress_report.py, results in docs/STRESS_REPORT.md)
+#   ./vakya warm              check the Gnani and Embeddings keys, then ask the API to prepare its hold lines (the short phrases
+#                               played while a reply is being written) so the first call of a demo is not slower than the rest
+#   ./vakya clean-web         delete frontend/.next (the web build cache) when the web app is not running
+# Windows: use vakya.ps1 in PowerShell.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND="$ROOT/backend"
+FRONTEND="$ROOT/frontend"
+RUN_DIR="$ROOT/.vakya"
+LOGS="$RUN_DIR/logs"
+API_PORT="${VAKYA_API_PORT:-8020}"
+WEB_PORT="${VAKYA_WEB_PORT:-3010}"
+mkdir -p "$LOGS"
+
+# A setting that backend/.env documents is read from the shell environment first, else from backend/.env, else a default, so
+# the same line works for the API (which reads .env) and for this script. The file is read as plain text, never executed, and a
+# value is only ever printed by the caller that asked for it.
+env_setting() {  # KEY -> the last KEY=value in backend/.env (quotes and a trailing " # comment" removed), or nothing
+    local key="$1" file="$BACKEND/.env" line k v out=""
+    [[ -f "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}"
+        [[ "$line" == *=* ]] || continue
+        k="${line%%=*}"; k="${k%"${k##*[![:space:]]}"}"
+        [[ "$k" == "$key" ]] || continue
+        v="${line#*=}"; v="${v#"${v%%[![:space:]]*}"}"
+        case "$v" in
+            \"*) v="${v#\"}"; v="${v%%\"*}" ;;
+            \'*) v="${v#\'}"; v="${v%%\'*}" ;;
+            *) v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+        esac
+        out="$v"
+    done <"$file"
+    printf '%s' "$out"
+}
+setting() {  # KEY [default] -> shell environment, else backend/.env, else the default
+    local key="$1" v="${!1:-}"
+    [[ -n "$v" ]] || v="$(env_setting "$key")"
+    printf '%s' "${v:-${2:-}}"
+}
+PHONE_PORT="$(setting PHONE_PUBLIC_PORT 8021)"   # the phone-only public port the tunnel points at (backend/phone_public.py)
+
+# The two keys Vakya needs: Gnani (speech: Prisma listens, Timbre speaks, voice cloning) and Embeddings (the language model, and the
+# embeddings that search the knowledge base). Only whether a key is set is ever printed, never the key.
+gnani_key() { setting GNANI_API_KEY; }
+embeddings_key() { local k; k="$(setting EMBEDDINGS_API_KEY)"; [[ -n "$k" ]] || k="$(setting LLM_API_KEY)"; printf '%s' "$k"; }
+
+if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; D=$'\e[2m'; N=$'\e[0m'; else B= G= Y= R= D= N=; fi
+ok()   { echo "  ${G}✓${N} $*"; }
+warn() { echo "  ${Y}!${N} $*"; }
+bad()  { echo "  ${R}✗${N} $*"; }
+fix()  { echo "    ${D}fix:${N} $*"; }
+step() { echo; echo "${B}$*${N}"; }
+
+OS="$(uname -s)"; ARCH="$(uname -m)"
+has() { command -v "$1" >/dev/null 2>&1; }
+
+find_python() {
+    local c
+    for c in python3.12 python3.11 python3.10 python3; do
+        if has "$c" && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+            command -v "$c"; return 0
+        fi
+    done
+    return 1
+}
+
+install_hint() {  # package name -> how to install it on this OS
+    if [[ "$OS" == "Darwin" ]]; then echo "brew install $1"; else echo "sudo apt install $1"; fi
+}
+
+key_report() {  # shared by setup, warm and doctor: one line per key, with the fix when it is missing
+    if [[ -n "$(gnani_key)" ]]; then ok "Gnani key set (speech: Prisma listening, Timbre speaking, voice cloning)"
+    else bad "GNANI_API_KEY is not set: the agent can neither hear nor speak"; fix "add GNANI_API_KEY=... to backend/.env"; fi
+    if [[ -n "$(embeddings_key)" ]]; then ok "Embeddings key set (language model and knowledge search)"
+    else bad "No Embeddings key: the agent cannot answer"; fix "add EMBEDDINGS_API_KEY=... (or LLM_API_KEY=...) to backend/.env"; fi
+}
+key_summary() { key_report; }
+
+# ------------------------------------------------------------------------------------------------- setup
+cmd_setup() {
+    [[ $# -eq 0 ]] || { bad "./vakya setup takes no options (got: $*)"; exit 1; }
+
+    step "Checking the machine ($OS $ARCH)"
+    local py; py="$(find_python)" || { bad "Python 3.10 or newer is required"; fix "$(install_hint python@3.12)"; exit 1; }
+    ok "Python $("$py" -c 'import sys; print(sys.version.split()[0])')"
+    has node && ok "Node $(node -v)" || { bad "Node.js 20+ is required"; fix "$(install_hint node)"; exit 1; }
+    has ffmpeg && ok "ffmpeg" || { warn "ffmpeg is missing (needed to read uploaded audio)"; fix "$(install_hint ffmpeg)"; }
+
+    step "Backend environment (backend/.venv)"
+    [[ -x "$BACKEND/.venv/bin/python" ]] || "$py" -m venv "$BACKEND/.venv"
+    "$BACKEND/.venv/bin/pip" install -q --upgrade pip
+    "$BACKEND/.venv/bin/pip" install -q -r "$BACKEND/requirements-dev.txt" \
+        && ok "Python packages installed" || { bad "pip install failed (see the output above)"; exit 1; }
+
+    if [[ ! -f "$BACKEND/.env" ]]; then
+        cp "$BACKEND/.env.example" "$BACKEND/.env" && ok "Created backend/.env from the example (add keys there when you have them)"
+    else
+        ok "backend/.env exists (left unchanged)"
+    fi
+
+    step "Web app (frontend/node_modules)"
+    (cd "$FRONTEND" && npm install --no-audit --no-fund --loglevel=error) && ok "npm packages installed" \
+        || { bad "npm install failed"; exit 1; }
+
+    step "Keys"
+    key_summary
+
+    step "Done. Start everything with: ./vakya start"
+}
+
+# ------------------------------------------------------------------------------------------------- start / stop
+pid_of() { [[ -f "$RUN_DIR/$1.pid" ]] && cat "$RUN_DIR/$1.pid"; }
+alive() { local p; p="$(pid_of "$1")"; [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; }
+port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+
+wait_http() {  # url seconds
+    local i
+    for ((i = 0; i < $2; i++)); do curl -fsS -o /dev/null "$1" 2>/dev/null && return 0; sleep 1; done
+    return 1
+}
+
+# ---------------------------------------------------------------------------------------------- public tunnel (phone calls)
+# Vobiz has to reach this computer to connect a call, so phone calls need a public https address. The API serves the
+# routes Vobiz needs (the call stream, the answer document, the hangup callback and the missed-call hook) on a second,
+# phone-only port (PHONE_PUBLIC_PORT, default 8021; backend/phone_public.py), and the tunnel points at that port only: the
+# rest of the API (voices, cloning, the call endpoint) never leaves this computer. When Vobiz is set up in backend/.env, `./vakya start` starts the tunnel
+# (ngrok if installed, else cloudflared; VAKYA_TUNNEL=ngrok|cloudflared picks one) and hands its address to the API as
+# PUBLIC_BASE_URL, so nothing has to be started or pasted by hand. VAKYA_TUNNEL=off turns this off, for an owner who runs
+# their own tunnel (for example a named Cloudflare tunnel) and sets PUBLIC_BASE_URL in backend/.env. VAKYA_TUNNEL and
+# PHONE_PUBLIC_PORT are read from the shell first, else from backend/.env.
+phone_configured() { grep -qE '^VOBIZ_AUTH_ID=.+' "$BACKEND/.env" 2>/dev/null; }
+
+tunnel_kind() {  # ngrok | cloudflared | off | none
+    local want; want="$(setting VAKYA_TUNNEL auto)"
+    case "$want" in
+        off) echo off ;;
+        ngrok|cloudflared) echo "$want" ;;
+        *) if command -v ngrok >/dev/null 2>&1; then echo ngrok
+           elif command -v cloudflared >/dev/null 2>&1; then echo cloudflared
+           else echo none; fi ;;
+    esac
+}
+
+ngrok_url() {  # the https address of a running ngrok tunnel that points at the phone-only port, or nothing
+    curl -fsS -m 3 http://127.0.0.1:4040/api/tunnels 2>/dev/null | PORT="$PHONE_PORT" "$BACKEND/.venv/bin/python" -c '
+import json, os, sys
+try:
+    for t in json.load(sys.stdin)["tunnels"]:
+        if t["public_url"].startswith("https://") and t["config"]["addr"].rstrip("/").endswith(":" + os.environ["PORT"]):
+            print(t["public_url"]); break
+except Exception:
+    pass'
+}
+
+cloudflared_url() {  # the trycloudflare.com address from the log of a tunnel this script started, or nothing
+    grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOGS/tunnel.log" 2>/dev/null | tail -1
+}
+
+tunnel_url() {  # the public address of the tunnel this script manages (or one you started yourself), or nothing
+    case "$(tunnel_kind)" in
+        off) setting PUBLIC_BASE_URL ;;
+        ngrok) ngrok_url ;;
+        *) tunnel_alive && cloudflared_url ;;
+    esac
+}
+
+own_tunnel_line() {  # VAKYA_TUNNEL=off: show the address of your own tunnel (PUBLIC_BASE_URL), or say what is missing
+    local url; url="$(setting PUBLIC_BASE_URL)"
+    if [[ -n "$url" ]]; then ok "Tunnel  $url  (your own tunnel; VAKYA_TUNNEL=off)"
+    else warn "VAKYA_TUNNEL=off and PUBLIC_BASE_URL is empty: phone calls need PUBLIC_BASE_URL in backend/.env"; fi
+}
+
+tunnel_alive() { [[ -f "$RUN_DIR/tunnel.pid" ]] && kill -0 "$(cat "$RUN_DIR/tunnel.pid")" 2>/dev/null; }
+
+start_tunnel() {
+    phone_configured || return 0
+    local kind; kind="$(tunnel_kind)"
+    case "$kind" in
+        off) own_tunnel_line; return 0 ;;
+        none) warn "Neither ngrok nor cloudflared is installed, so phone calls cannot connect"
+              fix "brew install ngrok    (or: brew install cloudflared)"; return 0 ;;
+    esac
+    local url i
+    if [[ "$kind" == ngrok ]]; then
+        url="$(ngrok_url)"
+        if [[ -z "$url" ]]; then
+            nohup ngrok http "$PHONE_PORT" --log=stdout >"$LOGS/tunnel.log" 2>&1 </dev/null &
+            echo $! >"$RUN_DIR/tunnel.pid"
+            for ((i = 0; i < 25; i++)); do url="$(ngrok_url)"; [[ -n "$url" ]] && break; sleep 1; done
+        fi
+    else
+        if tunnel_alive; then url="$(cloudflared_url)"
+        else
+            : >"$LOGS/tunnel.log"
+            nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$PHONE_PORT" >"$LOGS/tunnel.log" 2>&1 </dev/null &
+            echo $! >"$RUN_DIR/tunnel.pid"
+            for ((i = 0; i < 30; i++)); do url="$(cloudflared_url)"; [[ -n "$url" ]] && break; sleep 1; done
+        fi
+    fi
+    if [[ -n "$url" ]]; then export PUBLIC_BASE_URL="$url"; ok "Tunnel  $url  -> port $PHONE_PORT only (call stream, answer document, callbacks)"
+    else warn "$kind gave no public address, so phone calls will not connect"; fix "./vakya logs tunnel"; fi
+}
+
+# ------------------------------------------------------------------------------------------------- web build cache
+# next dev keeps its build in frontend/.next. A cache built from older code can keep serving old CSS and pages after
+# many merges, so a start removes it when HEAD is not the commit the last web start recorded (RUN_DIR/web.head).
+web_head() { git -C "$ROOT" rev-parse HEAD 2>/dev/null; }
+
+clear_stale_web_cache() {  # before the web app starts: remove frontend/.next if HEAD changed, then record HEAD
+    local head recorded
+    head="$(web_head)"
+    [[ -n "$head" ]] || return 0  # not a git checkout: there is nothing to compare with
+    recorded="$(cat "$RUN_DIR/web.head" 2>/dev/null)"
+    if [[ -d "$FRONTEND/.next" && "$head" != "$recorded" ]]; then
+        if rm -rf "$FRONTEND/.next"; then ok "Cleared the web build cache (code changed since the last start)"
+        else warn "Could not remove frontend/.next"; fi
+    fi
+    printf '%s\n' "$head" >"$RUN_DIR/web.head"
+}
+
+cmd_clean_web() {
+    if alive web; then
+        bad "The web app is running (pid $(pid_of web)), so its build cache stays"
+        fix "./vakya stop, then ./vakya clean-web"; exit 1
+    fi
+    if [[ -d "$FRONTEND/.next" ]]; then
+        if rm -rf "$FRONTEND/.next"; then ok "Deleted frontend/.next (the web build cache; the next start rebuilds it)"
+        else bad "Could not remove frontend/.next"; exit 1; fi
+    else
+        echo "  No web build cache (frontend/.next) to delete"
+    fi
+}
+
+cmd_start() {
+    [[ -x "$BACKEND/.venv/bin/python" ]] || { bad "Not set up yet"; fix "./vakya setup"; exit 1; }
+    step "Starting Vakya"
+    alive api || start_tunnel
+    if alive api; then ok "API already running (pid $(pid_of api))"
+    elif port_busy "$API_PORT"; then warn "Port $API_PORT is already in use by another program"; fix "stop it, or VAKYA_API_PORT=8012 ./vakya start"
+    else
+        (cd "$BACKEND" && PHONE_PUBLIC_PORT="$PHONE_PORT" nohup .venv/bin/python -m uvicorn backend:app --host 127.0.0.1 \
+            --port "$API_PORT" >"$LOGS/api.log" 2>&1 </dev/null & echo $! >"$RUN_DIR/api.pid") >/dev/null 2>&1
+        if wait_http "http://127.0.0.1:$API_PORT/api/health" 90; then ok "API     http://localhost:$API_PORT"
+        else bad "API did not start"; fix "./vakya logs api"; fi
+        # A phone agent on a laptop must not fall asleep mid-shift: keep the Mac awake for as long as the API runs
+        # (caffeinate exits with it). VAKYA_KEEP_AWAKE=off leaves power management alone.
+        if [[ "$(setting VAKYA_KEEP_AWAKE on)" != off ]] && command -v caffeinate >/dev/null 2>&1 && [[ -f "$RUN_DIR/api.pid" ]]; then
+            nohup caffeinate -is -w "$(cat "$RUN_DIR/api.pid")" >/dev/null 2>&1 </dev/null &
+            echo $! >"$RUN_DIR/caffeinate.pid"; ok "Awake   caffeinate -is while the API runs (VAKYA_KEEP_AWAKE=off to skip)"
+        fi
+    fi
+    if alive web; then ok "Web app already running (pid $(pid_of web))"
+    elif port_busy "$WEB_PORT"; then warn "Port $WEB_PORT is already in use by another program"
+    else
+        clear_stale_web_cache
+        (cd "$FRONTEND" && NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" nohup npx next dev -p "$WEB_PORT" \
+            >"$LOGS/web.log" 2>&1 </dev/null & echo $! >"$RUN_DIR/web.pid") >/dev/null 2>&1
+        if wait_http "http://127.0.0.1:$WEB_PORT" 120; then ok "Web app http://localhost:$WEB_PORT"
+        else bad "Web app did not start"; fix "./vakya logs web"; fi
+    fi
+    echo
+    echo "  Open ${B}http://localhost:$WEB_PORT${N}  ·  check everything with ${B}./vakya doctor${N}  ·  stop with ${B}./vakya stop${N}"
+    echo "  ${D}Run ./vakya warm before a demo: it checks the keys and prepares the hold lines.${N}"
+}
+
+cmd_stress() {
+    [[ -x "$BACKEND/.venv/bin/python" ]] || { bad "Not set up yet"; fix "./vakya setup"; exit 1; }
+    (cd "$BACKEND" && exec .venv/bin/python bench/stress_report.py "$@")
+}
+
+cmd_warm() {
+    [[ $# -eq 0 ]] || { bad "./vakya warm takes no options (got: $*)"; exit 1; }
+    [[ -x "$BACKEND/.venv/bin/python" ]] || { bad "Not set up yet"; fix "./vakya setup"; exit 1; }
+    step "Keys"
+    key_report
+    curl -fsS -o /dev/null "http://127.0.0.1:$API_PORT/api/health" 2>/dev/null \
+        || { bad "The API is not running on port $API_PORT"; fix "./vakya start"; exit 1; }
+    step "Preparing the hold lines for a live demo"
+    API="http://127.0.0.1:$API_PORT" GREEN="$G" YELLOW="$Y" RED="$R" DIM="$D" RESET="$N" \
+    "$BACKEND/.venv/bin/python" - <<'PY'
+import json, os, sys, time, urllib.error, urllib.request
+
+api = os.environ["API"]
+G, Y, R, D, N = (os.environ[k] for k in ("GREEN", "YELLOW", "RED", "DIM", "RESET"))
+HEADERS = {"storage-mode": "local"}
+
+
+def call(method, path):
+    req = urllib.request.Request(api + path, method=method, headers=HEADERS, data=b"" if method == "POST" else None)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+# The warm-up is best effort: a missing endpoint or a failed call is reported, never fatal.
+try:
+    state = call("POST", "/api/warmup")
+except urllib.error.HTTPError as e:
+    if e.code in (404, 405):
+        print(f"  {Y}-{N} This version of the API has no warm-up step: nothing to prepare")
+    else:
+        print(f"  {Y}!{N} The warm-up was refused ({e.code}): {e.read().decode(errors='replace')[:200]}")
+    state = None
+except OSError as e:
+    print(f"  {Y}!{N} Could not reach the warm-up: {e}")
+    state = None
+
+failed = []
+if isinstance(state, dict):
+    shown, t0 = set(), time.time()
+    while True:
+        for c in state.get("components") or []:
+            if c.get("id") in shown or c.get("state") in ("pending", "warming", None):
+                continue
+            shown.add(c.get("id"))
+            mark, colour = {"ready": ("\u2713", G), "skipped": ("-", Y)}.get(c["state"], ("x", R))
+            secs = f"{c['seconds']:.1f}s" if c.get("seconds") is not None else ""
+            detail = f"  {D}{c['detail']}{N}" if c.get("detail") else ""
+            print(f"  {colour}{mark}{N} {str(c.get('label') or c.get('id')):<32} {secs:>7}{detail}", flush=True)
+        if state.get("state") != "running" or time.time() - t0 > 300:
+            break
+        time.sleep(2)
+        try:
+            state = call("GET", "/api/warmup")
+        except (OSError, urllib.error.HTTPError) as e:
+            print(f"  {Y}!{N} Lost the warm-up while it was running: {e}")
+            break
+    failed = [c for c in state.get("components") or [] if c.get("state") == "failed"]
+
+try:  # what is still missing, as the API sees it (this call never spends a Gnani credit)
+    ready = call("GET", "/api/ready")
+    for problem in ready.get("problems") or []:
+        print(f"  {Y}!{N} {problem}")
+    if ready.get("ok") and not ready.get("problems"):
+        print(f"  {G}\u2713{N} The API reports itself ready")
+except (OSError, urllib.error.HTTPError):
+    pass
+
+print()
+if failed:
+    print(f"  {R}Partly ready:{N} {len(failed)} step(s) failed. Check ./vakya logs api")
+    sys.exit(1)
+print(f"  {G}Done.{N} Run ./vakya doctor for the full check.")
+PY
+}
+
+descendants() {  # every child, grandchild, ... of a pid (so nothing a server spawned can outlive it)
+    local c
+    for c in $(pgrep -P "$1" 2>/dev/null); do echo "$c"; descendants "$c"; done
+}
+
+vakya_pids() {  # pids of the API, the web server and anything listening on their ports (found by what runs, not only by pid files)
+    {
+        pgrep -f "uvicorn backend:app" 2>/dev/null
+        lsof -nP -tiTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null
+        lsof -nP -tiTCP:"$WEB_PORT" -sTCP:LISTEN 2>/dev/null
+    } | sort -u
+}
+
+stop_one() {
+    local name="$1" p
+    p="$(pid_of "$name")"
+    if [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; then
+        local tree; tree="$(descendants "$p") $p"
+        kill -TERM $tree 2>/dev/null
+        for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || break; sleep 0.5; done
+        kill -KILL $tree 2>/dev/null
+        ok "Stopped $name"
+    else
+        echo "  $name was not running"
+    fi
+    rm -f "$RUN_DIR/$name.pid"
+}
+
+cmd_stop() {
+    step "Stopping Vakya"; stop_one web; stop_one api
+    if [[ -f "$RUN_DIR/caffeinate.pid" ]]; then kill "$(cat "$RUN_DIR/caffeinate.pid")" 2>/dev/null; rm -f "$RUN_DIR/caffeinate.pid"; fi
+    local tp
+    for tp in tunnel ngrok; do  # only a tunnel this script started; one you started yourself is left alone
+        if [[ -f "$RUN_DIR/$tp.pid" ]]; then
+            kill "$(cat "$RUN_DIR/$tp.pid")" 2>/dev/null; rm -f "$RUN_DIR/$tp.pid"; ok "Stopped tunnel"
+        fi
+    done
+    # Sweep whatever is left (an older crash, a worker whose parent died, a server started by hand): ask first, then insist.
+    local left; left="$(vakya_pids)"
+    if [[ -n "$left" ]]; then
+        local all="$left" p
+        for p in $left; do all="$all $(descendants "$p")"; done
+        kill -TERM $all 2>/dev/null
+        for _ in 1 2 3 4 5 6; do [[ -z "$(vakya_pids)" ]] && break; sleep 0.5; done
+        left="$(vakya_pids)"
+        [[ -n "$left" ]] && kill -KILL $left $(for p in $left; do descendants "$p"; done) 2>/dev/null
+        ok "Stopped leftover servers"
+    fi
+    sleep 0.5
+    left="$(vakya_pids)"
+    if [[ -n "$left" ]]; then
+        bad "Still running: $(echo $left | tr '\n' ' ')"
+        fix "kill -9 $(echo $left | tr '\n' ' ')"
+        return 1
+    fi
+    ok "Everything is stopped"
+}
+
+cmd_status() {
+    step "Status"
+    alive api && ok "API running (pid $(pid_of api)) http://localhost:$API_PORT" || echo "  API stopped"
+    alive web && ok "Web app running (pid $(pid_of web)) http://localhost:$WEB_PORT" || echo "  Web app stopped"
+    if phone_configured; then
+        local url
+        if [[ "$(tunnel_kind)" == off ]]; then own_tunnel_line; return 0; fi
+        url="$(tunnel_url)"
+        [[ -n "$url" ]] && ok "Tunnel  $url  (phone calls)" || echo "  Tunnel not running (phone calls cannot connect; ./vakya start opens it)"
+    fi
+}
+
+cmd_logs() {
+    case "${1:-api}" in
+        api) tail -n 80 -f "$LOGS/api.log" ;;
+        web) tail -n 80 -f "$LOGS/web.log" ;;
+        tunnel|ngrok|cloudflared) tail -n 80 -f "$LOGS/tunnel.log" ;;
+        *) echo "usage: ./vakya logs [api|web|tunnel]"; exit 1 ;;
+    esac
+}
+
+cmd_test() {
+    step "Backend tests"; (cd "$BACKEND" && .venv/bin/python -m pytest -q) || exit 1
+    step "Frontend tests"; (cd "$FRONTEND" && npx jest) || exit 1
+}
+
+# ------------------------------------------------------------------------------------------------- doctor
+cmd_doctor() {
+    step "Machine"
+    echo "  $OS $ARCH"
+    find_python >/dev/null && ok "Python 3.10+" || { bad "Python 3.10+ missing"; fix "$(install_hint python@3.12)"; }
+    has node && ok "Node $(node -v)" || { bad "Node.js missing"; fix "$(install_hint node)"; }
+    has ffmpeg && ok "ffmpeg" || { warn "ffmpeg missing (needed to read uploaded audio that is not plain WAV)"; fix "$(install_hint ffmpeg)"; }
+    [[ -x "$BACKEND/.venv/bin/python" ]] && ok "backend/.venv" || { bad "backend/.venv missing"; fix "./vakya setup"; }
+    [[ -d "$FRONTEND/node_modules" ]] && ok "frontend/node_modules" || { bad "frontend packages missing"; fix "./vakya setup"; }
+    [[ -f "$BACKEND/.env" ]] && ok "backend/.env" || { warn "backend/.env missing"; fix "cp backend/.env.example backend/.env"; }
+
+    step "Keys"
+    key_report
+
+    step "Ports"
+    local ap="API port $API_PORT" wp="Web port $WEB_PORT"
+    if alive api; then ok "$ap in use by the Vakya API (pid $(pid_of api))"
+    elif port_busy "$API_PORT" && curl -fsS -m 3 -o /dev/null "http://127.0.0.1:$API_PORT/api/health" 2>/dev/null; then
+        ok "$ap in use by a running Vakya API"
+    elif port_busy "$API_PORT"; then warn "$ap is in use by another program"; fix "stop it, or VAKYA_API_PORT=8012 ./vakya start"
+    else ok "$ap is free"; fi
+    if alive web; then ok "$wp in use by the Vakya web app (pid $(pid_of web))"
+    elif port_busy "$WEB_PORT"; then warn "$wp is in use by another program"; fix "stop it, or VAKYA_WEB_PORT=3011 ./vakya start"
+    else ok "$wp is free"; fi
+
+    if phone_configured && [[ "$(tunnel_kind)" == off ]]; then
+        step "Phone tunnel"
+        local own code; own="$(setting PUBLIC_BASE_URL)"; own="${own%/}"
+        if [[ -z "$own" ]]; then
+            warn "VAKYA_TUNNEL=off and PUBLIC_BASE_URL is empty: phone calls need PUBLIC_BASE_URL in backend/.env"
+        elif [[ -n "${VAKYA_DOCTOR_SKIP_TUNNEL_CHECK:-}" ]]; then
+            ok "Tunnel  $own  (your own tunnel; reachability check skipped)"
+        else
+            # The phone-only app answers 200 to an unknown token, so 200 means the tunnel reaches it.
+            code="$(curl -s -o /dev/null -w '%{http_code}' -m 8 -X POST "$own/api/phone/status-callback/doctor-check" 2>/dev/null)"
+            if [[ "$code" == 200 ]]; then ok "Tunnel  $own reaches the phone-only port"
+            else warn "Tunnel  $own did not answer the phone check (HTTP ${code:-none})"
+                 fix "is the tunnel up and pointing at http://127.0.0.1:$PHONE_PORT? try: cloudflared tunnel info <name>, or its logs; ./vakya start must be running"; fi
+        fi
+    fi
+
+    step "Running app"
+    local health
+    if ! health="$(curl -fsS "http://127.0.0.1:$API_PORT/api/health" 2>/dev/null)"; then
+        bad "API is not running on port $API_PORT"; fix "./vakya start"; return
+    fi
+    ok "API answers on port $API_PORT"
+    local ready; ready="$(curl -fsS -m 8 "http://127.0.0.1:$API_PORT/api/ready" 2>/dev/null)" || ready=""
+    "$BACKEND/.venv/bin/python" - "$health" "$ready" <<'PY'
+import json, sys
+h = json.loads(sys.argv[1])
+try:
+    r = json.loads(sys.argv[2]) if sys.argv[2] else {}
+except ValueError:
+    r = {}
+G, Y, R, D, N = "\033[32m", "\033[33m", "\033[31m", "\033[2m", "\033[0m"
+ok = lambda s: print(f"  {G}\u2713{N} {s}")
+warn = lambda s, f=None: (print(f"  {Y}!{N} {s}"), f and print(f"    {D}fix:{N} {f}"))
+llm = h.get("llm") or {}
+if llm.get("active"):
+    ok(f"Language model: {llm['active']} ({llm.get('model')})")
+elif "llm" in h:
+    warn("No language model: agents cannot answer", "add EMBEDDINGS_API_KEY (or LLM_API_KEY) to backend/.env, then ./vakya restart")
+sb = h.get("supabase") or {}
+if sb.get("configured"):
+    ok("Supabase connected" if sb.get("reachable") else "Supabase configured but unreachable")
+else:
+    ok("Local storage (no Supabase needed; data lives in backend/data)")
+if r:
+    if r.get("problems"):
+        for p in r["problems"]:
+            warn(p, "./vakya warm prepares the hold lines; the keys go in backend/.env")
+    else:
+        ok("Gnani side ready (key set, usage ledger writable, no paused lane)")
+PY
+}
+
+case "${1:-}" in
+    _setting)      shift; setting "$@"; echo ;;       # tests only: ./vakya _setting KEY [default]
+    _tunnel_kind)  tunnel_kind ;;                     # tests only: the tunnel kind start would use
+    _start_tunnel) start_tunnel ;;                    # tests only
+    _clear_web_cache) clear_stale_web_cache ;;        # tests only: the check a start makes before the web app
+    setup)  shift; cmd_setup "$@" ;;
+    start)  cmd_start ;;
+    stop)   cmd_stop ;;
+    restart) cmd_stop; cmd_start ;;
+    status) cmd_status ;;
+    doctor) cmd_doctor ;;
+    logs)   shift; cmd_logs "$@" ;;
+    test)   cmd_test ;;
+    stress) shift; cmd_stress "$@" ;;
+    warm)   shift; cmd_warm "$@" ;;
+    clean-web) cmd_clean_web ;;
+    *) sed -n '2,/^# Windows/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//' ;;
+esac

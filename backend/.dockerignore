@@ -1,0 +1,25 @@
+# Used when the build context is backend/ itself (docker build backend/ or the compose file's backend service).
+.venv*
+**/.venv*
+data/
+tests/
+bench/*
+!bench/theatre/
+bench/theatre/*
+!bench/theatre/results/
+bench/theatre/results/audio/
+bench/theatre/results/cache/
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.pytest_temp
+*.ipynb
+**/.ipynb_checkpoints
+.env
+.env.*
+*.wav
+*.mp3
+*.m4a
+*.flac
+# the small fixtures the app reads at runtime stay
+!fixtures/*.wav
