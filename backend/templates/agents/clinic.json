@@ -1,0 +1,168 @@
+{
+  "id": "clinic",
+  "name": "Clinic front desk",
+  "type_label": "Clinic",
+  "tagline": "Answers calls about timings, doctors and fees, and books consultations.",
+  "illustration": "clinic",
+  "accent": "teal",
+  "persona": {
+    "tone": "Warm and calm",
+    "traits": [
+      "Reassuring",
+      "Patient",
+      "Precise"
+    ],
+    "sample_line": {
+      "en": "Good morning, how can I help you today? I can tell you the doctor's timings and book a visit.",
+      "hi": "नमस्ते, आपकी क्या मदद करूँ? डॉक्टर का समय पूछिए या अपॉइंटमेंट बुक कराइए।"
+    }
+  },
+  "role": "Front-desk receptionist for a clinic: timings, doctors, fees and appointments",
+  "languages": [
+    "en",
+    "hi",
+    "mr"
+  ],
+  "greeting": "Hello, thank you for calling {org}. How can I help you today?",
+  "system_instructions": "You are the friendly receptionist of {org} in {city}. Help callers with the clinic's timings, doctors and their days, consultation fees, and booking, rescheduling or cancelling appointments, using only the clinic document and your scheduling tools. You never give medical advice, diagnoses or medicine suggestions. If a caller describes an emergency such as chest pain, breathing trouble, heavy bleeding or unconsciousness, always tell them to call 108 or go to the nearest emergency room right away. Keep answers short and warm, since this is a phone call. Never say a time is free, open or booked without checking it with your scheduling tools first. If it is not free, offer the nearest earlier and later times the tool gives you and ask which the caller prefers. Read the chosen day, date and time back and book only after the caller clearly says yes. To book you need the caller's name and phone number.",
+  "tools": [
+    "schedules"
+  ],
+  "document": "clinic.md",
+  "suggested_questions": [
+    "What are the clinic timings?",
+    "How much is a consultation?",
+    "Can I book a doctor for Thursday at 6 pm?",
+    "I have chest pain right now, what should I do?"
+  ],
+  "schedules": [
+    {
+      "name": "Doctor consultations",
+      "description": "15-minute consultations with the doctor",
+      "kind": "slots",
+      "slot_minutes": 15,
+      "capacity": 1,
+      "week": {
+        "mon": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "tue": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "wed": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "thu": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "fri": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "sat": [
+          {
+            "start": "10:00",
+            "end": "13:00"
+          },
+          {
+            "start": "17:00",
+            "end": "20:00"
+          }
+        ],
+        "sun": []
+      },
+      "buffer_minutes": 0,
+      "min_notice_minutes": 60,
+      "horizon_days": 30
+    }
+  ],
+  "personalise": {
+    "audience": "For a clinic or doctor's office that wants calls answered about timings, doctors, fees and appointments.",
+    "org_label": "Clinic name",
+    "org_placeholder": "Your clinic's name",
+    "name_pattern": "{org} Reception",
+    "fallback_org": "our clinic",
+    "sample_orgs": [],
+    "sample_city": null,
+    "strip": []
+  },
+  "remember": {
+    "people": {
+      "label": "Patients on this number (the family)",
+      "fields": [
+        "name",
+        "age_band"
+      ]
+    },
+    "facts": [
+      {
+        "key": "preferred_doctor",
+        "label": "Preferred doctor",
+        "type": "text",
+        "max": 60,
+        "hint": "the doctor or department the caller prefers"
+      },
+      {
+        "key": "preferred_schedule",
+        "label": "Preferred time",
+        "type": "text",
+        "max": 50,
+        "hint": "days or times of day that suit them, such as evenings or Saturdays"
+      },
+      {
+        "key": "usual_purpose",
+        "label": "Usual visit",
+        "type": "text",
+        "max": 60,
+        "hint": "the kind of visit they book, such as a check-up or a follow-up; never an illness or symptom"
+      },
+      {
+        "key": "age_band",
+        "label": "Age band",
+        "type": "enum",
+        "choices": [
+          "child",
+          "teen",
+          "adult",
+          "senior"
+        ],
+        "rule": "age_band",
+        "hint": "only if the caller volunteers the person's age: child, teen, adult or senior"
+      }
+    ]
+  }
+}

@@ -1,0 +1,198 @@
+/* ============================================================================
+   Vakya marketing site: the Vakya look.
+   Imported by the (site) layout only. Everything is scoped under `.site`, and every selector starts with `html` so it
+   out-ranks the older warm-paper rules in globals.css without editing that file. The pages keep using the --s-*
+   tokens, so the inner pages (how it works, channels, proof, run it, FAQ) follow the new look through the token
+   values below; the landing page adds its own `vk-*` classes at the bottom.
+   Display: Gambarino (Fontshare, loaded by <link> in the (site) layout). Body: Inter (--nf-body, wired in the root).
+   ============================================================================ */
+
+/* The ground behind the whole page, including overscroll. */
+html:root:has(.site), html:root:has(.site) body { background-color: #fff; color-scheme: light; }
+
+html .site {
+  /* ---- Type families */
+  --font-display-site: "Gambarino", serif;
+  --s-font-display: var(--font-display-site);
+  --s-font-body: var(--nf-body, Inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* ---- Colour: white and off-white grounds, black ink, thin #e6e6e6 borders. The pastels are art and tags only. */
+  --s-ground: #ffffff;
+  --s-paper: #ffffff;
+  --s-offwhite: #fcf7f2;
+  --s-fill: #f8f8f8;
+  --s-ink: #000000;
+  --s-ink-2: #333333;
+  --s-mute: #6b6b6b;
+  --s-line: #e6e6e6;
+  --s-bar: #cccccc;
+  /* The one interactive accent (violet-700); --s-marigold is kept as the name the older pages use for "accent region",
+     now violet-500 with black ink, so the old filled regions become soft violet panels. */
+  --s-bronze: #6c62ed;
+  --s-bronze-deep: #5b50e0;
+  --s-marigold: #a7a1f4;
+  --s-marigold-ink: #000000;
+  --s-gold: #bdb9f7;
+  --violet-200: #e2e0fb; --violet-400: #bdb9f7; --violet-500: #a7a1f4; --violet-600: #8981f1; --violet-700: #6c62ed;
+  --orange-200: #ffe9dc; --orange-400: #ffd3b7; --orange-500: #ffbd93; --orange-700: #fe914b;
+  --blue-300: #ecfbfe; --blue-500: #d1f5fd; --blue-600: #bef1fd; --blue-700: #a2ebfc;
+  /* Dark feature card: #111 with white text. */
+  --s-night: #111111;
+  --s-night-2: #1c1c1c;
+  --s-night-text: #ffffff;
+  --s-night-mute: #bdbdbd;
+  --s-night-line: rgba(255, 255, 255, 0.16);
+  --s-brand-gradient: linear-gradient(#000, #000);
+  /* No shadows: a 1 px ring where an older rule still asks for one. */
+  --s-shadow-paper: 0 0 0 1px #e6e6e6;
+  --s-shadow-float: 0 0 0 0 transparent;
+  --s-shadow-night: 0 0 0 0 transparent;
+  --s-dots: radial-gradient(circle, rgba(0, 0, 0, 0.1) 0.8px, transparent 1.1px);
+  /* Radii: cards 16, sub-cards and buttons 8. */
+  --s-r-card: 1rem;
+  --s-r-island: 1rem;
+  --s-r-inner: 0.5rem;
+  --s-r-chip: 0.5rem;
+
+  /* ---- Type roles: h1 clamp(2.75rem, 6vw, 5rem), h2 clamp(2rem, 4vw, 3rem), card title 20 px Inter 600. */
+  --s-text-display: clamp(2.75rem, 6vw, 5rem);
+  --s-text-title: clamp(2.5rem, 5vw, 4rem);
+  --s-text-h2: clamp(2rem, 4vw, 3rem);
+  --s-text-h3: 1.25rem;
+  --s-text-stat: clamp(2rem, 1.5rem + 1.6vw, 2.5rem);
+  --s-text-item: 1.125rem;
+  --s-text-lede: 1rem;
+  --s-text-body: 1rem;
+  --s-text-small: 0.875rem;
+  --s-w-body: 400;
+
+  background: #fff;
+  color: var(--s-ink-2);
+}
+html .site ::selection { background: var(--violet-200); color: #000; }
+/* Gambarino has no italic: the accent phrase is the same face, same colour. */
+html .site .accent, html .site .on-night .accent { font-style: normal; color: inherit; }
+
+/* ---- Eyebrow: 12 px, 600, uppercase, 1 px tracking, black. No rule in front of it. */
+html .site .s-eyebrow { color: #000; letter-spacing: 1px; font-size: 0.75rem; }
+html .site .s-eyebrow::before { content: none; }
+html .site .on-night .s-eyebrow { color: #fff; }
+
+/* ---- Dark feature card (#111, white text), flat. */
+html .site .s-night-panel { background: #111; border: 0; box-shadow: none; color: #fff; }
+html .site .s-night-panel::before { content: none; animation: none; }
+html .site .s-paper-card { background: #fff; border: 1px solid var(--s-line); border-radius: var(--s-r-card); box-shadow: none; }
+html .site .s-dots::before { opacity: 0.6; }
+
+html .site :focus-visible { outline: 2px solid var(--violet-700); outline-offset: 3px; border-radius: 0.375rem; }
+html .site .on-night :focus-visible { outline-color: #fff; }
+
+/* ---- Type roles. In the components layer, as in globals.css, so a utility on the same element still wins. */
+@layer components {
+  html .site .display, html .site .s-title, html .site .h2, html .site .s-h2 { font-family: var(--s-font-display); font-weight: 400; color: #000; }
+  html .site .display { font-size: var(--s-text-display); letter-spacing: -0.002em; line-height: 1; }
+  html .site .s-title { font-size: var(--s-text-title); letter-spacing: -0.002em; line-height: 1.02; }
+  html .site .h2, html .site .s-h2 { font-size: var(--s-text-h2); letter-spacing: 0; line-height: 1.05; }
+  html .site .s-h3 { font-family: var(--s-font-body); font-size: var(--s-text-h3); font-weight: 600; letter-spacing: 0; line-height: 1.25; color: #000; }
+  html .site .on-night .s-h3, html .site .on-night .h2, html .site .on-night .s-title { color: #fff; }
+  html .site .s-item { font-family: var(--s-font-body); font-size: var(--s-text-item); font-weight: 600; letter-spacing: 0; line-height: 1.3; }
+  html .site .s-stat { font-family: var(--s-font-body); font-size: var(--s-text-stat); font-weight: 600; letter-spacing: -0.01em; line-height: 1; }
+  html .site .lede, html .site .s-lede { color: var(--s-mute); font-size: var(--s-text-lede); line-height: 1.5; }
+  html .site .on-night { --s-lh-body: 1.55; --s-lh-small: 1.5; --s-w-body: 400; letter-spacing: 0; }
+}
+
+/* ---- Buttons: radius 8, Inter 600 14 px, 40 px high. Primary black, secondary white with a thin border. */
+html .site .s-btn { height: 2.5rem; padding: 0 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; gap: 0.5rem; }
+html .site .s-btn:hover { transform: none; }
+html .site .s-btn:active { transform: scale(0.98); }
+html .site .s-btn--sm { height: 2.25rem; padding: 0 0.875rem; font-size: 0.875rem; }
+html .site .s-btn--primary { background: #000; color: #fff; box-shadow: none; }
+html .site .s-btn--primary:hover { background: #000; opacity: 0.9; box-shadow: none; }
+html .site .s-btn--primary::after { content: none; }
+html .site .s-btn--secondary { background: #fff; color: #000; border-color: var(--s-line); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+html .site .s-btn--secondary:hover { background: #f8f8f8; border-color: var(--s-line); }
+html .site .s-btn--light { background: #fff; color: #000; }
+html .site .s-btn--light:hover { background: #f8f8f8; }
+html .site .s-btn--ghost-light { border-color: var(--s-night-line); color: #fff; }
+/* A primary with an icon: a small gradient square at the left, padding 4 16 4 4. */
+html .site .s-btn--chip { padding: 0.25rem 1rem 0.25rem 0.25rem; height: 2.5rem; }
+html .site .s-btn__chip { width: 2rem; height: 2rem; margin: 0; border-radius: 0.375rem; color: #000; background: linear-gradient(135deg, #fff3e0, #bdb9f7 55%, #bef1fd); transition: transform 0.2s; }
+html .site .s-btn--primary:hover .s-btn__chip { background: linear-gradient(135deg, #fff3e0, #bdb9f7 55%, #bef1fd); transform: translateX(2px); }
+html .site .s-link { color: #000; text-decoration-color: var(--s-bar); }
+
+/* ---- Cards */
+html .site .s-card { background: #fff; border: 1px solid var(--s-line); border-radius: var(--s-r-card); }
+html .site .s-card--fill { background: #f8f8f8; border-color: var(--s-line); }
+
+/* ---- Footer column headings: 12 px, uppercase, 1 px tracking. */
+html .site .vk-foot-h { font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #000; }
+
+/* ============================================================================
+   Landing page (vk-*)
+   ============================================================================ */
+
+/* Pills and tags: 12 px 600 uppercase, 1 px tracking, light tinted backgrounds. */
+html .site .vk-tag { display: inline-flex; align-items: center; height: 1.5rem; padding: 0 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; line-height: 1; white-space: nowrap; color: #000; background: var(--violet-200); }
+html .site .vk-tag--orange { background: var(--orange-200); }
+html .site .vk-tag--violet { background: var(--violet-200); }
+html .site .vk-tag--blue { background: var(--blue-500); }
+html .site .vk-tag--mixed { background: linear-gradient(90deg, var(--orange-200), var(--violet-200) 55%, var(--blue-500)); }
+
+/* ---- Aurora: layered radial and conic gradients, blurred, masked to white. The ray layer turns once in 40 s. */
+html .site .vk-aurora { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
+html .site .vk-aurora__rays { position: absolute; left: 50%; top: 34%; width: max(150vw, 1400px); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%;
+  background: conic-gradient(from 0deg at 50% 50%,
+    rgba(189, 185, 247, 0.85) 0deg, rgba(255, 255, 255, 0) 24deg,
+    rgba(190, 241, 253, 0.9) 52deg, rgba(255, 255, 255, 0) 80deg,
+    rgba(255, 243, 224, 1) 108deg, rgba(255, 233, 220, 0.0) 134deg,
+    rgba(167, 161, 244, 0.8) 160deg, rgba(255, 255, 255, 0) 190deg,
+    rgba(190, 241, 253, 0.85) 218deg, rgba(255, 255, 255, 0) 246deg,
+    rgba(255, 243, 224, 0.95) 274deg, rgba(255, 255, 255, 0) 300deg,
+    rgba(189, 185, 247, 0.8) 330deg, rgba(189, 185, 247, 0.85) 360deg);
+  filter: blur(40px);
+  -webkit-mask-image: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.55) 42%, transparent 72%); mask-image: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.55) 42%, transparent 72%);
+  animation: vk-spin 40s linear infinite; }
+html .site .vk-aurora__core { position: absolute; left: 50%; top: 34%; width: min(110vw, 1100px); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%;
+  background:
+    radial-gradient(closest-side, #fff 0%, #fff 14%, #fff3e0 30%, rgba(189, 185, 247, 0.55) 52%, rgba(190, 241, 253, 0.4) 70%, transparent 100%);
+  filter: blur(40px); }
+@keyframes vk-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { html .site .vk-aurora__rays { animation: none; } }
+
+/* ---- Product art: a single colour wash with a faint ring motif. */
+html .site .vk-art { position: relative; overflow: hidden; border-radius: 0.5rem; aspect-ratio: 16 / 10; isolation: isolate; }
+html .site .vk-art svg { position: absolute; inset: 0; width: 100%; height: 100%; color: rgba(255, 255, 255, 0.85); }
+html .site .vk-art--orange { background: radial-gradient(70% 90% at 50% 100%, var(--orange-700) 0%, var(--orange-500) 38%, var(--orange-200) 78%, #fff 100%); }
+html .site .vk-art--violet { background: radial-gradient(70% 90% at 50% 100%, var(--violet-700) 0%, var(--violet-500) 38%, var(--violet-200) 78%, #fff 100%); }
+html .site .vk-art--blue { background: radial-gradient(70% 90% at 50% 100%, var(--blue-700) 0%, var(--blue-600) 38%, var(--blue-300) 78%, #fff 100%); }
+html .site .vk-art--mixed { background:
+  radial-gradient(60% 80% at 15% 100%, var(--orange-500) 0%, transparent 70%),
+  radial-gradient(60% 80% at 85% 100%, var(--blue-700) 0%, transparent 70%),
+  radial-gradient(70% 90% at 50% 100%, var(--violet-600) 0%, var(--violet-200) 70%, #fff 100%); }
+
+/* ---- Capability card: soft violet-to-blue gradient on the right half. */
+html .site .vk-cap { position: relative; overflow: hidden; border: 1px solid var(--s-line); border-radius: 1rem; background: #fff; }
+html .site .vk-cap__wash { position: absolute; inset: 0 0 0 50%; background: linear-gradient(135deg, var(--violet-400) 0%, #d6d3fa 38%, var(--blue-600) 100%); }
+@media (max-width: 47.99rem) { html .site .vk-cap__wash { inset: 50% 0 0 0; } }
+
+/* ---- Stats band */
+html .site .vk-band > div + div { border-left: 1px solid var(--s-line); }
+@media (max-width: 47.99rem) {
+  html .site .vk-band > div + div { border-left: 0; }
+  html .site .vk-band > div:nth-child(even) { border-left: 1px solid var(--s-line); }
+  html .site .vk-band > div:nth-child(n + 3) { border-top: 1px solid var(--s-line); }
+}
+
+/* ---- Proof table */
+html .site .vk-table { border-collapse: collapse; width: 100%; }
+html .site .vk-table th, html .site .vk-table td { padding: 0.875rem 1rem; text-align: left; vertical-align: top; border-top: 1px solid var(--s-line); }
+html .site .vk-table thead th { border-top: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #000; }
+html .site .vk-table tbody tr:nth-child(even) { background: #f8f8f8; }
+html .site .vk-table tbody th { font-weight: 600; color: #000; width: 28%; }
+
+/* ---- Demo video placeholder: the dark card with a soft violet and blue glow, still. */
+html .site .vk-demo-frame { background:
+  radial-gradient(60% 80% at 20% 110%, rgba(167, 161, 244, 0.55), transparent 70%),
+  radial-gradient(60% 80% at 85% 110%, rgba(162, 235, 252, 0.4), transparent 70%),
+  #111; }

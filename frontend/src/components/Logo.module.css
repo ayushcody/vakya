@@ -1,0 +1,45 @@
+/* Vakya logo: ink follows the tone, the danda is always the brand violet (--accent, #6c62ed when unset). Scoped here. */
+
+.logo {
+  --logo-ink: #0b0b0f;
+  display: inline-block;
+  flex-shrink: 0;
+  overflow: visible;
+  vertical-align: middle;
+}
+
+.ink,
+.stroke {
+  fill: var(--logo-ink);
+}
+
+.stroke {
+  fill: none;
+  stroke: var(--logo-ink);
+}
+
+.danda {
+  fill: var(--accent, #6c62ed);
+}
+
+.dandaStroke {
+  stroke: var(--accent, #6c62ed);
+}
+
+/* tone="ink" is the default custom property above; tone="light" is for dark surfaces. */
+.light {
+  --logo-ink: #fcf7f2;
+}
+
+/* tone="auto": follow the app theme, except on the always-light marketing site and its dark bands. */
+:global([data-theme="dark"]) .auto {
+  --logo-ink: #fcf7f2;
+}
+
+:global(.site) .auto {
+  --logo-ink: #0b0b0f;
+}
+
+:global(.site .on-night) .auto {
+  --logo-ink: #fcf7f2;
+}
