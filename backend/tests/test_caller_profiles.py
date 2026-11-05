@@ -21,7 +21,7 @@ from tests.test_phone_greeting import sessions, wait_until  # noqa: F401  (sessi
 from tests.test_phone import vobiz  # noqa: F401
 
 NUMBER = "+919876543210"
-TODAY = date(2026, 11, 3)       # a Tuesday
+TODAY = date(2026, 11, 4)       # a Wednesday: BOOKING (Tuesday 3 Nov) has passed
 BOOKING = {"date": "2026-11-03", "time": "16:00", "purpose": "dental check-up"}
 
 
@@ -121,6 +121,33 @@ def test_the_greeting_follows_what_the_agent_supports_and_needs_something_to_say
     # nothing to say: the agent's own greeting plays
     assert cp.returning_greeting(profile(display_name=None, last_booking=None), ["en"], TODAY) is None
     assert cp.returning_greeting(None, ["en"], TODAY) is None
+
+
+def test_an_appointment_still_ahead_is_named_as_the_callers_appointment():
+    from datetime import datetime
+    fri = {"date": "2026-11-06", "time": "15:00"}
+    en = profile(preferred_language="en", display_name="Zoran", last_booking=fri)
+    assert cp.returning_greeting(en, ["en"], now=datetime(2026, 11, 4, 10, 0)) == (
+        "en", "Hello Zoran, welcome back. Your appointment is on Friday at 3 PM. How can I help today?")
+    assert cp.returning_greeting(en, ["en"], now=datetime(2026, 11, 5, 10, 0))[1] == (
+        "Hello Zoran, welcome back. Your appointment is tomorrow at 3 PM. How can I help today?")
+    assert cp.returning_greeting(en, ["en"], now=datetime(2026, 11, 6, 14, 59))[1] == (
+        "Hello Zoran, welcome back. Your appointment is today at 3 PM. How can I help today?")
+    # the hour has passed: it is the last appointment again
+    assert cp.returning_greeting(en, ["en"], now=datetime(2026, 11, 6, 15, 1))[1] == (
+        "Hello Zoran, last time you booked an appointment for Friday at 3 PM. How can I help today?")
+    assert cp.returning_greeting(profile(last_booking=fri), ["en", "hi"], now=datetime(2026, 11, 5, 9, 0)) == (
+        "hi", "नमस्ते Priya जी, फिर से आपका स्वागत है। आपकी अपॉइंटमेंट कल 3 बजे है। आज कैसे मदद करूँ?")
+    assert cp.returning_greeting(profile(preferred_language="mr", last_booking=fri), ["mr"],
+                                 now=datetime(2026, 11, 4, 9, 0)) == (
+        "mr", "नमस्कार Priya जी, पुन्हा स्वागत आहे. तुमची अपॉइंटमेंट शुक्रवारी 3 वाजता आहे. आज कशी मदत करू?")
+    assert cp.returning_greeting(profile(preferred_language="hinglish", last_booking=fri), ["en", "hi"],
+                                 now=datetime(2026, 11, 6, 8, 0))[1] == (
+        "Namaste Priya ji, phir se swagat hai. Aapki appointment aaj 3 baje hai. Aaj kaise madad karoon?")
+    far = {"date": "2026-12-12", "time": "09:30"}
+    assert cp.returning_greeting(profile(preferred_language="en", last_booking=far), ["en"],
+                                 now=datetime(2026, 11, 4, 9, 0))[1].startswith(
+        "Hello Priya, welcome back. Your appointment is on 12 December at 9:30 AM.")
 
 
 def test_returning_opening_keeps_the_disclosure_and_follows_the_switches(env):
