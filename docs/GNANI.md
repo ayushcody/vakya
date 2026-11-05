@@ -5,9 +5,10 @@ endpoint. There is no second speech provider and no local speech model: when Gna
 pre-rendered Timbre line, then an offer of a callback or a person) instead of guessing with something else. Replies are written by
 Gemini Flash (Google, hosted) and documents are searched with Gemini embeddings, keyword search as the backup; Gnani does the speech only.
 
-The code was written **without a key**: every call is tested against a fake only (see "Engineering notes found against the
-real API" for what the first live run has to confirm). With no `GNANI_API_KEY` nothing reaches Gnani, and `GET /api/ready`
-says so.
+The code was written without a key and first run against the live API on **5 Nov 2026**: Timbre speech and Prisma recognition
+(including `keyterms`, `topic`, `speaker_names` and a substitution rule) work; two guessed fields were wrong and are fixed (see
+"Engineering notes found against the real API"). The realtime stream, cloning and a real phone call have not run yet. With no
+`GNANI_API_KEY` nothing reaches Gnani, and `GET /api/ready` says so.
 
 ## What is wired
 
@@ -179,42 +180,32 @@ is `X-API-Key-ID` (any other header name gets `MISSING_API_KEY`). Error bodies a
 
 ## What is untested
 
-Nothing has run against the real API with a valid key. The tests (`backend/tests/test_gnani_client.py`,
-`test_gnani_providers.py`, `test_gnani_gateway.py`, `test_gnani_hold_lines.py`, `test_usage_ledger.py`, `test_usage_api.py`) use
-`httpx.MockTransport` and fakes. Guessed, in one place each so a first failing call is a one-line fix in `gnani_client.py`:
+First live contact was on **5 Nov 2026** (the notes below). Still not run live: the realtime WebSocket, the clone embedding, Timbre's
+8 kHz raw audio on a real phone call, a real phone call at all, and the credit rates (the ledger still estimates from defaults; check
+the balance in Gnani's console to measure them). The tests (`backend/tests/test_gnani_client.py`, `test_gnani_providers.py`,
+`test_gnani_gateway.py`, `test_gnani_hold_lines.py`, `test_usage_ledger.py`, `test_usage_api.py`) use `httpx.MockTransport` and
+fakes shaped like the live replies. Still guessed:
 
-- **STT form fields.** `language_code`, `model`, `format`, `keyterms`, `previous_text`, `topic`, `speaker_names`, `enable_substitution` and
-  `substitution_map` follow https://docs.gnani.ai/api/STT/speech-to-text.md. The list fields (`keyterms`, `speaker_names`) are sent as
-  JSON arrays (the page allows JSON or comma-separated; JSON keeps a phrase with a comma whole), `substitution_map` as a JSON list of
-  `{"patterns": [...], "replacement": "..."}` with `enable_substitution` `"true"` (at most 10 rules), and `X-API-Request-ID` is a
-  header. A list of language codes stays comma-separated (the page's own example). Not yet proven against a live key: that every
-  multipart text field is read as written here, and what the API does with a rule that matches nothing.
-- **TTS body.** `{text, model, voice, language, speed, audio_config: {sample_rate, format}}`; for a cloned voice `voice` is dropped
-  and `speaker_embedding` added with `model: vachana-vc-v1`. The reply is taken as the audio bytes (or a JSON body with base64
-  under `audio`/`audio_content`/`audio_base64`/`data`).
 - **Embedding upload.** Multipart field named `audio_file`, reply key `speaker_embedding`.
-- **`raw` format** is assumed to be PCM16 mono little-endian at the requested rate.
-- **Voice names.** `Nalini`, `Kaveri` and `Poorvi` come from the documentation summary; check them against the voice list of your
-  account and set `GNANI_VOICES`.
 - **Auth header on the WebSocket.** `x-api-key-id` plus the configuration headers.
 - **Prisma gives no per-segment confidence**, so a turn's recognition confidence is unknown.
-- **The credit rates** (above), the 30 s audio limit, cloning quotas and consent rules, and Timbre's latency on a phone turn.
+- **Cloning quotas and consent rules, and Timbre's latency on a phone turn.**
 - **Whether the one-at-a-time limit counts a stream, a REST call, or both.**
 
 ## Engineering notes found against the real API
 
-*To fill in once the key arrives. Each entry: what the documentation said, what the API did, what changed in the code. Keep it
-short and dated.*
+One clip so far (a Timbre Hindi sentence fed back to Prisma), so these are first-contact facts, not measurements.
 
 | Date | Area | Documentation said | The API did | Change |
 |---|---|---|---|---|
-| | STT form fields (list of codes, keyterms) | | | |
-| | TTS reply shape (bytes or JSON) | | | |
-| | Placeholder WAV header sizes | `0xFFFFFFFF` in RIFF and `data` sizes | | `fix_wav_header` |
-| | Letter-by-letter acronyms | | | `collapse_spelled_acronyms` |
-| | One active request: 429 body, `Retry-After`, does a stream count? | | | `GNANI_STREAM_HOLDS_SLOT` |
-| | Measured credits per second (REST, stream), per 1,000 characters, per embedding | 0.0097, 0.0073, 2.9, unknown | | `GNANI_RATE_*` |
-| | Latency p50 and p95 of Prisma and Timbre on a phone turn | | | |
-| | Voice names and which languages each speaks | | | `GNANI_VOICES` |
-| | Clone embedding: accepted clip length, errors | | | |
-| | Anything that surprised us | | | |
+| 5 Nov | TTS output format | `audio_config.container` (wav, raw, mp3, ogg, mulaw, alaw) | We had sent `audio_config.format`: it was ignored and raw PCM came back for a WAV request. With `container` it returns a WAV (5.44 s, 24 kHz, mono) | `_tts_body` sends `container`, `num_channels`, `sample_width`, `encoding` |
+| 5 Nov | Cloned-voice body | only `text`, `model`, `speaker_embedding`, `audio_config` | not run live yet | `_tts_body` sends only those for a clone |
+| 5 Nov | STT reply shape | | The words are in `transcript`; also `success`, `request_id`, `model`, `processing_time`, `end_to_end_latency`, `detected_language_code` | `transcribe` reads `transcript` (`text` as a fallback) |
+| 5 Nov | STT form fields | JSON arrays for `keyterms` and `speaker_names`; `substitution_map` as `[{"patterns": [...], "replacement": ...}]` with `enable_substitution`; `topic`; `X-API-Request-ID` | All accepted (200). Prisma first wrote "Vakya" as वाकया; key terms alone, the substitution rule alone, and speaker names with a topic each made it वाक्या | none needed |
+| 5 Nov | `topic` | | On this one clip both requests with a `topic` dropped "सुबह" from "कल सुबह दस बजे"; without it the word was kept. One clip, so not yet a finding | watch it in the stress run before relying on `topic` |
+| 5 Nov | Code-mix | | `hi-IN,en-IN` returned "appointment" in Latin letters inside Devanagari; with speaker names and a topic it came back in Devanagari | none |
+| 5 Nov | Voice list | (not documented) | `GET /api/v1/tts/voices` answers 404 | voices come from `GNANI_VOICES` and the documented list; the smoke script's voice step is expected to fail |
+| 5 Nov | Latency | | Prisma REST 0.27 to 0.30 s processing on a 5.4 s clip (about 0.9 to 3.3 s round trip from this laptop); Timbre 1.0 to 2.4 s for one 79-character sentence | one sample each, not a p50 |
+| | Placeholder WAV header sizes | `0xFFFFFFFF` in RIFF and `data` sizes | not seen on the first WAV | `fix_wav_header` |
+| | One active request: 429 body, `Retry-After`, does a stream count? | | not hit yet | `GNANI_STREAM_HOLDS_SLOT` |
+| | Measured credits per second (REST, stream), per 1,000 characters, per embedding | 0.0097, 0.0073, 2.9, unknown | not measured | `GNANI_RATE_*` |
