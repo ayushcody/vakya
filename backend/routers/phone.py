@@ -78,7 +78,7 @@ try:
     from core.errors import AppError
     from services import call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail
     from services import phone_audio as pa
-    from services import phone_greeting, turn_taking
+    from services import digit_repair, phone_greeting, turn_taking
     from services.auth import get_current_user_id
     from services.telephony import base as tbase
     from services.telephony import registry
@@ -91,7 +91,7 @@ except ImportError:  # pragma: no cover - imported as backend.routers.phone
         call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail,
     )
     from backend.services import phone_audio as pa
-    from backend.services import phone_greeting, turn_taking
+    from backend.services import digit_repair, phone_greeting, turn_taking
     from backend.services.auth import get_current_user_id
     from backend.services.telephony import base as tbase
     from backend.services.telephony import registry
@@ -498,6 +498,7 @@ class CallSession:
         self._utter_ms = 0                # speech length of the utterance the running turn answers
         self.dtmf_presses = 0
         self.human_requested = False
+        self.keypad: Optional[digit_repair.KeypadEntry] = None   # a number being typed, after the agent asked for it
         self.accepted_at = accepted_at if accepted_at is not None else time.monotonic()
         self._send_lock = asyncio.Lock()
         self.sent_audio_s = 0.0
@@ -761,9 +762,11 @@ class CallSession:
         return (running and self.turn_audio) or self.pacer.playing
 
     def start_turn(self, wav: bytes, *, speculative: bool = False, end: Optional[float] = None,
-                   pieces: Optional[List[bytes]] = None, asr_pre: Optional["asyncio.Future"] = None) -> None:
+                   pieces: Optional[List[bytes]] = None, asr_pre: Optional["asyncio.Future"] = None,
+                   text: Optional[str] = None) -> None:
         """Start a turn on `wav` (the caller's audio for speech recognition). `pieces` are the PCM pieces that make
-        it up (see _Inflight): kept so that the turn, when it is cancelled before it is stored, hands them on."""
+        it up (see _Inflight): kept so that the turn, when it is cancelled before it is stored, hands them on. `text` is
+        what the caller gave when it is not speech (a number typed on the keypad): no speech recognition."""
         self.turn_audio = False
         self.turns += 1
         self.tm = {"end": end} if end is not None else {}
@@ -777,7 +780,7 @@ class CallSession:
         inflight = _Inflight(None, self.turns, list(pieces or []))
         self._inflight = inflight
         self.turn_task = inflight.task = asyncio.create_task(self._turn(wav, self.turns, gate, turn_id, inflight,
-                                                                        asr_pre))
+                                                                        asr_pre, text=text))
         if speculative:
             self.spec = _Speculation(self.turn_task, gate, turn_id, self.turns, time.monotonic(),
                                      pieces=list(pieces or []))
@@ -876,7 +879,7 @@ class CallSession:
 
     async def _turn(self, wav: bytes, n: int, gate: asyncio.Event, turn_id: str,
                     inflight: Optional[_Inflight] = None, asr_pre: Optional["asyncio.Future"] = None,
-                    held: bool = False) -> None:
+                    held: bool = False, text: Optional[str] = None) -> None:
         """One reply. `gate` is set for a normal turn; a speculative turn's audio (and, with PHONE_SPECULATIVE=asr,
         everything after speech recognition) waits for it.
 
@@ -899,6 +902,8 @@ class CallSession:
             run.asr_previous_user_text = self.last_user_text     # for Gnani's previous_text hint
             run.asr_pre = asr_pre     # this recording's speech recognition, when the call already started it
             run.asr_conversation_id = self.conversation_id   # the caller's known names and the request id (services/hearing.py)
+            if text is not None:
+                run.text_input = text   # typed on the keypad: no speech recognition, the same turn otherwise
             if inflight is not None:
                 inflight.run = run
             b.remember_stream_turn(turn_id, run.user_id)
@@ -1305,21 +1310,45 @@ class CallSession:
             pass
 
     async def on_dtmf(self, ev: "tbase.Event") -> None:
-        """A key press on the callee's phone. The digit itself is never stored or logged (it may be a card number or a
-        code); only how many keys were pressed is. Pressing 0 asks for a person: the conversation is flagged
-        `needs_human`, which shows on the Calls page. (Vobiz does not document its dtmf event: the codec reads the digit
-        from `dtmf.digit` or `dtmf`, which is unverified.)"""
+        """A key press on the callee's phone. The digit itself is never logged or kept in the call record (it may be a card
+        number or a code); only how many keys were pressed is. Pressing 0 asks for a person: the conversation is flagged
+        `needs_human`, which shows on the Calls page.
+
+        Once the agent has asked for the number on the keypad (services/digit_repair.asks_for_keypad), the keys type a
+        number instead: 0 is a digit, * asks for a person, and # (or ten digits of a mobile number) ends it. The number
+        then becomes the caller's next turn, as if they had said it, so it is read back and booked only on a yes like any
+        other. (Vobiz does not document its dtmf event: the codec reads the digit from `dtmf.digit` or `dtmf`, which is
+        unverified.)"""
         digit = (ev.digit or "").strip()
         if not digit or len(digit) > 2:
             return
         self.dtmf_presses += 1
         self.log.append({"event": "dtmf"})
-        if digit == "0" and not self.human_requested:
-            self.human_requested = True
-            self.log.append({"event": "human_requested"})
-            call_records.upsert(self.call_sid, outcome="human_requested")
-            await self._flag_human()
         call_records.upsert(self.call_sid, dtmf_presses=self.dtmf_presses)
+        if self.keypad is None and digit != "*" and digit != "#" and digit_repair.asks_for_keypad(self.last_agent_text):
+            self.keypad = digit_repair.KeypadEntry()
+        if self.keypad is not None:
+            action, number = self.keypad.press(digit)
+            if action == "human":
+                self.keypad = None
+                await self._ask_for_human()
+            elif action == "submit" and number:
+                self.keypad = None
+                self.log.append({"event": "keypad_number"})       # that a number was typed, never the number
+                await self.clear()
+                await self.stop_turn()
+                self.start_turn(b"", text=number)
+            return
+        if digit == "0":
+            await self._ask_for_human()
+
+    async def _ask_for_human(self) -> None:
+        if self.human_requested:
+            return
+        self.human_requested = True
+        self.log.append({"event": "human_requested"})
+        call_records.upsert(self.call_sid, outcome="human_requested")
+        await self._flag_human()
 
     async def _flag_human(self) -> None:
         if not self.conversation_id:

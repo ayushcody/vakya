@@ -110,8 +110,14 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _BRACKETS = re.compile(r"[()\[\]{}<>\"`]")
 
 
+# services/digit_repair.py keeps a phone number heard in pieces next to the form's fields: the digits so far and the
+# number of tries. They are not details the caller gave (never in the model's list of known details, masked on the desk).
+REPAIR_KEYS = ("phone_partial", "phone_tries")
+
+
 def is_known_key(key: str) -> bool:
-    return key in FIELDS or (key.startswith(FACT_PREFIX) and bool(_FACT_KEY.fullmatch(key[len(FACT_PREFIX):])))
+    return (key in FIELDS or key in REPAIR_KEYS
+            or (key.startswith(FACT_PREFIX) and bool(_FACT_KEY.fullmatch(key[len(FACT_PREFIX):]))))
 
 
 _FACT_KEY = re.compile(r"[a-z][a-z0-9_]{1,30}")
@@ -127,7 +133,7 @@ def clean_value(key: str, value: Any) -> Optional[str]:
     text = re.sub(r"\s+", " ", text).strip(" ,;:-.")
     if not text or text.lower() in ("null", "none", "n/a", "unknown", "not given", "not provided", "-"):
         return None
-    if key not in ("phone", "date", "time", "age", "email") and sensitive_ids(text):
+    if key not in ("phone", "date", "time", "age", "email", *REPAIR_KEYS) and sensitive_ids(text):
         return None
     return text[:MAX_LEN.get(key, 100 if key.startswith(FACT_PREFIX) else 80)].strip()
 
@@ -737,8 +743,8 @@ def prompt_slots(form: Optional[Dict[str, str]], tool_slots: Optional[Dict[str, 
     merged = _tool_slots_first(form or {}, tool_slots or {})
     out: Dict[str, str] = {}
     for k, v in merged.items():
-        if k == "relation":
-            continue
+        if k == "relation" or k in REPAIR_KEYS:
+            continue        # an incomplete number is not a known detail: digit_repair.prompt_note tells the model
         if k == "person":
             rel = merged.get("relation")
             out["booking for"] = f"{v} ({rel})" if rel else v
@@ -761,7 +767,7 @@ def mask_phone(number: Optional[str]) -> Optional[str]:
 
 def public_view(form: Optional[Dict[str, str]]) -> Dict[str, str]:
     """The form for the owner's Calls page: a number and an e-mail address are masked (the transcript is masked too)."""
-    out = {k: v for k, v in (form or {}).items() if v}
+    out = {k: v for k, v in (form or {}).items() if v and k not in REPAIR_KEYS}   # working state, not a detail
     if out.get("phone"):
         out["phone"] = mask_phone(out["phone"]) or ""
     if out.get("email"):

@@ -21,6 +21,28 @@ keeps the code's summary). The tools always see the whole stored call, so an ear
 
 Settings: `CALL_HISTORY_TOKENS`, `CALL_NOTES_LLM` (on|off), `CALL_NOTES_MAX_CHARS` (default 900).
 
+### A phone number in pieces
+
+A spoken ten-digit number is the detail recognition gets wrong most often on a phone line, so a number that arrives
+incomplete is kept rather than asked for again from the start (`backend/services/digit_repair.py`, run after the rules
+read each utterance in `turn_caller_memory`):
+
+| Caller says | After | The form |
+|---|---|---|
+| "98765 4321" | "What is your phone number?" | `phone_partial` 987654321 (9 of 10), `phone_tries` 1 |
+| "43210" | "Please say the last digits again." | `phone` 9876543210 (the new digits replace the end) |
+| "98765", then "43210" | the number was asked for | `phone` 9876543210 (the pieces are joined) |
+| "nahi, last wale 3 2 1 0" | a read-back of a number ending 3219 | `phone` 9876543210 (only the end changes) |
+| "नाही, सुरुवातीचे 98766" | a read-back | the first five digits change |
+| "nahi, 6 30 baje" | a read-back | nothing: a time is never part of a number |
+
+A change is kept only when the result is a valid Indian mobile number. While the number is incomplete the model gets one
+line ("Phone number not complete yet: heard 98765 4321, 9 of 10 digits. Ask only for the missing digits...") instead of
+the number in the known details; after two tries on a phone call the line also says to offer the keypad
+([PHONE.md](PHONE.md)). The read-back and the caller's yes are still needed to book. `phone_partial` and `phone_tries`
+are working state, not details the caller gave: they are never in the desk's view of the call. A booking whose number was completed this way names the utterance
+that completed it in its proof of booking.
+
 ## 2. Across calls: one profile per number
 
 `backend/services/caller_profiles.py`. The key is the owner plus the number as E.164 (`+919876543210`).
