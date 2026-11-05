@@ -8,7 +8,7 @@ import { LegacyHashRedirect } from "@/components/site/LegacyHashRedirect";
 
 const TITLE = "Vakya: call once, it's booked";
 const DESCRIPTION =
-  "A voice front desk for Indian clinics, hotels, salons and other small businesses, built on Gnani Prisma and Timbre. It answers in Hindi, Marathi and English, checks the schedule, reads every number back, books only on a spoken yes and leaves a signed receipt. Tested on noisy 8 kHz lines, failures shown.";
+  "A voice front desk for Indian clinics, hotels, salons and other small businesses, built on Gnani Prisma and Timbre. It answers in Hindi, Marathi and English, checks the schedule, reads every number back, books only on a spoken yes and leaves a signed receipt. Built for noisy 8 kHz phone lines; the noise test is published once it has run on Gnani Prisma.";
 
 // Server component so the page can export real metadata; the interactive pieces are client components below.
 export const metadata: Metadata = {

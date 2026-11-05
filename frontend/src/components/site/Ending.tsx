@@ -99,7 +99,7 @@ const FAQ_ITEMS: Item[] = [
           <li>Vobiz carries the phone call.</li>
           <li>There is no second speech model. When Gnani is busy or down, the caller hears a short pre-rendered line and is offered a callback.</li>
         </ul>
-        <p>The Gnani code has been tested against fakes only until a live key proves it.</p>
+        <p>First live contact with Gnani was on 5 Nov: Prisma and Timbre work. The realtime stream, cloning and a real phone call have not run yet.</p>
       </>
     ),
   },
@@ -245,7 +245,7 @@ const FAQ_ITEMS: Item[] = [
   },
   {
     q: "What is not ready yet?",
-    text: "The Gnani code is tested against fakes only until a live key proves it. The missed-call callback, inbound calls on your own number and real Google Calendar sync are built and tested with fakes, not yet tried live. The report card is empty until Gnani Prisma has been run, and will use synthetic audio, not real callers. Caller Theatre has passed 9 of 9 scenarios on a scripted model only. Phone numbers are always read back. A receipt matches the exact file it was made for, so a re-encoded or edited copy is not recognised.",
+    text: "Gnani Prisma and Timbre first ran live on 5 Nov; the realtime stream, cloning and a real phone call have not run yet. The missed-call callback, inbound calls on your own number and real Google Calendar sync are built and tested with fakes, not yet tried live. The report card is empty until Gnani Prisma has been run, and will use synthetic audio, not real callers. Caller Theatre has passed 9 of 9 scenarios on a scripted model only. Phone numbers are always read back. A receipt matches the exact file it was made for, so a re-encoded or edited copy is not recognised.",
     a: (
       <>
         <p>
@@ -260,7 +260,7 @@ const FAQ_ITEMS: Item[] = [
           . The short version:
         </p>
         <ul>
-          <li>The Gnani code is tested against fakes only until a live key proves it.</li>
+          <li>Gnani Prisma and Timbre first ran live on 5 Nov; the realtime stream, cloning and a real phone call have not run yet.</li>
           <li>The missed-call callback, inbound calls on your own number and real Google Calendar sync are built and tested with fakes, not yet tried on a live line or calendar.</li>
           <li>The report card is empty until Gnani Prisma has been run, and will use synthetic audio, not real callers.</li>
           <li>Caller Theatre has passed 9 of 9 scenarios, on a scripted model only.</li>

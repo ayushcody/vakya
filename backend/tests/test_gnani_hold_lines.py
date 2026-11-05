@@ -22,7 +22,7 @@ def timbre(monkeypatch):
     def handler(request):
         body = json.loads(request.content)
         seen.append(body)
-        fmt = body["audio_config"]["format"]
+        fmt = body["audio_config"]["container"]
         payload = body["text"].encode()
         if fmt == "wav":
             fmtc = struct.pack("<4sIHHIIHH", b"fmt ", 16, 1, 1, 24000, 48000, 2, 16)
@@ -54,7 +54,7 @@ def test_prepare_renders_each_line_for_phone_and_web_and_keeps_them_on_disk(timb
     web = hl.get("callback", "en", phone=False)
     assert phone == hl.text_of("callback", "en").encode()                       # raw 8 kHz PCM as Timbre sent it
     assert web[:4] == b"RIFF" and struct.unpack_from("<I", web, 4)[0] == len(web) - 8     # the header placeholder was fixed
-    assert {(b["audio_config"]["format"], b["audio_config"]["sample_rate"]) for b in timbre} == {("raw", 8000), ("wav", 24000)}
+    assert {(b["audio_config"]["container"], b["audio_config"]["sample_rate"]) for b in timbre} == {("raw", 8000), ("wav", 24000)}
     assert {b["language"] for b in timbre} == {"en-IN", "hi-IN"} and all(b["voice"] for b in timbre)
     assert len(list((tmp_path / "hold_lines").iterdir())) == 8
     hl.reset()                                                                   # a restart: read back from disk

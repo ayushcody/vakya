@@ -281,7 +281,8 @@ def _transcribe_raw(audio: bytes, *, language: str, model: str, fmt: str, keyter
         raise AppError("PROVIDER_ERROR", "Gnani AI returned an unexpected speech-recognition reply.", 502,
                        {"provider": "gnani"})
     proc = data.get("processing_time")
-    return {**data, "text": str(data.get("text") or "").strip(),
+    # Prisma's reply carries the words in `transcript` (confirmed live 5 Nov 2026); `text` is kept as a fallback
+    return {**data, "text": str(data.get("transcript") or data.get("text") or "").strip(),
             "language": data.get("detected_language_code") or None,
             "request_id": data.get("request_id") or rid or None,
             "processing_time": proc if isinstance(proc, (int, float)) and not isinstance(proc, bool) else None,
@@ -292,13 +293,18 @@ def _transcribe_raw(audio: bytes, *, language: str, model: str, fmt: str, keyter
 
 def _tts_body(text: str, voice: Optional[str], language: str, speed: float, sample_rate: int, fmt: str,
               model: str, speaker_embedding: Optional[List[float]]) -> dict:
-    """GUESS: `voice` is omitted for a cloned voice (the embedding names it), `speed` is clamped to 0.85..1.15."""
+    """The inference body (https://docs.gnani.ai/api/TTS/tts-inference.md, confirmed live 5 Nov 2026): the output format is
+    `audio_config.container` (wav, raw, mp3, ogg, mulaw, alaw), PCM16 mono. A cloned voice takes only `text`, `model`,
+    `speaker_embedding` and `audio_config` (https://docs.gnani.ai/api/VC/vc-inference.md); `speed` is clamped to 0.85..1.15."""
+    audio_config: Dict[str, Any] = {"sample_rate": sample_rate, "num_channels": 1, "sample_width": 2, "container": fmt}
+    if fmt in ("wav", "raw"):
+        audio_config["encoding"] = "linear_pcm"
+    if speaker_embedding:
+        return {"text": text, "model": model, "speaker_embedding": list(speaker_embedding), "audio_config": audio_config}
     body: Dict[str, Any] = {"text": text, "model": model, "language": language,
                             "speed": min(max(float(speed), SPEED_RANGE[0]), SPEED_RANGE[1]),
-                            "audio_config": {"sample_rate": sample_rate, "format": fmt}}
-    if speaker_embedding:
-        body["speaker_embedding"] = list(speaker_embedding)
-    elif voice:
+                            "audio_config": audio_config}
+    if voice:
         body["voice"] = voice
     return body
 
