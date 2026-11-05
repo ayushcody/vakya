@@ -121,6 +121,7 @@ def test_a_long_list_is_shortened(clock):
 
 def test_booking_writes_the_row_for_this_front_desk(clinic):
     ok, v = book()
+    v.pop("whatsapp", None)       # present when the WhatsApp confirmations (services/booking_notify.py) are in the build
     assert ok and v == {"booking_id": "A10", "schedule": "Doctor consultations", "name": "Priya Sharma", "date": THURSDAY,
                         "weekday": "Thursday", "time": "18:00", "status": "booked", "token": 1, "say": v["say"]}
     assert "A10" in v["say"]["en"] and "phone" not in v
@@ -260,8 +261,8 @@ def test_the_agent_is_given_the_scheduling_tools_and_the_rule(desk, monkeypatch)
     model = Model(monkeypatch, lambda m, kw: llm.ChatResult("Hello.", "fake", "fake-model", 1, {}))
     say(rig, agent["id"], "hi")
     first = model.requests[0]
-    assert [t["function"]["name"] for t in first["tools"]] == \
-        ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "queue_status", "forget_me"]
+    assert [t["function"]["name"] for t in first["tools"] if t["function"]["name"] != "whatsapp_consent"] == \
+        ["check_availability", "list_free_slots", "book", "cancel", "reschedule", "find_booking", "queue_status", "forget_me"]
     system = first["messages"][0]["content"]
     assert "never say a time is free" in system and "`before` and `after`" in system and "Shall I book it?" in system
 
@@ -289,8 +290,8 @@ def test_the_doctor_list_tool_gives_way_to_the_schedules(rig, monkeypatch, tmp_p
         say(rig, agent["id"], "hi")
     finally:
         h.close()
-    names = [t["function"]["name"] for t in model.requests[0]["tools"]]
-    assert names == ["check_availability", "list_free_slots", "book", "cancel", "find_booking", "queue_status", "forget_me"]
+    names = [t["function"]["name"] for t in model.requests[0]["tools"] if t["function"]["name"] != "whatsapp_consent"]
+    assert names == ["check_availability", "list_free_slots", "book", "cancel", "reschedule", "find_booking", "queue_status", "forget_me"]
 
 
 def test_checking_a_taken_time_offers_before_and_after(desk, monkeypatch):
@@ -358,6 +359,8 @@ def test_cancelling_needs_the_callers_yes_first(desk, monkeypatch):
     from services import schedule_bookings as sb
     sb.create(schedule, day=date.fromisoformat(day), at="11:00", name="Priya Sharma", phone="9876543210", source="staff")
     monkeypatch.setenv("TOOLS_READBACK", "on")
+    d = date.fromisoformat(day)
+    ASK_CANCEL = f"Shall I cancel booking A10, {d.strftime('%A')} {d.day} {d.strftime('%B')} at 11 am?"   # its day and time, read back
 
     def plan(messages, kw):
         text, results = after_last_user(messages)
@@ -369,13 +372,13 @@ def test_cancelling_needs_the_callers_yes_first(desk, monkeypatch):
             return llm.ChatResult("hello", "fake", "fake-model", 1, {})
         body = results[-1]["content"]
         if "NOT DONE" in body:
-            return llm.ChatResult("Shall I cancel booking A10?", "fake", "fake-model", 1, {})
+            return llm.ChatResult(ASK_CANCEL, "fake", "fake-model", 1, {})
         return llm.ChatResult("Cancelled booking A10.", "fake", "fake-model", 1, {})
 
     Model(monkeypatch, plan)
     first = say(rig, agent["id"], "please cancel my booking A10")
     assert first["tool_calls"][0]["ok"] is False and bookings()[0]["status"] == "booked"
-    assert first["agent_text"] == "Shall I cancel booking A10?"
+    assert first["agent_text"] == ASK_CANCEL
     second = say(rig, agent["id"], "yes", first["conversation_id"])
     assert second["tool_calls"][0]["ok"] is True and bookings()[0]["status"] == "cancelled"
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     from services import availability as av, schedules as sch
@@ -75,10 +75,22 @@ def clean_phone(value: Any, required: bool) -> str:
 # ---------------------------------------------------------------------------------------------- reading
 
 def engine_for(schedule: dict, rows: Optional[List[dict]] = None, now: Optional[datetime] = None) -> av.Engine:
-    """The availability engine of a schedule over its current bookings and blocks."""
+    """The availability engine of a schedule over its current bookings and blocks, and, when Google Calendar is set up, the
+    owner's own events (docs/CALENDAR.md)."""
     rows = _ap().all_bookings() if rows is None else rows
     return av.Engine(schedule, av.live_bookings(rows, schedule["id"]), sch.list_blocks(schedule["id"]),
-                     now or sch.now(schedule.get("timezone")))
+                     now or sch.now(schedule.get("timezone")), external=av.calendar_source(schedule))
+
+
+def _warm_calendar(schedule: dict, day: Optional[date]) -> None:
+    """Read the owner's events of `day` before the appointments file is locked, so a slow Google never holds the lock (the
+    answer is remembered for 60 seconds, and a failure is remembered too). Never raises."""
+    try:
+        source = av.calendar_source(schedule)
+        if source is not None and day is not None:
+            source(day)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def summary(schedule: dict, rows: Optional[List[dict]] = None) -> dict:
@@ -124,10 +136,11 @@ def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: An
             raise BookingProblem("INVALID_NIGHTS", f"The number of nights must be from 1 to {sch.MAX_NIGHTS}.", "nights")
     elif at is None:
         raise BookingProblem("INVALID_TIME", "A time is needed.", "start")
+    _warm_calendar(schedule, day)
     with ap.transaction() as data:
         current = now or sch.now(schedule.get("timezone"))
         engine = av.Engine(schedule, av.live_bookings(data["bookings"], schedule["id"]),
-                           sch.list_blocks(schedule["id"]), current)
+                           sch.list_blocks(schedule["id"]), current, external=av.calendar_source(schedule))
         result = engine.check(day=day, at=at, nights=n, caller=caller)
         if not result["available"]:
             raise BookingRefused(result)
@@ -139,7 +152,7 @@ def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: An
             "reason": text, "status": "booked", "created_at": current.isoformat(timespec="seconds"),
             "schedule_id": schedule["id"], "schedule_name": schedule["name"], "agent_id": schedule.get("agent_id"),
             "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
-            "timezone": schedule.get("timezone"), "source": source,
+            "timezone": schedule.get("timezone"), "source": source, "version": 1,
         }
         if stay:
             booking["nights"] = n
@@ -185,9 +198,86 @@ def cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = Fa
             raise BookingProblem("IN_THE_PAST", f"Booking {wanted} is in the past and cannot be cancelled.", "booking_id")
         row["status"] = "cancelled"
         row["cancelled_at"] = current.isoformat(timespec="seconds")
+        row["version"] = int(row.get("version") or 1) + 1
         out = dict(row)
+    note_change(out, "cancelled", at=out["cancelled_at"])
     ap.sync_cancellation(wanted, ap.CALENDAR_WAIT_S if caller else None)
     return out
+
+
+def note_change(row: dict, kind: str, **fields: Any) -> None:
+    """Write a move or a cancellation on the proof of the booking, when it has one (booking_evidence.record_change). The proof
+    itself stays as it was sealed. Never raises."""
+    if not row.get("evidence_id"):
+        return
+    try:
+        try:
+            from services import booking_evidence  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import booking_evidence  # noqa: PLC0415
+        booking_evidence.record_change(row["evidence_id"], kind, **fields)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def reschedule(booking_id: str, agent_id: Optional[str] = None, *, day: date, at: Optional[str], nights: Optional[int] = None,
+               caller: bool = False, now: Optional[datetime] = None) -> Tuple[dict, dict]:
+    """Move a booking to another time, in one transaction, and return (the booking as it is now, the booking as it was).
+
+    The same row is changed in place (same booking_id): date, weekday, time, start and end, and for a stay the nights. The
+    new time is checked by the availability engine with this booking itself left out, so moving 3 pm to 3:30 pm is not
+    refused for overlapping itself; when it is not free BookingRefused carries the nearest free times and the booking stays
+    exactly as it was. `version` goes up by one, `moved_from` {date, time, start} and `moved_at` say what changed, and the
+    calendar event is moved after the booking is saved (a failure of Google never undoes the move). The rules for who may
+    move which booking are those of `cancel`: `agent_id` keeps it to that front desk's own bookings, `caller=True` holds the
+    new time to the minimum notice and the horizon and refuses a booking whose time has passed."""
+    ap = _ap()
+    wanted = str(booking_id or "").strip().upper().replace(" ", "")
+    first = next((b for b in ap.all_bookings() if b["booking_id"] == wanted), None)
+    schedule = sch.get(first["schedule_id"]) if first and first.get("schedule_id") else None
+    if first is None or schedule is None or (agent_id is not None and first.get("agent_id") != agent_id):
+        raise BookingProblem("NOT_FOUND", f"There is no booking {wanted}.", "booking_id")
+    if schedule["kind"] != "nights" and at is None:
+        raise BookingProblem("INVALID_TIME", "A time is needed.", "start")
+    _warm_calendar(schedule, day)
+    with ap.transaction() as data:
+        row = next((b for b in data["bookings"] if b["booking_id"] == wanted), None)
+        if row is None or not row.get("schedule_id") or (agent_id is not None and row.get("agent_id") != agent_id):
+            raise BookingProblem("NOT_FOUND", f"There is no booking {wanted}.", "booking_id")
+        if row["status"] != "booked":
+            raise BookingProblem("ALREADY_CANCELLED", f"Booking {wanted} is already cancelled.", "booking_id")
+        current = now or sch.now(row.get("timezone"))
+        if caller and datetime.fromisoformat(row.get("end") or row["start"]) <= current:
+            raise BookingProblem("IN_THE_PAST", f"Booking {wanted} is in the past and cannot be moved.", "booking_id")
+        stay = schedule["kind"] == "nights"
+        n = None
+        if stay:
+            n = nights if nights is not None else row.get("nights") or 1
+            if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= sch.MAX_NIGHTS:
+                raise BookingProblem("INVALID_NIGHTS", f"The number of nights must be from 1 to {sch.MAX_NIGHTS}.", "nights")
+        others = [b for b in data["bookings"] if b["booking_id"] != wanted]
+        engine = av.Engine(schedule, av.live_bookings(others, schedule["id"]), sch.list_blocks(schedule["id"]), current,
+                           external=av.calendar_source(schedule))
+        result = engine.check(day=day, at=at, nights=n, caller=caller)
+        if not result["available"]:
+            raise BookingRefused(result)
+        start = datetime.fromisoformat(result["requested"]["start"]).replace(tzinfo=None)
+        end = datetime.fromisoformat(result["requested"]["end"]).replace(tzinfo=None)
+        if start.isoformat(timespec="minutes") == str(row.get("start")) and (not stay or n == row.get("nights")):
+            raise BookingProblem("SAME_TIME", f"Booking {wanted} is already at that time.", "start")
+        previous = dict(row)
+        row["moved_from"] = {"date": previous["date"], "time": previous["time"], "start": previous.get("start")}
+        row["moved_at"] = current.isoformat(timespec="seconds")
+        row["version"] = int(previous.get("version") or 1) + 1
+        row["date"], row["weekday"], row["time"] = start.date().isoformat(), WEEKDAYS[start.weekday()], start.strftime("%H:%M")
+        row["start"], row["end"] = start.isoformat(timespec="minutes"), end.isoformat(timespec="minutes")
+        if stay:
+            row["nights"] = n
+        moved = dict(row)
+    note_change(moved, "moved", at=moved["moved_at"], moved_from=moved["moved_from"],
+                to={"date": moved["date"], "time": moved["time"], "start": moved["start"]})
+    ap.sync_move(wanted, ap.CALENDAR_WAIT_S if caller else None)
+    return (ap._find(wanted) or moved), previous   # noqa: SLF001 - the row after the calendar had its say
 
 
 def find_upcoming(agent_id: str, phone: Any) -> List[dict]:
@@ -243,6 +333,8 @@ def public(b: dict, tokens: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     for key in ("booked_by", "relation"):
         if b.get(key):
             out[key] = b[key]
+    if b.get("moved_from"):
+        out["moved_from"] = b["moved_from"]
     return out
 
 

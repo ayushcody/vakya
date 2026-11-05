@@ -70,6 +70,8 @@ export interface Slot {
   /** Everyone booked in this slot (all of them, not only the first), with who they are for. */
   bookings: SlotBooking[];
   block_id: string | null;
+  /** Blocked by an event on the owner's Google Calendar (not by a block of Vakya's, so there is nothing to free). */
+  calendar?: boolean;
 }
 export type BookingSource = "phone" | "missed_call" | "web" | "staff";
 export interface SlotBooking {
@@ -101,7 +103,7 @@ export interface CheckOption {
   start: string;
   end: string;
 }
-export type CheckReason = "closed" | "full" | "blocked" | "past" | "outside_hours" | "too_soon" | "too_far" | "not_a_start" | "unclear";
+export type CheckReason = "closed" | "full" | "blocked" | "calendar_busy" | "past" | "outside_hours" | "too_soon" | "too_far" | "not_a_start" | "unclear";
 export interface CheckResult {
   available: boolean;
   requested: CheckOption | null;
