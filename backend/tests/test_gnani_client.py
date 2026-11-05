@@ -125,7 +125,7 @@ def test_synthesize_body(api):
     assert str(req.url) == "https://api.vachana.ai/api/v1/tts/inference" and req.headers["x-api-key-id"] == KEY
     body = json.loads(req.content)
     assert body == {"text": "नमस्ते", "model": "timbre-v2.5", "language": "hi-IN", "speed": 1.15, "voice": "Nalini",
-                    "audio_config": {"sample_rate": 24000, "format": "wav"}}
+                    "audio_config": {"sample_rate": 24000, "num_channels": 1, "sample_width": 2, "container": "wav", "encoding": "linear_pcm"}}
     assert audio == b"RIFFwav"
 
 
@@ -220,3 +220,20 @@ def test_streaming_recognizer_frames_commits_and_reads_events(monkeypatch):
     assert [len(f) for f in socket.sent[:3]] == [1024, 1024, 1024] and json.loads(socket.sent[3]) == {"type": "commit"}
     assert [e["type"] for e in events] == ["connected", "transcript"] and events[1]["text"] == "नमस्ते"
     assert socket.closed
+
+
+def test_the_words_come_from_transcript_as_the_live_api_sends_them(api):
+    # shape of a real Prisma v3 reply, 5 Nov 2026
+    api.reply = lambda r: httpx.Response(200, json={"success": True, "request_id": "r1", "transcript": " नमस्ते, वाक्या ",
+                                                    "model": "prisma-v3.0", "processing_time": 0.2,
+                                                    "end_to_end_latency": 0.3, "detected_language_code": "hi-IN"})
+    out = gc.transcribe(b"RIFFdata", language="hi-IN,en-IN")
+    assert out["text"] == "नमस्ते, वाक्या" and out["language"] == "hi-IN" and out["request_id"] == "r1"
+
+
+def test_a_cloned_voice_sends_only_the_documented_fields(api):
+    api.reply = lambda r: httpx.Response(200, content=b"RIFFwav", headers={"content-type": "audio/wav"})
+    gc.synthesize("hi", voice="Nalini", language="hi-IN", speed=0.9, speaker_embedding=[0.1, 0.2])
+    body = json.loads(api.requests[0].content)
+    assert set(body) == {"text", "model", "speaker_embedding", "audio_config"}
+    assert body["audio_config"]["container"] == "wav"
