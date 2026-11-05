@@ -221,3 +221,22 @@ def _isolated_canned_reply_cache():
         canned_reply.audio_cache.clear()
     except Exception:  # noqa: BLE001
         pass
+
+
+@pytest.fixture(autouse=True)
+def _no_real_whatsapp(monkeypatch, tmp_path):
+    """No test sends a WhatsApp message: the access token and number id are unset (the outbox then only builds previews), the
+    outbox file is under tmp_path, never backend/data, and the one network exit (services/whatsapp._http) raises if reached."""
+    from services import booking_notify, whatsapp
+    for name in ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_API_VERSION", "WHATSAPP_TEMPLATE_CONFIRMED",
+                 "WHATSAPP_TEMPLATE_MOVED", "WHATSAPP_TEMPLATE_CANCELLED", "WHATSAPP_CONFIRMATIONS", "WHATSAPP_PREVIEW",
+                 "WHATSAPP_SEND_DELAY_S", "WHATSAPP_BACKSTOP_S"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("VAKYA_WHATSAPP_FILE", str(tmp_path / "whatsapp" / "outbox.json"))
+
+    def refuse(*a, **k):
+        raise AssertionError("a test reached the real WhatsApp API: fake services.whatsapp._http")
+    monkeypatch.setattr(whatsapp, "_http", refuse)
+    booking_notify.reset()
+    yield
+    booking_notify.reset()

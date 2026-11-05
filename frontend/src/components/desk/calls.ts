@@ -60,6 +60,10 @@ export interface ApiBooking {
   /** Who made the booking for this person and how they are related ("Rahul", "son"), when the stored row says. */
   booked_by?: string | null;
   relation?: string | null;
+  /** 1 when made, +1 on every move and on cancel; where a moved booking was before (null when never moved). */
+  version?: number;
+  moved_from?: { date: string; time: string; start?: string | null } | null;
+  moved_at?: string | null;
 }
 
 export interface BookingsResponse {
@@ -101,6 +105,8 @@ export interface Booking {
   token?: number | null;
   bookedBy?: string | null;
   relation?: string | null;
+  /** Where it was before it was moved ("2026-11-05", "15:00"); null when it never was. */
+  movedFrom?: { date: string; time: string } | null;
   practice: boolean;
   /** What the booking tool said (calls-derived fallback only), e.g. "booking A12 with Dr. Meera Kulkarni on Monday 2026-10-19 10:30". */
   lines: string[];
@@ -165,6 +171,7 @@ export function fromApiBooking(b: ApiBooking, agentName: string | null = null): 
     token: b.token ?? null,
     bookedBy: b.booked_by ?? null,
     relation: b.relation ?? null,
+    movedFrom: b.moved_from ? { date: b.moved_from.date, time: b.moved_from.time } : null,
     practice: false,
     lines: [],
     fromCalls: false,
@@ -279,6 +286,15 @@ export function useBookings(days = 30) {
     await Promise.all([store.mutate(), calls.mutate()]);
   };
   return { data, isLoading, error, mutate, calls: calls.data?.calls ?? [], fromCalls: fallback };
+}
+
+/**
+ * Move one appointment to another time (PATCH /api/bookings/{id}). `start` is "YYYY-MM-DDTHH:MM" in the schedule's own time
+ * (a stay: the new check-in day). The server answers 409 SLOT_UNAVAILABLE with `details` {reason, before, after, spoken} when the
+ * time is taken; the booking is then unchanged.
+ */
+export function moveBooking(id: string, start: string, nights?: number | null) {
+  return api.patch<{ booking: ApiBooking }>(`/api/bookings/${encodeURIComponent(id)}`, { start, ...(nights ? { nights } : {}) });
 }
 
 /** Cancel one appointment (DELETE /api/bookings/{id}). */

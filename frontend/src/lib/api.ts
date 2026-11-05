@@ -113,6 +113,9 @@ export const api = {
   async put<T>(path: string, body?: unknown, opts?: RequestOpts): Promise<T> {
     return parse<T>(await request("PUT", path, jsonBody(body), JSON_HEADERS, opts));
   },
+  async patch<T>(path: string, body?: unknown, opts?: RequestOpts): Promise<T> {
+    return parse<T>(await request("PATCH", path, jsonBody(body), JSON_HEADERS, opts));
+  },
   async del<T>(path: string, opts?: RequestOpts): Promise<T> {
     return parse<T>(await request("DELETE", path, undefined, {}, opts));
   },
