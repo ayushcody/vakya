@@ -81,7 +81,7 @@ for _feature in (system, auth, voices, agents, documents, turns):
 # The routers that have their own module of routes (the optional hook `install` lets one add routes to the main app too, as
 # the phone router does for its public routes).
 for _name in ("templates", "consent", "verify", "warmup", "phone", "conversations", "privacy",
-              "system_resources", "web_call", "callers", "bookings", "schedules", "delays", "usage", "theatre", "hearing"):
+              "system_resources", "web_call", "callers", "bookings", "schedules", "delays", "usage", "theatre", "hearing", "whatsapp"):
     try:
         _mod = importlib.import_module(f"routers.{_name}")
         app.include_router(_mod.router)
@@ -112,6 +112,16 @@ async def on_startup():
         reason = heartbeat.start()
         if reason is None:
             print(f"[Vakya] Heartbeat every {heartbeat.status()['interval_s']:.0f} s to {heartbeat.status()['target']}")
+
+
+@app.on_event("startup")
+async def resume_whatsapp():
+    """Messages a restart left waiting in the outbox are scheduled again (services/booking_notify.py)."""
+    try:
+        from services import booking_notify
+        booking_notify.resume()
+    except Exception as e:  # noqa: BLE001
+        log.error("could not resume the WhatsApp outbox: %s", e)
 
 
 app.on_event("startup")(voices.retention_startup)  # the voices past their retention period are deleted at start-up

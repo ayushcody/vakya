@@ -633,6 +633,12 @@ async def _remember_web_caller(link_id: str, claims: Dict[str, Any]) -> None:
     source "web call"). Nothing is read back to the visitor from it. Never raises, never waits."""
     try:
         cid = web_session.VISITOR_CONV.pop(claims["v"], None)
+        if cid:   # the visitor hung up: the WhatsApp confirmation of a booking made on this call goes after a short delay
+            try:
+                from services import booking_notify  # noqa: PLC0415
+            except ImportError:  # pragma: no cover
+                from backend.services import booking_notify  # noqa: PLC0415
+            booking_notify.call_ended(cid)
         rec = await asyncio.to_thread(store.get, link_id) if cid else None
         if not rec or not rec.get("user_id"):
             return

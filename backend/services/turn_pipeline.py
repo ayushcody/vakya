@@ -478,9 +478,26 @@ def _observed(spec: Any, run: TurnRun) -> Any:
             run.emit_tool_start(tool, args)
         except Exception as e:  # noqa: BLE001
             log.debug("tool start event skipped: %r", e)
-        return inner(tool, args)
+        token = _bind_whatsapp_call(getattr(run, "conversation_id", None))
+        try:
+            return inner(tool, args)
+        finally:
+            if token is not None:
+                token.var.reset(token)
     spec.runner = runner
     return spec
+
+
+def _bind_whatsapp_call(conversation_id: Any) -> Any:
+    """Tie a booking, move or cancel made by this tool to this call, so its WhatsApp confirmation goes when this call ends
+    (services/booking_notify.py). Returns the contextvar token to reset, or None."""
+    if not conversation_id:
+        return None
+    try:
+        from services import booking_notify  # noqa: PLC0415
+        return booking_notify.bind_call(str(conversation_id))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def tool_turn(run: TurnRun, messages: List[dict], timeout: float) -> "tools_mod.ToolTurn":

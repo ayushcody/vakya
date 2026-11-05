@@ -19,17 +19,23 @@ Nights (kind "nights"): one slot per date, from check-in that day to check-out t
 uses the nights D .. D+N-1, each needing a free room. A block blocks the nights it overlaps.
 
 `check()` answers a request (a date and time, or a check-in date and a number of nights) with `available`, a `reason`
-when not (closed, full, blocked, past, outside_hours, too_soon, too_far, not_a_start, unclear) and the nearest free slot before and
+when not (closed, full, blocked, calendar_busy, past, outside_hours, too_soon, too_far, not_a_start, unclear) and the nearest free slot before and
 after, searched on the same day first and then on the days either side (forwards up to the horizon). A caller on the
 phone is held to the minimum notice and the horizon; staff are not (`caller=False`).
 
 Not modelled: party size (it is recorded on a booking, but one booking uses one unit of capacity), time zones that change
-their clocks, ranges that cross midnight (use two days)."""
+their clocks, ranges that cross midnight (use two days).
+
+The owner's own calendar (docs/CALENDAR.md): when Google Calendar is set up, `external(day)` gives the busy intervals of a day
+from the owner's own events, and a slot they overlap is "blocked" with `calendar=True` (reason "calendar_busy"). It applies to
+time slots only (a stay is not blocked by a meeting). If Google cannot be read, the Engine goes on from Vakya's own list for
+the rest of its life and says so in the log."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 try:
     from services import schedules as sch
@@ -44,6 +50,25 @@ MONTHS_HI = ("जनवरी", "फ़रवरी", "मार्च", "अप
 HOURS_HI = ("", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ", "दस", "ग्यारह", "बारह")
 MAX_RANGE_DAYS = 42
 
+log = logging.getLogger("vakya.availability")
+Intervals = List[Tuple[datetime, datetime]]
+
+
+def calendar_source(schedule: dict) -> Optional[Callable[[date], Intervals]]:
+    """The busy-interval reader of the owner's Google Calendar for this schedule, or None when no calendar is set up (then
+    nothing here differs from a desk without Google)."""
+    try:
+        try:
+            from services import gcal  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import gcal  # noqa: PLC0415
+        if schedule.get("kind") == "nights" or not gcal.configured():
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    zone = schedule.get("timezone")
+    return lambda d: gcal.day_busy(d, zone)
+
 
 @dataclass
 class Slot:
@@ -53,14 +78,18 @@ class Slot:
     remaining: int
     bookings: List[dict] = field(default_factory=list)
     block_id: Optional[str] = None
+    calendar: bool = False          # blocked by an event on the owner's Google Calendar, not by a Vakya block
 
     def public(self, tz: str, decorate=None) -> dict:
         """The slot as the API shows it. `decorate(booking)` (the desk's route) adds who the booking is for: the masked
         phone, where it came from and the caller's reference; the raw phone number never leaves this function."""
-        return {"start": sch.iso(self.start, tz), "end": sch.iso(self.end, tz), "status": self.status,
-                "remaining": self.remaining,
-                "bookings": [{"id": b["id"], "name": b["name"], **(decorate(b) if decorate else {})} for b in self.bookings],
-                "block_id": self.block_id}
+        out = {"start": sch.iso(self.start, tz), "end": sch.iso(self.end, tz), "status": self.status,
+               "remaining": self.remaining,
+               "bookings": [{"id": b["id"], "name": b["name"], **(decorate(b) if decorate else {})} for b in self.bookings],
+               "block_id": self.block_id}
+        if self.calendar:
+            out["calendar"] = True
+        return out
 
 
 def live_bookings(rows: Iterable[dict], schedule_id: str) -> List[dict]:
@@ -83,8 +112,12 @@ def live_bookings(rows: Iterable[dict], schedule_id: str) -> List[dict]:
 
 
 class Engine:
-    def __init__(self, schedule: dict, bookings: Iterable[dict], blocks: Iterable[dict], now: datetime):
+    def __init__(self, schedule: dict, bookings: Iterable[dict], blocks: Iterable[dict], now: datetime,
+                 external: Optional[Callable[[date], Intervals]] = None):
         self.s = schedule
+        self.external = external
+        self._external_days: Dict[date, Intervals] = {}
+        self._external_failed = False
         self.now = now
         self.today = now.date()
         self.tz = schedule.get("timezone")
@@ -109,6 +142,20 @@ class Engine:
         self._slots: Dict[date, List[Slot]] = {}
 
     # ------------------------------------------------------------------------------------------ the day
+
+    def _calendar_busy(self, d: date) -> Intervals:
+        """The owner's own events of a day (empty without a calendar, for a stay, for a day before today, and for the rest of
+        this Engine's life after Google failed once: Vakya's own list then decides, which is what a desk without Google does)."""
+        if self.external is None or self.nights or self._external_failed or d < self.today:
+            return []
+        if d not in self._external_days:
+            try:
+                self._external_days[d] = [(a.replace(tzinfo=None), b.replace(tzinfo=None)) for a, b in self.external(d)]
+            except Exception as e:  # noqa: BLE001 - Google never fails a caller's request
+                log.warning("calendar: could not read the owner's events (%s); using Vakya's own list", e)
+                self._external_failed = True
+                return []
+        return self._external_days[d]
 
     def is_open(self, d: date) -> bool:
         return d.isoformat() not in self.closed and bool(self.week[d.weekday()])
@@ -140,14 +187,16 @@ class Engine:
         out: List[Slot] = []
         if self.is_open(d):
             day_bookings = self._by_day.get(d, [])
+            busy = self._calendar_busy(d)
             for start in self._starts(d):
                 end = self._span(start)
                 mine = [b for b in day_bookings if b["start"] < end and b["end"] > start]
                 block = next((bid for bs, be, bid in self.blocks if bs < end and be > start), None)
-                remaining = 0 if block else max(0, self.capacity - len(mine))
+                on_calendar = block is None and start > self.now and any(bs < end and be > start for bs, be in busy)
+                remaining = 0 if block or on_calendar else max(0, self.capacity - len(mine))
                 if (d < self.today) if self.nights else (start <= self.now):
                     status = "past"
-                elif block:
+                elif block or on_calendar:
                     status = "blocked"
                 elif len(mine) >= self.capacity:
                     status = "full"
@@ -155,7 +204,7 @@ class Engine:
                     status = "booked"
                 else:
                     status = "free"
-                out.append(Slot(start, end, status, remaining, mine, block))
+                out.append(Slot(start, end, status, remaining, mine, block, calendar=on_calendar and status == "blocked"))
         self._slots[d] = out
         return out
 
@@ -289,7 +338,7 @@ class Engine:
         if caller and start < self.now + self.min_notice:
             return fail("too_soon")
         if hit.status == "blocked":
-            return fail("blocked")
+            return fail("calendar_busy" if hit.calendar else "blocked")
         if hit.remaining <= 0:
             return fail("full")
         return self._result(True, None, requested)
@@ -493,6 +542,8 @@ def speak(engine: Engine, res: dict, lang: str) -> str:
         return f"{when_hi} वाला समय भरा हुआ है। {tail}" if hi else f"{when_en} is already taken. {tail}"
     if reason == "blocked":
         return f"{when_hi} हम उपलब्ध नहीं हैं। {tail}" if hi else f"We are not available {when_en}. {tail}"
+    if reason == "calendar_busy":   # something else is in the owner's own calendar then
+        return f"{when_hi} हम व्यस्त हैं। {tail}" if hi else f"We are busy {when_en}. {tail}"
     if reason == "closed":
         day_word = day_hi(req.date(), today)
         return f"{day_word} को हम बंद रहते हैं। {tail}" if hi \

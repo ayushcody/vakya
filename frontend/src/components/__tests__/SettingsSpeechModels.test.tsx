@@ -31,6 +31,7 @@ function serve(providers: unknown[]) {
     if (path.startsWith("/api/phone/status")) return phone(providers);
     if (path.startsWith("/api/usage/summary")) return usage;
     if (path.startsWith("/api/privacy/attestation")) return {};
+    if (path.startsWith("/api/whatsapp/")) return {};
     throw new Error(`unexpected GET ${path}`);
   });
 }

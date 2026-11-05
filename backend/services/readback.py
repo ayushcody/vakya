@@ -213,9 +213,11 @@ def _time_words(t: Time, lang: str) -> str:
     return f"{period} {clock} वाजता"
 
 
-def sentences(args: Dict[str, Any]) -> Dict[str, str]:
+def sentences(args: Dict[str, Any], action: str = "book") -> Dict[str, str]:
     """The read-back of a booking in English, Hindi and Marathi, ending in the confirmation question. Dates, times, the name
-    and the last four digits of the phone are written as they must be spoken (digits, never words)."""
+    and the last four digits of the phone are written as they must be spoken (digits, never words). `action` "move" reads
+    back the NEW day and time of an existing booking ("Moving your booking to Thursday 6 November at 4 pm. Shall I go
+    ahead?")."""
     d = _date(args.get("date"))
     t = _time(args.get("time"))
     name = str(args.get("name") or "").strip()
@@ -237,8 +239,31 @@ def sentences(args: Dict[str, Any]) -> Dict[str, str]:
         who = {"en": f"for {name}", "hi": f"{name} के नाम से", "mr": f"{name} यांच्या नावाने"}[lang] if name else ""
         number = {"en": f"phone number ending {tail}", "hi": f"फ़ोन नंबर के आख़िरी अंक {tail}",
                   "mr": f"फोन नंबरचे शेवटचे अंक {tail}"}[lang] if tail else ""
+        if action == "move":
+            lead = {"en": "Moving your booking to", "hi": "आपकी बुकिंग इस समय पर होगी:", "mr": "तुमची बुकिंग या वेळेवर असेल:"}[lang]
+            ask = {"en": "Shall I go ahead?", "hi": "क्या मैं बदल दूँ?", "mr": "मी बदलू का?"}[lang]
+            out[lang] = f"{lead} " + ", ".join(x for x in (head, who, number) if x) + ". " + ask
+            continue
         ask = {"en": "Shall I book it?", "hi": "क्या मैं बुक कर दूँ?", "mr": "मी बुक करू का?"}[lang]
         out[lang] = ", ".join(x for x in (head, who, number) if x) + ". " + ask
+    return out
+
+
+def cancel_sentences(booking_id: str, day: Optional[Date], t: Optional[Time]) -> Dict[str, str]:
+    """The read-back of a cancellation in English, Hindi and Marathi: one question that names the booking and its day and
+    time ("Shall I cancel booking A12, Thursday 5 November at 3 pm?")."""
+    out: Dict[str, str] = {}
+    for lang in ("en", "hi", "mr"):
+        parts: List[str] = []
+        if day:
+            parts.append(f"{_WEEKDAYS[lang][day.weekday()]} {day.day} {_MONTHS[lang][day.month - 1]}")
+        if t:
+            parts.append(("at " if lang == "en" else "") + _time_words(t, lang))
+        head = " ".join(parts)
+        bid = str(booking_id)
+        out[lang] = {"en": f"Shall I cancel booking {bid}, {head}?",
+                     "hi": f"क्या मैं बुकिंग {bid}, {head}, रद्द कर दूँ?",
+                     "mr": f"मी बुकिंग {bid}, {head}, रद्द करू का?"}[lang]
     return out
 
 

@@ -495,6 +495,43 @@ def _receipt_of_turn(turn_id: str) -> Optional[dict]:
         return None
 
 
+# ------------------------------------------------------------------------------------------------ later changes
+
+def record_change(evidence_id: str, kind: str, **fields: Any) -> bool:
+    """Write that the booking was moved or cancelled after the proof was sealed: one line in `changes.json` of the evidence
+    folder ({kind "moved" | "cancelled", at, and for a move moved_from and to}). The seal is not touched: the proof still
+    covers the booking exactly as the caller agreed it, and these lines say what happened to it afterwards (shown to the
+    owner as `changes`, never in the public view). True when the line was written; never raises."""
+    folder = _dir(evidence_id)
+    if not folder or not os.path.isdir(folder) or kind not in ("moved", "cancelled"):
+        return False
+    try:
+        with _lock:
+            path = os.path.join(folder, "changes.json")
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    lines = json.load(f)
+                lines = lines if isinstance(lines, list) else []
+            except (OSError, ValueError):
+                lines = []
+            lines.append({"kind": kind, **{k: v for k, v in fields.items() if v is not None}})
+            _write_json(path, lines)
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not record a %s on the evidence %s: %r", kind, evidence_id, e)
+        return False
+
+
+def changes_of(evidence_id: str) -> List[dict]:
+    folder = _dir(evidence_id)
+    try:
+        with open(os.path.join(folder or "", "changes.json"), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [c for c in data if isinstance(c, dict)] if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
 # ------------------------------------------------------------------------------------------------ reading
 
 def _load(evidence_id: str) -> Tuple[Optional[dict], Optional[dict], Optional[dict]]:
@@ -604,6 +641,8 @@ def _view(evidence_id: str, *, full: bool, audio_ok: bool) -> Optional[dict]:
         "created_at": meta.get("created_at"), "complete": bool(meta.get("complete")), "deleted": manifest is None,
         "retention_days": retention_days(), "manifest_sha256": hashes["manifest_sha256"], "verified": checked["ok"],
         "verification": {k: checked[k] for k in ("receipt_ok", "manifest_ok", "reason")}}
+    if full:   # what happened to the booking after the proof was sealed (not covered by the seal)
+        out["changes"] = changes_of(evidence_id)
     if manifest is not None:
         out.update(schedule_name=manifest.get("schedule_name"), start=manifest.get("start"), date=manifest.get("date"),
                    time=manifest.get("time"), conversation_id=manifest.get("conversation_id"),

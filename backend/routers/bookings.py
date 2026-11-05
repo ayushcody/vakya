@@ -6,6 +6,10 @@
     POST   /api/bookings                       a staff booking against a schedule: {schedule_id, start, name, phone?,
                                                note?, nights?, party?}  ->  {booking}   (409 SLOT_UNAVAILABLE with the
                                                reason and the nearest free times when it is not free)
+    PATCH  /api/bookings/{id}                  move one to another time: {start, nights?}  ->  {booking}  (the same id; staff are
+                                               not held to the minimum notice; 409 SLOT_UNAVAILABLE with the reason and the
+                                               nearest free times when the new time is taken, the booking then stays as it was;
+                                               its calendar event is moved)
     DELETE /api/bookings/{id}                  cancel one (and take it off the calendar when it is synced)
 
 The store is the JSON file the agent's appointments tool writes (mcp_servers/appointments.py, VAKYA_APPOINTMENTS_FILE).
@@ -15,7 +19,8 @@ A booking row:
     status "booked" | "cancelled", conversation_id and receipt_id (null when the booking was not made on a call),
     agent_id, created_at (with the offset), calendar_sync "synced" | "pending" | "failed" | "not_configured" (services/gcal.py);
     and from the schedules: schedule_id and schedule_name (null for a doctor booking of the older tool), end (ISO; a doctor
-    booking lasts 30 minutes), nights (stays), party, note.
+    booking lasts 30 minutes), nights (stays), party, note; and version (1 when made, +1 on every move and on cancel),
+    moved_from {date, time, start} and moved_at (null when never moved).
 """
 import asyncio
 import logging
@@ -30,17 +35,20 @@ from pydantic import BaseModel
 
 try:
     from core.errors import AppError
-    from services import booking_evidence, schedule_bookings as sb, schedules as sch
+    from services import booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
     from services.auth import get_current_user_id
 except ImportError:  # pragma: no cover - imported as backend.routers.bookings
     from backend.core.errors import AppError
-    from backend.services import booking_evidence, schedule_bookings as sb, schedules as sch
+    from backend.services import booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
     from backend.services.auth import get_current_user_id
 
 log = logging.getLogger("vakya.bookings")
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+_notify = schedule_tools._notify     # hands a change to the WhatsApp confirmations; never raises (see services/schedule_tools.py)
 
 
 def _store():
@@ -109,6 +117,7 @@ def public_booking(b: dict, zone: ZoneInfo, who: Optional["sb.Who"] = None) -> D
         "schedule_id": b.get("schedule_id") or None, "schedule_name": b.get("schedule_name") or None,
         "nights": b.get("nights") or None, "party": b.get("party") or None, "note": b.get("note") or None,
         "evidence_id": b.get("evidence_id") or None, "has_evidence": bool(b.get("evidence_id")),
+        "version": b.get("version") or 1, "moved_from": b.get("moved_from") or None, "moved_at": b.get("moved_at") or None,
         "booked_by": b.get("booked_by") or None, "relation": b.get("relation") or None,
         **(who.fields(b.get("phone"), b.get("source"), b.get("conversation_id")) if who is not None else {}),
     }
@@ -186,9 +195,50 @@ async def create_booking(body: StaffBooking, user_id: str = Depends(get_current_
         except sb.BookingProblem as e:
             raise AppError(e.code, e.message, 422, {"field": e.field}) from None
         except sb.BookingRefused as e:
-            r = e.result
-            raise AppError("SLOT_UNAVAILABLE", str(e), 409, {"reason": r.get("reason"), "before": r.get("before"),
-                                                              "after": r.get("after"), "spoken": r.get("spoken")}) from None
+            raise _unavailable(e) from None
+        _notify("booked", row, source="staff")
+        return {"booking": public_booking(row, _zone(_store()))}
+    return await asyncio.to_thread(work)
+
+
+def _unavailable(e: "sb.BookingRefused") -> AppError:
+    r = e.result
+    return AppError("SLOT_UNAVAILABLE", str(e), 409, {"reason": r.get("reason"), "before": r.get("before"),
+                                                       "after": r.get("after"), "spoken": r.get("spoken")})
+
+
+class MoveBooking(BaseModel):
+    start: str
+    nights: Optional[int] = None
+
+
+@router.patch("/{booking_id}")
+async def move_booking(booking_id: str, body: MoveBooking, user_id: str = Depends(get_current_user_id)):
+    """Move a booking to another time from the desk. `start` is the new time of a slot (a stay: the new check-in date, with
+    `nights` to change its length). The booking keeps its id; staff are not held to the minimum notice or the horizon. If
+    the time is taken: 409 SLOT_UNAVAILABLE with `reason`, `before` and `after`, and nothing changes. Its calendar event is
+    moved (a failure of Google never undoes the move: `calendar_sync` says "failed")."""
+    def work():
+        wanted = str(booking_id or "").strip().upper().replace(" ", "")
+        found = next((b for b in _store().all_bookings() if b.get("booking_id") == wanted), None)
+        if found is None:
+            raise AppError("NOT_FOUND", "Booking not found", 404, {"booking_id": booking_id})
+        schedule = sch.get(found["schedule_id"]) if found.get("schedule_id") else None
+        if schedule is None:
+            raise AppError("NOT_MOVABLE", "This booking was not made on a schedule, so it cannot be moved here. Cancel it and "
+                           "book again.", 422, {"booking_id": booking_id})
+        try:
+            start = sch.parse_dt(body.start, schedule.get("timezone"), "start")
+            row, previous = sb.reschedule(wanted, None, day=start.date(), at=start.strftime("%H:%M"), nights=body.nights,
+                                          caller=False)
+        except sch.ScheduleError as e:
+            raise AppError(e.code, e.message, 422, {"field": e.field}) from None
+        except sb.BookingProblem as e:
+            status = 404 if e.code == "NOT_FOUND" else 409 if e.code in ("ALREADY_CANCELLED", "SAME_TIME") else 422
+            raise AppError(e.code, e.message, status, {"field": e.field}) from None
+        except sb.BookingRefused as e:
+            raise _unavailable(e) from None
+        _notify("moved", row, previous, source="staff")
         return {"booking": public_booking(row, _zone(_store()))}
     return await asyncio.to_thread(work)
 
@@ -205,7 +255,9 @@ async def cancel_booking(booking_id: str, user_id: str = Depends(get_current_use
         if "already cancelled" in msg:
             raise AppError("ALREADY_CANCELLED", msg, 409) from None
         raise AppError("NOT_FOUND", "Booking not found", 404, {"booking_id": booking_id}) from None
+    sb.note_change(booking, "cancelled", at=booking.get("cancelled_at"))
     booking = await asyncio.to_thread(ap.sync_cancellation, booking["booking_id"]) or booking   # never raises
+    await asyncio.to_thread(_notify, "cancelled", booking, None, source="staff")
     return {"booking": public_booking(booking, _zone(ap))}
 
 

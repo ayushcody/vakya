@@ -356,6 +356,65 @@ def _create_event(booking_id: str) -> None:
         _delete_event(booking_id)
 
 
+def _booking_days(b: Optional[dict]) -> List[date]:
+    """The calendar days a booking covers (for forgetting what was read of them)."""
+    try:
+        first = datetime.fromisoformat(str(b.get("start") or f"{b['date']}T{b['time']}")).date()
+        last = datetime.fromisoformat(str(b["end"])).date() if b.get("end") else first
+        return [first + timedelta(days=i) for i in range(max(0, (last - first).days) + 1)]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return []
+
+
+def _forget(*days: date) -> None:
+    """A change made through Vakya: what was read of these days from Google is out of date (services/gcal.py)."""
+    try:
+        from services import gcal  # noqa: PLC0415
+        for d in days:
+            gcal.invalidate(d)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _move_event(booking_id: str) -> None:
+    gcal = _calendar()
+    if gcal is None:
+        return
+    b = _find(booking_id)
+    if b is None or b["status"] != "booked":
+        return
+    if not b.get("calendar_event_id"):          # it never reached the calendar (not synced, or failed): make it there now
+        _create_event(booking_id)
+        return
+    try:
+        _summary, description = _event_text(b)
+        if b.get("moved_from"):
+            old = b["moved_from"]
+            was = datetime.combine(date.fromisoformat(old["date"]), _parse_time(old["time"]))
+            description += f"\nMoved from {was.strftime('%a')} {was.day} {was.strftime('%b')} " \
+                           f"{was.hour % 12 or 12}:{was.minute:02d} {'am' if was.hour < 12 else 'pm'}"
+        start = datetime.combine(date.fromisoformat(b["date"]), _parse_time(b["time"]))
+        minutes = SLOT_MINUTES
+        if b.get("end"):
+            minutes = max(5, int((datetime.fromisoformat(b["end"]) - datetime.fromisoformat(b["start"])).total_seconds() // 60))
+        try:
+            gcal.move_event(b["calendar_event_id"], start, minutes, description)
+        except Exception as e:  # noqa: BLE001
+            if getattr(e, "status", None) in (404, 410):   # the owner deleted the event: put a new one there
+                _set(booking_id, calendar_event_id=None)
+                _create_event(booking_id)
+                return
+            raise
+    except Exception as e:  # noqa: BLE001 - the move stands whatever Google says
+        log.warning("calendar: could not move the event of booking %s: %s", booking_id, e)
+        _set(booking_id, calendar_sync="failed", calendar_error=str(e)[:200])
+        return
+    _set(booking_id, calendar_sync="synced", calendar_error=None)
+    again = _find(booking_id)
+    if again is not None and again["status"] != "booked":   # cancelled while the event was being moved
+        _delete_event(booking_id)
+
+
 def _delete_event(booking_id: str) -> None:
     b = _find(booking_id)
     event_id = (b or {}).get("calendar_event_id")
@@ -385,6 +444,7 @@ def _run_sync(fn, booking_id: str, wait: float) -> None:
 
 def sync_booking(booking_id: str, wait: Optional[float] = None) -> None:
     """Put a new booking on the calendar (when one is configured). Never raises."""
+    _forget(*_booking_days(_find_quiet(booking_id)))
     if not calendar_configured():
         return
     _set(booking_id, calendar_sync="pending")
@@ -394,8 +454,31 @@ def sync_booking(booking_id: str, wait: Optional[float] = None) -> None:
 def sync_cancellation(booking_id: str, wait: Optional[float] = None) -> Optional[dict]:
     """Take a cancelled booking off the calendar. Returns the booking as it is afterwards. Never raises. The desk waits
     longer than a caller on the phone does (10 s)."""
+    _forget(*_booking_days(_find_quiet(booking_id)))
     _run_sync(_delete_event, booking_id, 10.0 if wait is None else wait)
     return _find(booking_id)
+
+
+def sync_move(booking_id: str, wait: Optional[float] = None) -> None:
+    """Move the event of a booking whose time was just changed (events.patch; the description says "Moved from Thu 6 Nov
+    3:00 pm"). A booking with no event yet gets one. The same rules as `sync_booking`: after the move is saved, at most
+    `wait` seconds (default CALENDAR_WAIT_S), a failure is written on the booking (`calendar_sync` "failed") and never undoes
+    the move, a slow call finishes in the background. Never raises."""
+    b = _find_quiet(booking_id)
+    _forget(*_booking_days(b), *_booking_days(b.get("moved_from") and {"start": b["moved_from"].get("start"),
+                                                                       "date": b["moved_from"].get("date"),
+                                                                       "time": b["moved_from"].get("time")}))
+    if not calendar_configured():
+        return
+    _set(booking_id, calendar_sync="pending")
+    _run_sync(_move_event, booking_id, CALENDAR_WAIT_S if wait is None else wait)
+
+
+def _find_quiet(booking_id: str) -> dict:
+    try:
+        return _find(booking_id) or {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 # ---------------------------------------------------------------------------------------------- tools
@@ -489,6 +572,7 @@ def cancel_appointment(booking_id: Annotated[str, Field(description="e.g. A12")]
             raise AppointmentError(f"Booking {wanted} is in the past and cannot be cancelled.")
         booking["status"] = "cancelled"
         booking["cancelled_at"] = now().isoformat(timespec="seconds")
+        booking["version"] = int(booking.get("version") or 1) + 1
     sync_cancellation(booking["booking_id"], CALENDAR_WAIT_S)
     return _public(booking)
 
@@ -528,6 +612,7 @@ def cancel_booking(booking_id: str) -> dict:
             raise AppointmentError(f"Booking {wanted} is already cancelled.")
         booking["status"] = "cancelled"
         booking["cancelled_at"] = now().isoformat(timespec="seconds")
+        booking["version"] = int(booking.get("version") or 1) + 1
         out = dict(booking)
     return out
 

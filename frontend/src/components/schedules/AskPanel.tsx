@@ -14,6 +14,7 @@ const REASONS: Record<CheckReason, string> = {
   closed: "Closed that day",
   full: "Already full",
   blocked: "Marked busy",
+  calendar_busy: "Busy on your Google Calendar",
   past: "That time has passed",
   outside_hours: "Outside opening hours",
   too_soon: "Too soon to book",

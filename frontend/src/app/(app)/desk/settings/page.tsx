@@ -7,6 +7,7 @@ import { Badge, Card, ErrorBoundary, PageHeader, Skeleton } from "@/components/u
 import type { BadgeTone } from "@/components/ui/Badge";
 import { useConsentMode, useEngines, useHealth } from "@/hooks/useApi";
 import { HearingSettings } from "@/components/hearing/HearingSettings";
+import { WhatsAppSettings } from "@/components/whatsapp/WhatsAppSettings";
 import { SpeechModelsCard } from "@/components/usage/SpeechModelsCard";
 import { api } from "@/lib/api";
 import { llmLabel } from "@/lib/llm";
@@ -159,6 +160,8 @@ function SettingsContent() {
             <Row label="Phone line"><Status tone="neutral">Could not load</Status></Row>
           )}
         </Section>
+
+        <WhatsAppSettings />
 
         <Section id="privacy" title="Privacy" intro="Where the data lives and what the server promises about it.">
           <Row label="Storage">

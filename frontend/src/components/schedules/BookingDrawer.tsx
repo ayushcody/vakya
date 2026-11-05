@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import useSWR from "swr";
-import { CalendarClock, Fingerprint, Lock, Globe2, Repeat, Ticket, UserRound, Users, X } from "lucide-react";
+import { ArrowRightLeft, CalendarClock, Fingerprint, Lock, Globe2, Repeat, Ticket, UserRound, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Skeleton } from "@/components/ui";
 import { BookingTimeline } from "@/components/verify/BookingTimeline";
@@ -15,8 +15,9 @@ import { bookedByWords } from "@/components/queue/queue";
 import { cancelBooking, useScheduleBookings, type Booking } from "@/components/desk/calls";
 import { api, ApiError } from "@/lib/api";
 import { APP_FONT_CLASSES } from "@/lib/appFonts";
-import { formatDateTime } from "@/lib/formatDate";
+import { formatDateTime, formatDayTime } from "@/lib/formatDate";
 import { languageName, ordinal, SOURCE_LABEL, SourceIcon } from "./bookingWho";
+import { RescheduleForm } from "./RescheduleForm";
 
 const noop = () => () => {};
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -35,6 +36,7 @@ export function BookingDrawer({ booking, onClose, onChanged }: { booking: Bookin
     closeRef.current = onClose;
   });
   const [confirming, setConfirming] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [seals, setSeals] = useState(false);   // the hashes of the proof, behind a toggle so the timeline reads cleanly
 
@@ -174,6 +176,9 @@ export function BookingDrawer({ booking, onClose, onChanged }: { booking: Bookin
               )}
             </li>
             <li className="flex items-center gap-2"><CalendarClock aria-hidden className="size-4 shrink-0 text-text-secondary" /><span><span className="font-medium">{formatDateTime(booking.start, booking.timezone) || "Time not recorded"}</span>{booking.scheduleName ? ` · ${booking.scheduleName}` : ""}{booking.id ? ` · ${booking.id}` : ""}</span></li>
+            {booking.movedFrom && formatDayTime(booking.movedFrom.date, booking.movedFrom.time) && (
+              <li className="flex items-center gap-2"><ArrowRightLeft aria-hidden className="size-4 shrink-0 text-text-secondary" />Moved from {formatDayTime(booking.movedFrom.date, booking.movedFrom.time)}</li>
+            )}
           </ul>
         </header>
 
@@ -224,6 +229,17 @@ export function BookingDrawer({ booking, onClose, onChanged }: { booking: Bookin
         </div>
 
         <footer className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3.5 sm:px-6">
+          {moving && !cancelled && (
+            <RescheduleForm
+              booking={booking}
+              onCancel={() => setMoving(false)}
+              onMoved={() => {
+                toast.success(`Booking ${booking.id} moved`);
+                setMoving(false);
+                onChanged?.();
+              }}
+            />
+          )}
           {booking.callerRef && booking.source !== "staff" && (
             <Link href={`/desk/callers?caller=${encodeURIComponent(booking.callerRef)}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-sm font-medium text-text-primary hover:bg-bg-base">
               Open the caller
@@ -235,6 +251,9 @@ export function BookingDrawer({ booking, onClose, onChanged }: { booking: Bookin
             </Link>
           )}
           <span className="flex-1" />
+          {!cancelled && booking.id && !confirming && !moving && (
+            <Button variant="outline" size="sm" onClick={() => setMoving(true)}>Move</Button>
+          )}
           {!cancelled && booking.id && !confirming && (
             <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>Cancel booking</Button>
           )}

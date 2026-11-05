@@ -27,7 +27,7 @@ cancelled on a day or at a time while no write tool succeeded (claims_unconfirme
 (UNCONFIRMED_LINE).
 
 Server configuration: "appointments" is built in (backend/mcp_servers/appointments.py: the doctor list), and so is
-"schedules" (services/schedule_tools.py: check_availability, list_free_slots, book, cancel on the front desk's own
+"schedules" (services/schedule_tools.py: check_availability, list_free_slots, book, reschedule, cancel on the front desk's own
 schedules, run in this process). More servers can be added in
 backend/data/mcp/servers.json (or the file named by VAKYA_MCP_SERVERS), as
 {"name": {"label": "...", "command": "python", "args": ["server.py"], "env": {...}, "cwd": "/path"}}.
@@ -74,7 +74,9 @@ CONFIRM_BEFORE = {"cancel_appointment": "booking_id", "cancel": "booking_id"}
 # sentence; the model reads it back, asks "Shall I book it?", and the tool runs on the next call once the previous agent
 # turn holds that read-back (the same day and hour) and a question. One extra turn (about 2 s) buys zero silent wrong
 # writes: on 21 Oct 2026 a Monday booking landed on a Saturday. TOOLS_READBACK=off restores one-step writes.
-READBACK_TOOLS = {"book_appointment": "book it", "book": "book it"}
+# `reschedule` is read back at the NEW day and time; `cancel` (of a schedule booking) at the booking's own day and time, which
+# the gate looks up by its id (see `_cancel_readback_error`).
+READBACK_TOOLS = {"book_appointment": "book it", "book": "book it", "reschedule": "move it", "cancel": "cancel it"}
 SLOT_KEYS = ("name", "phone", "date", "time", "doctor", "reason", "schedule", "nights")
 SLOTS_MARKER = "(Details the caller already gave in this conversation"
 _WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -140,12 +142,14 @@ def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optio
     verb = READBACK_TOOLS.get(spec.tool)
     if verb is None or not readback_enabled():
         return None
+    if spec.tool == "cancel":
+        return _cancel_readback_error(spec, arguments, previous_agent_text, caller_text)
     d, t = _iso_date(arguments.get("date")), _hhmm(arguments.get("time"))
     read_back = bool(previous_agent_text) and _slot_mentioned(
         previous_agent_text, d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
     if read_back and (caller_text is None or readback.is_affirmative(caller_text, d, t)):
         return None
-    spoken = readback.sentences(arguments)
+    spoken = readback.sentences(arguments, "move" if spec.tool == "reschedule" else "book")
     if read_back:
         return ("NOT DONE: first read this back to the caller again: they have not said yes to this exact booking. If they "
                 "changed something, read the new details back; if they only asked a question, answer it and read the "
@@ -157,6 +161,33 @@ def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optio
             f"answer: EN \"{spoken['en']}\" HI \"{spoken['hi']}\" MR \"{spoken['mr']}\". Call the tool again with the same "
             "details only after the caller's next message is a yes (haan, ho, theek hai, kar do...). If they pick another time "
             "or change anything, read the new details back first.")
+
+
+def _cancel_readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optional[str],
+                           caller_text: Optional[str]) -> Optional[str]:
+    """The gate of `cancel`: the previous agent turn must name the booking's day and time and ask ("Shall I cancel booking A12,
+    Thursday 5 November at 3 pm?") and the caller's latest words must be a plain yes. The day and time are the booking's own,
+    found by its id among this front desk's bookings; when there is no such live booking the tool answers for itself (not
+    found, already cancelled) and nothing is held back here."""
+    try:
+        from mcp_servers import appointments  # noqa: PLC0415
+    except ImportError:  # pragma: no cover
+        from backend.mcp_servers import appointments  # noqa: PLC0415
+    wanted = _norm_id(arguments.get("booking_id", ""))
+    agent = getattr(spec, "agent_id", None)
+    row = next((b for b in appointments.all_bookings() if _norm_id(b.get("booking_id", "")) == wanted), None) if wanted else None
+    if row is None or row.get("status") != "booked" or not row.get("schedule_id") or (agent and row.get("agent_id") != agent):
+        return None
+    d, t = _iso_date(row.get("date")), _hhmm(row.get("time"))
+    read_back = bool(previous_agent_text) and _slot_mentioned(previous_agent_text, d, t)
+    if read_back and (caller_text is None or readback.is_affirmative(caller_text, d, t)):
+        return None
+    spoken = readback.cancel_sentences(row["booking_id"], d, t)
+    lead = ("NOT DONE: the caller has not said yes to cancelling this exact booking. If they asked something else, answer it, "
+            "then ask again. " if read_back else "NOT DONE: the caller has not confirmed which booking to cancel. ")
+    return (lead + "Ask exactly this, in the caller's language (keep the booking id, day and time as written, and say nothing "
+            f"else with it), and wait for the answer: EN \"{spoken['en']}\" HI \"{spoken['hi']}\" MR \"{spoken['mr']}\". "
+            "Call cancel again with the same booking_id only after the caller's next message is a yes.")
 
 
 def known_slots(history: Optional[List[dict]]) -> Dict[str, str]:
@@ -543,6 +574,17 @@ def tools_prompt(specs: List[ToolSpec], *, json_protocol: bool, now: Optional[da
                   "list_free_slots to read out times). When it is not free, offer the `before` and `after` times it "
                   "returns in one short sentence and ask which the caller prefers. When they choose, read the day, date "
                   "and time back, ask \"Shall I book it?\", and call book only after a spoken yes. For stays pass nights."]
+    if "cancel" in names:
+        lines += ["- Cancelling a schedule booking: ask \"Shall I cancel booking <ID>, <day, date and time>?\" (its day and time "
+                  "are in find_booking), then call cancel after the yes."]
+    if "reschedule" in names:
+        lines += ["- Changing a time: find the booking (find_booking), read the NEW day and time back, ask, and call "
+                  "reschedule after the yes. Never cancel and book again. Cancelling reads the booking's day and time back "
+                  "the same way."]
+    if "whatsapp_consent" in names:
+        lines += ["- When a booking, move or cancel result has whatsapp.status \"ask\", ask once, in the caller's language: "
+                  "\"Shall I send the confirmation on WhatsApp to the number ending in NNNN?\" (NNNN from the result), then "
+                  "call whatsapp_consent with their answer. Once answered, never ask again on this call."]
     if json_protocol:  # native tool calling carries the schemas itself (and every prompt token counts)
         lines += ["", 'To use a tool, reply with ONLY one JSON object: {"tool": "<tool name>", "arguments": {...}}. '
                   "After its result, call another tool the same way or answer the caller in plain spoken text, no JSON.",
@@ -639,6 +681,8 @@ def confirmation_error(spec: ToolSpec, arguments: dict, previous_agent_text: Opt
     key = CONFIRM_BEFORE.get(spec.tool)
     if key is None:
         return None
+    if spec.tool == "cancel" and readback_enabled():
+        return None     # the read-back gate asks for more (the booking's day and time, then the caller's yes): see readback_error
     target = _norm_id(arguments.get(key, ""))
     if target and previous_agent_text and _asked_about(previous_agent_text, target):
         return None
@@ -713,7 +757,7 @@ def unconfirmed_booking_ids(text: str, calls: List[ToolCall], known_text: str = 
 # A reply that says a booking, request or cancellation was made, naming a day or time, while no write tool succeeded
 # this turn. The booking-id guard above misses it when the model invents no id: on 22 Oct 2026 the local 3B model told an
 # attack caller "मैं आपकी बुकिंग को 2026-10-23, 7:00 AM के लिए पुष्टि कर देता हूँ" without calling any tool.
-WRITE_TOOLS = ("book_appointment", "cancel_appointment", "book", "cancel")
+WRITE_TOOLS = ("book_appointment", "cancel_appointment", "book", "cancel", "reschedule")
 _CLAIM_WORDS = r"(?:booked|confirmed|reserved|scheduled|locked|fixed|finali[sz]ed|cancelled|canceled|sent|submitted|placed)"
 _CLAIM_EN = re.compile(
     r"\b(?:(?:is|are|was|has been|have been|'s|got|now)\s+" + _CLAIM_WORDS + r"|i(?:'ve| have)\s+" + _CLAIM_WORDS +

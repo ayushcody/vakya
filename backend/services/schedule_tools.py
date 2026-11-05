@@ -7,8 +7,11 @@ is in its `tools`, or when it has schedules (services/schedules.py):
     check_availability(schedule?, date, time?, nights?)   is it free? when not: why, and the nearest free times either side
     list_free_slots(schedule?, date)                      the free times on a day (a stay: rooms left on the coming nights)
     book(schedule?, date, time?, nights?, name, phone)    book it (the turn loop makes the agent read it back first)
-    cancel(booking_id)                                    cancel one of this front desk's own bookings
+    cancel(booking_id)                                    cancel one of this front desk's own bookings (read back first)
+    reschedule(booking_id, date, time?, nights?)          move one of this front desk's own bookings, in place (read back first)
     find_booking(phone)                                   the caller's upcoming bookings (to cancel or change one)
+    whatsapp_consent(agreed)                              the caller's answer to "Shall I send the confirmation on WhatsApp?"
+                                                          (only when services/booking_notify.py exists)
     queue_status(name?, phone?, schedule?)                today's token, how many are ahead, the expected time and the delay
                                                           (services/delays.py; see docs/RUNNING_LATE.md)
 
@@ -29,12 +32,58 @@ except ImportError:  # pragma: no cover
     from backend.services import availability as av, delays, schedule_bookings as sb, schedules as sch
 
 SERVER = "schedules"
-LABEL = "Schedules (check availability, book and cancel on the front desk's own schedules)"
+
+
+def _notify(kind: str, booking: dict, previous: Optional[dict] = None, *, source: str = "agent") -> Optional[dict]:
+    """Hand the change to the WhatsApp confirmations (services/booking_notify.py). Never raises; None when that module is absent."""
+    try:
+        from services import booking_notify  # noqa: PLC0415
+    except ImportError:
+        try:
+            from backend.services import booking_notify  # noqa: PLC0415
+        except ImportError:
+            return None
+    try:
+        return booking_notify.booking_changed(kind, booking, previous, source=source)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _whatsapp_module() -> Any:
+    try:
+        from services import booking_notify  # noqa: PLC0415
+        return booking_notify
+    except ImportError:
+        try:
+            from backend.services import booking_notify  # noqa: PLC0415
+            return booking_notify
+        except ImportError:
+            return None
+
+
+def _consent(args: dict) -> Tuple[bool, Any]:
+    module = _whatsapp_module()
+    if module is None:
+        return False, "WhatsApp is not set up."
+    agreed = args.get("agreed")
+    if not isinstance(agreed, bool):
+        return False, "agreed must be true or false."
+    try:
+        out = module.record_consent(agreed)
+    except Exception:  # noqa: BLE001
+        return False, "WhatsApp is not set up."
+    return True, out if isinstance(out, dict) else {"ok": True}
+LABEL = "Schedules (check availability, book, move and cancel on the front desk's own schedules)"
 
 _SCHEDULE = {"type": "string", "description": "Schedule name; leave out if there is only one"}
 _DATE = {"type": "string", "description": "YYYY-MM-DD"}
 _TIME = {"type": "string", "description": "HH:MM, 24-hour"}
 _NIGHTS = {"type": "integer", "description": "Number of nights (stays)", "minimum": 1, "maximum": sch.MAX_NIGHTS}
+
+WHATSAPP_TOOL = {
+    "tool": "whatsapp_consent",
+    "description": "Record the caller's answer to 'Shall I send the confirmation on WhatsApp?'. Call it right after they answer.",
+    "schema": {"type": "object", "properties": {"agreed": {"type": "boolean"}}, "required": ["agreed"]}}
 
 TOOLS = [
     {"tool": "check_availability",
@@ -55,9 +104,20 @@ TOOLS = [
                                "booked_by": {"type": "string", "description": "the caller's own name, only when booking for someone else"}},
                 "required": ["date", "name", "phone"]}},
     {"tool": "cancel",
-     "description": "Cancel an upcoming booking and free its time. Ask the caller to confirm first.",
+     "description": "Cancel an upcoming booking and free its time. Ask the caller to confirm first: the booking's day and "
+                    "time are read back and the caller must say yes.",
      "schema": {"type": "object", "properties": {"booking_id": {"type": "string", "description": "e.g. A12"}},
                 "required": ["booking_id"]}},
+    {"tool": "reschedule",
+     "description": "Move an existing booking to another day or time. Use it instead of cancel and book: the booking keeps "
+                    "its id. If you do not know the booking id, call find_booking first; if the caller has more than one "
+                    "upcoming booking, confirm which one they mean. Read the NEW day and time back and call this after "
+                    "the caller's yes. If the new time is taken, the result has the nearest free times: offer them.",
+     "schema": {"type": "object",
+                "properties": {"booking_id": {"type": "string", "description": "e.g. A12"}, "schedule": _SCHEDULE,
+                               "date": {"type": "string", "description": "the NEW date, YYYY-MM-DD"},
+                               "time": {"type": "string", "description": "the NEW time, HH:MM, 24-hour"}, "nights": _NIGHTS},
+                "required": ["booking_id", "date"]}},
     {"tool": "find_booking",
      "description": "Find the upcoming bookings made with a phone number.",
      "schema": {"type": "object", "properties": {"phone": {"type": "string", "description": "10 digits"}},
@@ -202,6 +262,9 @@ def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
         return False, e.message
     out = sb.public(row, sb.token_map())
     out["say"] = {"en": f"Booked. The booking id is {row['booking_id']}.", "hi": f"बुकिंग हो गई। बुकिंग आईडी {row['booking_id']} है।"}
+    notice = _notify("booked", row)
+    if notice:
+        out["whatsapp"] = notice
     if not stay and day == sch.now(schedule.get("timezone")).date():
         late = delays.running_late_note(schedule)
         if late:
@@ -211,9 +274,48 @@ def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
 
 def _cancel(agent_id: str, args: dict) -> Tuple[bool, Any]:
     try:
-        return True, sb.public(sb.cancel(args.get("booking_id"), agent_id, caller=True))
+        row = sb.cancel(args.get("booking_id"), agent_id, caller=True)
     except sb.BookingProblem as e:
         return False, e.message
+    out = sb.public(row)
+    notice = _notify("cancelled", row)
+    if notice:
+        out["whatsapp"] = notice
+    return True, out
+
+
+def _when_words(row: dict) -> Tuple[str, str]:
+    """"Thursday at 4 pm" in English and Hindi for a booking's start."""
+    start = datetime.fromisoformat(str(row["start"])).replace(tzinfo=None)
+    today = sch.now(row.get("timezone")).date()
+    return (f"{av.day_en(start.date(), today)} at {av.time_en(start)}",
+            f"{av.day_hi(start.date(), today)} {av.time_hi(start)}")
+
+
+def _reschedule(agent_id: str, args: dict) -> Tuple[bool, Any]:
+    day = _date(args.get("date"))
+    if day is None:
+        return False, "Which new date? Pass the date as YYYY-MM-DD."
+    at = _time(args.get("time"))
+    try:
+        row, previous = sb.reschedule(args.get("booking_id"), agent_id, day=day, at=at, nights=args.get("nights"), caller=True)
+    except sb.BookingRefused as e:
+        r = e.result
+        stay = r.get("nights") is not None and "nights" in r
+        before, after = _human(r["before"], stay), _human(r["after"], stay)
+        return False, {"moved": False, "reason": r["reason"], "say": r["spoken"],
+                       "alternatives": [x for x in (before, after) if x]}
+    except (sb.BookingProblem, sch.ScheduleError) as e:
+        return False, e.message
+    out = sb.public(row, sb.token_map())
+    out["moved_from"] = {"date": previous["date"], "weekday": previous.get("weekday"), "time": previous["time"]}
+    en, hi = _when_words(row)
+    out["say"] = {"en": f"Moved. Booking {row['booking_id']} is now {en}.",
+                  "hi": f"बुकिंग {row['booking_id']} अब {hi} के लिए है।"}
+    notice = _notify("moved", row, previous)
+    if notice:
+        out["whatsapp"] = notice
+    return True, out
 
 
 def _find(agent_id: str, args: dict) -> Tuple[bool, Any]:
@@ -246,6 +348,10 @@ def run(tool: str, args: dict, agent_id: str) -> Tuple[bool, Any]:
     try:
         if tool == "cancel":
             return _cancel(agent_id, args)
+        if tool == "reschedule":
+            return _reschedule(agent_id, args)
+        if tool == "whatsapp_consent":
+            return _consent(args)
         if tool == "find_booking":
             return _find(agent_id, args)
         if tool == "queue_status":
@@ -296,8 +402,10 @@ def has_schedules(agent_id: Optional[str]) -> bool:
 def specs_for_agent(agent_id: str, tools_mod: Any) -> List[Any]:
     """The tool specs of an agent, bound to its id."""
     out = []
-    for d in TOOLS:
+    offered = TOOLS + ([WHATSAPP_TOOL] if _whatsapp_module() is not None else [])
+    for d in offered:
         spec = tools_mod.ToolSpec(SERVER, d["tool"], d["description"], d["schema"])
+        spec.agent_id = agent_id            # the read-back gate of cancel looks the booking up among this front desk's own
         spec.runner = lambda tool, args, _a=agent_id: run(tool, args, _a)
         spec.opening_for = lambda args, _a=agent_id: opening_for(_a, args)
         out.append(spec)

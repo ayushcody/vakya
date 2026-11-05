@@ -1467,6 +1467,7 @@ class CallSession:
             g = self.greeting
             self.tap({"type": "ended"})
             call_control.unregister(self.conversation_id)
+            _whatsapp_call_ended(getattr(self, "conversation_id", None))
             call_records.upsert(self.call_sid, hangup_reason=self.end_reason or "ended",
                                 conversation_id=getattr(self, "conversation_id", None),
                                 duration_s=int(time.time() - self.started_at), ended_at=_now_iso())
@@ -1479,6 +1480,21 @@ class CallSession:
                      "%d started / %d confirmed / %d cancelled", self.call_sid, self.turns, self.barges,
                      time.time() - self.started_at, g.clip_id if g is not None else None,
                      self.spec_stats["started"], self.spec_stats["confirmed"], self.spec_stats["cancelled"])
+
+
+def _whatsapp_call_ended(conversation_id: Optional[str]) -> None:
+    """The call is over (the stream closed or Vobiz's hangup callback arrived, whichever is first; calling twice is safe): the
+    WhatsApp confirmation of what was booked, moved or cancelled goes after a short delay (services/booking_notify.py)."""
+    if not conversation_id:
+        return
+    try:
+        try:
+            from services import booking_notify  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import booking_notify  # noqa: PLC0415
+        booking_notify.call_ended(conversation_id)
+    except Exception as e:  # noqa: BLE001 - a confirmation never breaks the end of a call
+        log.warning("could not schedule the WhatsApp confirmation: %s", e.__class__.__name__)
 
 
 def install(app) -> None:
@@ -1839,6 +1855,8 @@ def _record_status(claims: Dict[str, Any], p: Optional[Dict[str, Any]]) -> bool:
     call_records.upsert(sid, owner=claims["u"], agent_id=claims["a"], direction=known.get("direction") or "outbound",
                         status=status if status != "unknown" else None, duration_s=p.get("duration_s"),
                         ended_at=p.get("ended_at") if status in call_records.TERMINAL else None, message=p.get("message"))
+    if status in call_records.TERMINAL:
+        _whatsapp_call_ended((call_records.get(sid) or {}).get("conversation_id"))
     return True
 
 
