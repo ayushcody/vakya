@@ -24,12 +24,16 @@ Keys go in `backend/.env` (never commit it): `GNANI_API_KEY`, `GEMINI_API_KEY`, 
 
 If the web app returns 500 on a font error after a restart: stop it, delete `frontend/.next`, start again (two dev servers on one `.next` corrupt it).
 
-## Checks (run before every commit)
+## Checks (run locally before every commit; GitHub Actions is not the gate)
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider     # add --basetemp=/tmp/<dir> when two runs overlap
-cd frontend && npx tsc --noEmit && npx jest && npx eslint .
+./vakya test           # backend tests, type check, lint, frontend tests (what CI runs); --build also builds the web app
+./vakya hooks          # once per clone: runs ./vakya test before every git push
 ```
+
+GitHub Actions runs only when started by hand or for a `v*` release tag, to save Actions minutes. Single suites:
+`cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider` (add `--basetemp=/tmp/<dir>` when two runs overlap),
+`cd frontend && npx tsc --noEmit && npx jest && npx eslint .`
 
 ## Map
 
