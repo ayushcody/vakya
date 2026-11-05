@@ -125,6 +125,7 @@ Everything lives in `backend/.env`; [`backend/.env.example`](backend/.env.exampl
 | `GNANI_STT_MODEL`, `GNANI_STT_FORMAT`, `GNANI_VOICES`, `GNANI_KEYTERMS` | Prisma model and output format (`codemix` by default), Timbre voice names, extra keyterms. See [`docs/GNANI.md`](docs/GNANI.md) | Defaults |
 | `GNANI_CREDIT_BUDGET`, `GNANI_CREDIT_RESERVE_PCT` | The credit budget and the share kept for live calls | 5000 and 20 |
 | `EMBEDDINGS_API_KEY` | Embeddings Flash for replies and Embeddings embeddings for document search | No replies; search falls back to keywords |
+| `EMBEDDINGS_API_KEYS` | Extra Embeddings keys (other Google accounts), separated by commas, spaces or new lines. When one key hits its quota or is invalid, the next takes over at once | Only `EMBEDDINGS_API_KEY` is used |
 | `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls. `./vakya start` opens a tunnel to the phone-only port 8021 | The browser web call still works |
 | `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_FILE` | Sync bookings to a Google Calendar | Bookings stay in Vakya's own list |
 | `CONSENT_MODE` | `tick` (default) or `strict` | n/a |
