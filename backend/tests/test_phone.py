@@ -776,6 +776,40 @@ def test_key_presses_are_counted_but_never_stored_and_zero_asks_for_a_person(rig
     assert conv.get("needs_human") is True and conv.get("handoff_at")
 
 
+def _keypad_call(rig, keys):
+    """A call where the agent has asked for the number on the keypad, then the caller presses `keys`. Returns the call
+    record and the language model's requests after the keypad ask."""
+    from services import call_records
+    from tests.test_turn_stream import FakeStream
+    rig.stream = lambda: FakeStream(["Please type your number on the keypad ", "and press hash."])
+    a = make_agent(rig.client)
+    with rig.client.websocket_connect(f"{px.STREAM_PATH}/{token_for(a)}") as ws:
+        _talk(ws)
+        read_until(ws, is_mark)                                  # the keypad ask has been spoken
+        asked_before = len(rig.asked)
+        rig.stream = lambda: FakeStream(["Thank you."])
+        for key in keys:
+            ws.send_text(json.dumps({"event": "dtmf", "stream_sid": STREAM_SID, "dtmf": {"digit": key, "duration": "250"}}))
+        time.sleep(1.0)
+        ws.send_text(json.dumps({"event": "stop", "stream_sid": STREAM_SID, "stop": {"reason": "callended"}}))
+    time.sleep(0.3)
+    return call_records.get("CA1"), rig.asked[asked_before:]
+
+
+def test_a_number_typed_on_the_keypad_becomes_the_callers_next_turn(rig):
+    row, later = _keypad_call(rig, "9876543210#")
+    assert len(later) == 1                                       # one turn for the whole number, not one per key
+    said = later[0]["messages"][-1]["content"]
+    assert "Caller says: 98765 43210" in said
+    assert row.get("outcome") != "human_requested"               # the 0 in the number did not ask for a person
+    assert not any("digit" in k for k in row)                    # still only a count of key presses is kept
+
+
+def test_star_while_typing_a_number_asks_for_a_person(rig):
+    row, later = _keypad_call(rig, "98*")
+    assert row["outcome"] == "human_requested" and later == []
+
+
 # ---- end_call and transfer_call --------------------------------------------------------------------------------------
 
 def _live_session_id():
