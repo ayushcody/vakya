@@ -78,11 +78,11 @@ function Show-Keys {
         Bad 'GNANI_API_KEY is not set: the agent can neither hear nor speak'
         Fix 'add GNANI_API_KEY=... to backend\.env'
     }
-    if ((Get-Setting 'GEMINI_API_KEY') -or (Get-Setting 'LLM_API_KEY')) {
+    if ((Get-Setting 'GEMINI_API_KEY') -or (Get-Setting 'GEMINI_API_KEYS') -or (Get-Setting 'LLM_API_KEY')) {
         Ok 'Gemini key set (language model and knowledge search)'
     } else {
         Bad 'No Gemini key: the agent cannot answer'
-        Fix 'add GEMINI_API_KEY=... (or LLM_API_KEY=...) to backend\.env'
+        Fix 'add GEMINI_API_KEY=... (or several as GEMINI_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend\.env'
     }
 }
 
@@ -472,7 +472,7 @@ function Invoke-Doctor {
         Ok ("Language model: {0} ({1})" -f $llm.active, $llm.model)
     } elseif ($llm) {
         Warn 'No language model: agents cannot answer'
-        Fix 'add GEMINI_API_KEY (or LLM_API_KEY) to backend\.env, then .\vakya.ps1 restart'
+        Fix 'add GEMINI_API_KEY or GEMINI_API_KEYS (or LLM_API_KEY) to backend\.env, then .\vakya.ps1 restart'
     }
 
     $sb = $health.supabase

@@ -64,7 +64,7 @@ PHONE_PORT="$(setting PHONE_PUBLIC_PORT 8021)"   # the phone-only public port th
 # The two keys Vakya needs: Gnani (speech: Prisma listens, Timbre speaks, voice cloning) and Gemini (the language model, and the
 # embeddings that search the knowledge base). Only whether a key is set is ever printed, never the key.
 gnani_key() { setting GNANI_API_KEY; }
-gemini_key() { local k; k="$(setting GEMINI_API_KEY)"; [[ -n "$k" ]] || k="$(setting LLM_API_KEY)"; printf '%s' "$k"; }
+gemini_key() { local k; k="$(setting GEMINI_API_KEY)"; [[ -n "$k" ]] || k="$(setting GEMINI_API_KEYS)"; [[ -n "$k" ]] || k="$(setting LLM_API_KEY)"; printf '%s' "$k"; }
 
 if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; D=$'\e[2m'; N=$'\e[0m'; else B= G= Y= R= D= N=; fi
 ok()   { echo "  ${G}✓${N} $*"; }
@@ -94,7 +94,7 @@ key_report() {  # shared by setup, warm and doctor: one line per key, with the f
     if [[ -n "$(gnani_key)" ]]; then ok "Gnani key set (speech: Prisma listening, Timbre speaking, voice cloning)"
     else bad "GNANI_API_KEY is not set: the agent can neither hear nor speak"; fix "add GNANI_API_KEY=... to backend/.env"; fi
     if [[ -n "$(gemini_key)" ]]; then ok "Gemini key set (language model and knowledge search)"
-    else bad "No Gemini key: the agent cannot answer"; fix "add GEMINI_API_KEY=... (or LLM_API_KEY=...) to backend/.env"; fi
+    else bad "No Gemini key: the agent cannot answer"; fix "add GEMINI_API_KEY=... (or several as GEMINI_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend/.env"; fi
 }
 key_summary() { key_report; }
 
@@ -536,7 +536,7 @@ llm = h.get("llm") or {}
 if llm.get("active"):
     ok(f"Language model: {llm['active']} ({llm.get('model')})")
 elif "llm" in h:
-    warn("No language model: agents cannot answer", "add GEMINI_API_KEY (or LLM_API_KEY) to backend/.env, then ./vakya restart")
+    warn("No language model: agents cannot answer", "add GEMINI_API_KEY or GEMINI_API_KEYS (or LLM_API_KEY) to backend/.env, then ./vakya restart")
 sb = h.get("supabase") or {}
 if sb.get("configured"):
     ok("Supabase connected" if sb.get("reachable") else "Supabase configured but unreachable")

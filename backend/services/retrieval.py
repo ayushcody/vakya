@@ -19,6 +19,7 @@ memory (LRU) and in a small SQLite file under backend/data (never required). Not
 level except httpx and numpy.
 """
 import hashlib
+import json
 import logging
 import math
 import os
@@ -263,7 +264,9 @@ def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str,
         reqs.append(item)
     headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
     last = "no attempt"
-    for attempt in range(max(1, attempts)):
+    switches = 0
+    attempt = 0
+    while attempt < max(1, attempts):
         response = None
         try:
             response = _http_post(url, headers, {"requests": reqs}, timeout)
@@ -274,6 +277,17 @@ def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str,
                     raise EmbeddingUnavailable(f"Gemini returned {len(vectors)} vectors for {len(inputs)} texts")
                 return [_unit(v) for v in vectors]
             last = f"HTTP {status}"
+            if gemini.is_key_error(status):
+                try:
+                    text = str(getattr(response, "text", "") or "") or json.dumps(response.json())
+                except Exception:  # noqa: BLE001
+                    text = ""
+                nxt = gemini.next_key_after_failure(headers["x-goog-api-key"], status, text) \
+                    if switches < len(gemini.keys()) else None
+                if nxt:                     # another key takes over at once; this does not use up a retry
+                    headers = {**headers, "x-goog-api-key": nxt}
+                    switches += 1
+                    continue
             if status not in (408, 429, 500, 502, 503, 504):
                 try:
                     last += ": " + str(response.json().get("error", {}).get("message", ""))[:120]
@@ -286,6 +300,7 @@ def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str,
             last = f"{type(e).__name__}"
         if attempt + 1 < attempts:
             _sleep(_retry_delay(attempt, response))
+        attempt += 1
     raise EmbeddingUnavailable(f"Gemini embeddings failed after {attempts} attempt(s): {last}")
 
 
@@ -336,7 +351,7 @@ def encode_texts(texts: Sequence[str], *, kind: str = "passage", titles: Optiona
         try:
             for i in range(0, len(missing), size):
                 part = missing[i:i + size]
-                for k, v in zip(part, _request_batch([first[k] for k in part], kind, model, dim, key, attempts, timeout)):
+                for k, v in zip(part, _request_batch([first[k] for k in part], kind, model, dim, gemini.embed_key() or key, attempts, timeout)):
                     if v.shape[0] != dim:
                         raise EmbeddingUnavailable(f"Gemini returned {v.shape[0]}-dimensional vectors, not {dim}")
                     fresh[k] = v

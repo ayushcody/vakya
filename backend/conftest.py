@@ -55,9 +55,13 @@ def _gnani_gateway_clean(monkeypatch, tmp_path):
 def _no_gemini_by_default(monkeypatch):
     """No test calls Gemini with the developer's real key: the language-model and embedding keys are empty (a test that needs
     them sets its own, with a fake HTTP layer) and the on-disk embedding cache is off."""
-    for name in ("GEMINI_API_KEY", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "GEMINI_EMBED_MODEL", "GEMINI_EMBED_DIM"):
+    for name in ("GEMINI_API_KEY", "GEMINI_API_KEYS", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "GEMINI_EMBED_MODEL", "GEMINI_EMBED_DIM"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("EMBED_DISK_CACHE", "off")
+    from services import gemini as _gemini
+    _gemini._reset_for_tests()
+    yield
+    _gemini._reset_for_tests()
 
 
 @pytest.fixture(autouse=True)

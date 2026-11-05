@@ -4,14 +4,14 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from services import llm
+from services import gemini, llm
 
 MSGS = [{"role": "user", "content": "hi"}]
 
 
 def use_endpoint(monkeypatch, url=None, key="secret", model="tiny", effort=None):
     """Point services/llm.py at `url` with a key. `effort`: LLM_REASONING_EFFORT (None leaves the default)."""
-    for name in ("LLM_BASE_URL", "LLM_API_KEY", "GEMINI_API_KEY", "LLM_MODEL", "LLM_REASONING_EFFORT", "LLM_RETRIES",
+    for name in ("LLM_BASE_URL", "LLM_API_KEY", "GEMINI_API_KEY", "GEMINI_API_KEYS", "LLM_MODEL", "LLM_REASONING_EFFORT", "LLM_RETRIES",
                  "LLM_RETRY_MAX_WAIT_S", "VAKYA_OFFLINE"):
         monkeypatch.delenv(name, raising=False)
     if url:
@@ -25,6 +25,7 @@ def use_endpoint(monkeypatch, url=None, key="secret", model="tiny", effort=None)
     monkeypatch.setattr(llm, "_effort_rejected", False)
     monkeypatch.setattr(llm, "_sleep", lambda s: None)
     llm.last_failures.clear()
+    gemini._reset_for_tests()
 
 
 def sse(*events) -> bytes:
