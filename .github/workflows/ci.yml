@@ -1,8 +1,10 @@
 name: CI
+# Checks run locally first (./vakya test, and the pre-push hook from ./vakya hooks). GitHub only runs this for a release
+# tag or when started by hand (Actions tab -> CI -> Run workflow), to save Actions minutes.
 on:
-  pull_request:
+  workflow_dispatch:
   push:
-    branches: [main]
+    tags: ["v*"]
 
 jobs:
   backend:
