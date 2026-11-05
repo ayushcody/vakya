@@ -2,13 +2,8 @@ name: Lighthouse budget
 
 # A separate workflow, so it never gates or delays the backend or frontend jobs in ci.yml.
 # Budget thresholds live in frontend/lighthouserc.json (see frontend/README.md, "Performance budget").
+# Started by hand only (Actions tab -> Lighthouse budget -> Run workflow), before a release or a site redesign.
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/lighthouse.yml"
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

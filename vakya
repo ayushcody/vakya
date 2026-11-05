@@ -8,7 +8,8 @@
 #   ./vakya status            what is running (and the phone tunnel, once Vobiz is set up)
 #   ./vakya doctor            check the machine and the running app, with a fix for every problem
 #   ./vakya logs [api|web]    follow the logs
-#   ./vakya test              run the backend and frontend test suites
+#   ./vakya test [--build]    every check GitHub CI runs, locally: backend tests, type check, lint, frontend tests
+#   ./vakya hooks             run ./vakya test before every git push from this clone
 #   ./vakya stress [opts]     the acoustic-stress report card: task completion under 8 kHz, noise and codecs
 #                               (backend/bench/stress_report.py, results in docs/STRESS_REPORT.md)
 #   ./vakya warm              check the Gnani and Embeddings keys, then ask the API to prepare its hold lines (the short phrases
@@ -451,9 +452,26 @@ cmd_logs() {
     esac
 }
 
+# The same checks GitHub's CI runs, on this machine. GitHub Actions only runs on demand or for a release tag, so this is the
+# gate before every commit and push (the pre-push hook from `./vakya hooks` runs it). --build also builds the web app.
 cmd_test() {
-    step "Backend tests"; (cd "$BACKEND" && .venv/bin/python -m pytest -q) || exit 1
-    step "Frontend tests"; (cd "$FRONTEND" && npx jest) || exit 1
+    local build=0 tmp
+    [ "${1:-}" = "--build" ] && build=1
+    tmp="$(mktemp -d /tmp/vakya-test.XXXXXX)"
+    step "Backend tests"; (cd "$BACKEND" && .venv/bin/python -m pytest -q -p no:cacheprovider --basetemp="$tmp") || exit 1
+    step "Type check"; (cd "$FRONTEND" && npx tsc --noEmit) || exit 1
+    step "Lint"; (cd "$FRONTEND" && npx eslint src --quiet) || exit 1
+    step "Frontend tests"; (cd "$FRONTEND" && npx jest --silent) || exit 1
+    if [ "$build" = 1 ]; then
+        step "Web build"; (cd "$FRONTEND" && npm run build) || exit 1
+    fi
+    rm -rf "$tmp"
+    ok "All checks passed"
+}
+
+# Run ./vakya test before every git push from this clone (skip once with: git push --no-verify).
+cmd_hooks() {
+    git -C "$ROOT" config core.hooksPath .githooks && ok "pre-push hook on: ./vakya test runs before every push"
 }
 
 # ------------------------------------------------------------------------------------------------- doctor
@@ -545,7 +563,8 @@ case "${1:-}" in
     status) cmd_status ;;
     doctor) cmd_doctor ;;
     logs)   shift; cmd_logs "$@" ;;
-    test)   cmd_test ;;
+    test)   shift; cmd_test "$@" ;;
+    hooks)  cmd_hooks ;;
     stress) shift; cmd_stress "$@" ;;
     warm)   shift; cmd_warm "$@" ;;
     demo)   shift; cmd_demo "$@" ;;
