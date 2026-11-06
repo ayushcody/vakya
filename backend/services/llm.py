@@ -3,7 +3,8 @@
 It speaks the OpenAI-compatible chat API of a hosted model, by default Google's Embeddings Flash. Settings (backend/.env):
   LLM_BASE_URL  default https://generativelanguage.googleapis.com/v1beta/openai/
   LLM_MODEL     default the stable Embeddings Flash (services/embeddings.py)
-  LLM_API_KEY   the key; EMBEDDINGS_API_KEY is accepted too
+  LLM_API_KEY   the key (never rotated); EMBEDDINGS_API_KEY / EMBEDDINGS_API_KEYS are accepted too (several keys take turns when
+                one hits its quota)
 Without a key nothing is sent and nothing raises on the spoken path: `chat(..., no_key_line=True)` and
 `chat_stream(..., no_key_line=True)` return the fixed line `no_key_reply(language)` ("Needs a Embeddings key" is what
 `status()` reports), so a typed web-call turn works end to end. Side-task callers leave `no_key_line` off and get
@@ -132,7 +133,14 @@ def status() -> dict:
     """The model this backend talks to and whether it can: {"provider", "base_url", "model", "configured", "reason"}."""
     reason = _unavailable_reason()
     return {"provider": PROVIDER, "base_url": embeddings.base_url(), "model": embeddings.chat_model(),
-            "configured": reason is None, "reason": reason}
+            "configured": reason is None, "reason": reason, "keys": _key_counts()}
+
+
+def _key_counts() -> dict:
+    """How many Embeddings keys there are and how many are not cooling down (counts only). LLM_API_KEY is one key, never rotated."""
+    if os.getenv("LLM_API_KEY", "").strip():
+        return {"keys": 1, "available": 1}
+    return embeddings.pool_status()
 
 
 _NO_KEY_LINES = {
@@ -378,9 +386,28 @@ def _retry_wait(e: ProviderHTTPError, attempt: int) -> Optional[float]:
     return wait if wait <= _env_number("LLM_RETRY_MAX_WAIT_S", 3.0) else None
 
 
+def _bearer(headers: dict) -> str:
+    auth = headers.get("Authorization") or ""
+    return auth[7:] if auth.startswith("Bearer ") else ""
+
+
+def _rotate(headers: dict, err: "ProviderHTTPError", switches: int) -> Optional[dict]:
+    """After a key failure: the headers with the next pool key (to retry at once, no sleep, no retry used), else None. At most
+    one switch per key in the pool. The failing key is reported (cooled down) either way."""
+    key = _bearer(headers)
+    if switches >= len(embeddings.keys()) or _env_is_llm_key():
+        return None
+    nxt = embeddings.next_key_after_failure(key, err.code, err.body)
+    return {**headers, "Authorization": f"Bearer {nxt}"} if nxt else None
+
+
+def _env_is_llm_key() -> bool:
+    return bool(os.getenv("LLM_API_KEY", "").strip())
+
+
 def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict:
     """POST a (non-streaming) JSON request, retrying a 429 or 5xx; any other HTTP error status raises ProviderHTTPError."""
-    attempt = 0
+    attempt = switches = 0
     while True:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         try:
@@ -388,6 +415,10 @@ def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict
                 return json.load(r)
         except urllib.error.HTTPError as e:
             err = ProviderHTTPError(e.code, e.read().decode(errors="replace"), e.headers)
+            rotated = _rotate(headers, err, switches)
+            if rotated:
+                headers, switches = rotated, switches + 1
+                continue
             wait = _retry_wait(err, attempt)
             if wait is None:
                 raise err from e
@@ -399,7 +430,7 @@ def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict
 def _post_stream(url: str, body: dict, headers: dict, timeout: float):
     """Open a streaming POST; a 429 or 5xx is retried, and a server that rejects `stream_options` (or `reasoning_effort`)
     gets one retry without it. Any other HTTP error status raises ProviderHTTPError."""
-    attempt = 0
+    attempt = switches = 0
     while True:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         try:
@@ -407,6 +438,10 @@ def _post_stream(url: str, body: dict, headers: dict, timeout: float):
         except urllib.error.HTTPError as e:
             full = e.read().decode(errors="replace")
             err = ProviderHTTPError(e.code, full, e.headers)
+            rotated = _rotate(headers, err, switches)
+            if rotated:
+                headers, switches = rotated, switches + 1
+                continue
             if e.code in (400, 422) and "stream_options" in body and "stream_options" in full:
                 body = {k: v for k, v in body.items() if k != "stream_options"}
                 continue

@@ -94,7 +94,7 @@ async def api_ready():
     st = llm.status()
     out["embeddings_configured"] = bool(st["configured"])
     if not st["configured"]:
-        out["problems"] = [*out.get("problems", []), "Needs a Embeddings key: set EMBEDDINGS_API_KEY (the agent answers with a fixed "
+        out["problems"] = [*out.get("problems", []), "Needs a Embeddings key: set EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS (the agent answers with a fixed "
                                                       "line until then)."]
         out["ok"] = False
     return out

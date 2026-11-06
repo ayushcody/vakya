@@ -142,7 +142,9 @@ same call does not write them back. Unclear or ambiguous ("Asha" when two are na
 ## 3. Using it next time
 
 * **Greeting.** A known caller is greeted by name in their preferred language (when the agent speaks it, else the nearest it
-  does): "Namaste Sunita ji, pichli baar aapne Mangalvaar 4 baje ki appointment li thi." A callback to a missed call greets by
+  does). A booking still ahead is named as their appointment ("Hello Zoran, welcome back. Your appointment is tomorrow at
+  3 PM."; "today" and "tomorrow" for those days, else the weekday or the date); one that has passed is the last one
+  ("Namaste Sunita ji, pichli baar aapne Mangalvaar 4 baje ki appointment li thi."). A callback to a missed call greets by
   name too: "Namaste Sunita ji, aapne abhi {business} ko missed call diya tha." The first time, the greeting adds once that the
   details are kept to help next time and how to have them deleted. A number with no name gets the usual greeting.
 * **Prompt.** Every turn carries a short block: name, language, people (and who was booked for last time), the trade's usual
