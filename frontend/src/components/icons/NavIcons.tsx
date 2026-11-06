@@ -72,6 +72,23 @@ export function TryIcon({ className, active }: NavIconProps) {
   );
 }
 
+/** This week: seven days as voice bars on a baseline, the busiest one lit. */
+export function WeekIcon({ className, active }: NavIconProps) {
+  return (
+    <Frame className={className}>
+      <path d="M3 20.5h18" />
+      <path d="M4.5 17.5v-3" />
+      <path d="M7.5 17.5v-6" />
+      <path d="M10.5 17.5v-4" />
+      <path d="M16.5 17.5v-5" />
+      <path d="M19.5 17.5v-2.5" />
+      <g stroke={accent(active)}>
+        <path d="M13.5 17.5V5.5" />
+      </g>
+    </Frame>
+  );
+}
+
 /** Report card: a trend line on a baseline, latest point marked. */
 export function AnalyticsIcon({ className, active }: NavIconProps) {
   return (

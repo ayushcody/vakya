@@ -12,6 +12,7 @@ import {
   CallersIcon,
   CallsIcon,
   OverviewIcon,
+  WeekIcon,
   TryIcon,
   SettingsIcon,
   VerifyIcon,
@@ -32,6 +33,7 @@ interface NavItem {
 /** The desk: one app for one job (answering and booking calls). The command palette lists the same pages. */
 export const NAV: NavItem[] = [
   { label: "Today", href: "/desk", icon: OverviewIcon },
+  { label: "This week", href: "/desk/week", icon: WeekIcon },
   { label: "Front desk", href: "/desk/receptionist", icon: AgentsIcon },
   { label: "Calls", href: "/desk/calls", icon: CallsIcon },
   { label: "Bookings", href: "/desk/bookings", icon: BookingsIcon },

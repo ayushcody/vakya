@@ -7,6 +7,8 @@ import { Search } from "lucide-react";
 import { ErrorBoundary } from "@/components/ui";
 import { CommandPalette } from "@/components/CommandPalette";
 import { SkipLink } from "@/components/SkipLink";
+import { BookingAlerts } from "@/components/phone/BookingAlerts";
+import { MobileTabBar } from "@/components/phone/MobileTabBar";
 
 const COLLAPSE_KEY = "vakya-sidebar-collapsed";
 
@@ -84,13 +86,15 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
             <kbd className="font-sans text-[11px] opacity-70">{isMac ? "\u2318K" : "Ctrl K"}</kbd>
           </button>
           <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+          <BookingAlerts />
+          <MobileTabBar />
         </>
       )}
       <main
         id="main-content"
         tabIndex={-1}
         className={`relative z-10 min-h-screen outline-none transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          showSidebar ? `pt-14 md:pt-0 ${collapsed ? "md:pl-16" : "md:pl-60"}` : ""
+          showSidebar ? `pt-14 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0 ${collapsed ? "md:pl-16" : "md:pl-60"}` : ""
         }`}
       >
         <ErrorBoundary>{children}</ErrorBoundary>
