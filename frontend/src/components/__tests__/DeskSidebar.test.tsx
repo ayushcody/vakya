@@ -25,10 +25,11 @@ const desktop = () => document.querySelector("aside") as HTMLElement;
 const mainNav = () => within(desktop()).getByRole("navigation", { name: "Main" });
 const linkRows = (root: HTMLElement) => within(root).getAllByRole("link").map((a) => [a.textContent?.trim(), a.getAttribute("href")]);
 
-test("one app for one job: the nine pages of the desk, then the public receipt check", async () => {
+test("one app for one job: the ten pages of the desk, then the public receipt check", async () => {
   await open("/desk");
   expect(linkRows(mainNav())).toEqual([
     ["Today", "/desk"],
+    ["This week", "/desk/week"],
     ["Front desk", "/desk/receptionist"],
     ["Calls", "/desk/calls"],
     ["Bookings", "/desk/bookings"],
@@ -67,7 +68,7 @@ test("the mobile drawer opens from the top bar, lists the same pages and closes"
   await open("/desk");
   fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
-  expect(within(drawer).getAllByRole("link", { name: /Today|Front desk|Calls|Bookings|Callers|Try a call|Report card|Caller Theatre|Settings/ })).toHaveLength(9);
+  expect(within(drawer).getAllByRole("link", { name: /Today|This week|Front desk|Calls|Bookings|Callers|Try a call|Report card|Caller Theatre|Settings/ })).toHaveLength(10);
   fireEvent.click(within(drawer).getByRole("button", { name: "Close menu" }));
   await act(async () => {});
   expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
