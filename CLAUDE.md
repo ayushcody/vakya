@@ -43,8 +43,8 @@ GitHub Actions runs only when started by hand or for a `v*` release tag, to save
 - Calls: `services/turn_pipeline.py`, `turn_stream.py`, `call_events.py` (Watch it think), `booking_evidence.py` (Proof of booking), `id_redact.py`, `grounding.py`.
 - Caller memory: `services/caller_memory.py` (within a call), `call_notes.py` (long calls), `caller_profiles.py` (per number), `caller_ref.py`.
 - Bench: `backend/bench/stress_report.py` (acoustic stress report card), `backend/bench/theatre/` (Caller Theatre).
-- Frontend (Next.js): site in `frontend/src/app/(site)`, the desk in `frontend/src/app/(app)/desk`, shared list view `components/ui/ListView`, dates via `lib/formatDate.ts` ("Thu 12 Nov, 7 pm", Asia/Kolkata).
-- Docs: `docs/ARCHITECTURE.md` first, then `GNANI.md`, `SCHEDULES.md`, `PHONE.md`, `CALLER_MEMORY.md`, `THEATRE.md`, `STRESS_REPORT.md`, `SUBMISSION.md`.
+- Frontend (Next.js): site in `frontend/src/app/(site)`, the desk in `frontend/src/app/(app)/desk`, shared list view `components/ui/ListView`, dates via `lib/formatDate.ts` ("Thu 12 Nov, 7 pm", Asia/Kolkata); This week `lib/weekReport.ts`, the desk on a phone (tab bar, booking alerts, install) `components/phone/`, `lib/deskAlerts.ts`.
+- Docs: `docs/ARCHITECTURE.md` first, then `GNANI.md`, `SCHEDULES.md`, `PHONE.md`, `CALLER_MEMORY.md`, `THEATRE.md`, `STRESS_REPORT.md`, `DESK_FEATURES.md`, `SUBMISSION.md`.
 
 ## Rules
 
