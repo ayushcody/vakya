@@ -24,7 +24,7 @@ export function deskTimezone(tz?: string | null): string {
   }
 }
 
-interface Parts {
+export interface Parts {
   year: number;
   month: number; // 1-12
   day: number;
@@ -34,6 +34,10 @@ interface Parts {
 }
 
 /** The wall-clock parts of an instant in a time zone. */
+export function wallClock(instant: Date, tz?: string | null): Parts {
+  return partsOf(instant, deskTimezone(tz));
+}
+
 function partsOf(instant: Date, tz: string): Parts {
   const f = new Intl.DateTimeFormat("en-US", {
     timeZone: tz, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", hourCycle: "h23",
