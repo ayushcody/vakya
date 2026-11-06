@@ -1,8 +1,12 @@
+import type { Viewport } from "next";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
 import { LayoutWrapper } from "@/components/LayoutWrapper";
 import { APP_FONT_CLASSES } from "@/lib/appFonts";
 import { manrope } from "@/lib/brandFont";
+
+/** The desk runs edge to edge as an installed phone app (the tab bar clears the home indicator itself); white bars match its top bar. */
+export const viewport: Viewport = { viewportFit: "cover", themeColor: "#ffffff" };
 
 /**
  * Shell of the app: the desk (sidebar, command palette), the auth pages, auth state and toasts. The public site and

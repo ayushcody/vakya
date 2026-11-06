@@ -9,6 +9,7 @@ import { useConsentMode, useEngines, useHealth } from "@/hooks/useApi";
 import { HearingSettings } from "@/components/hearing/HearingSettings";
 import { WhatsAppSettings } from "@/components/whatsapp/WhatsAppSettings";
 import { SpeechModelsCard } from "@/components/usage/SpeechModelsCard";
+import { PhoneDeskSettings } from "@/components/phone/PhoneDeskSettings";
 import { api } from "@/lib/api";
 import { llmLabel } from "@/lib/llm";
 import type { PhoneStatus, PrivacyAttestation } from "@/types/api";
@@ -162,6 +163,8 @@ function SettingsContent() {
         </Section>
 
         <WhatsAppSettings />
+
+        <PhoneDeskSettings />
 
         <Section id="privacy" title="Privacy" intro="Where the data lives and what the server promises about it.">
           <Row label="Storage">

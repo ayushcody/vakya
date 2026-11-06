@@ -30,11 +30,11 @@ function Tile({ label, value, hint, href }: { label: string; value: number | str
   const body = (
     <>
       <p className="text-xs font-semibold uppercase tracking-[1px] text-text-secondary">{label}</p>
-      <p className="mt-2 font-display text-[2.25rem] leading-none text-text-primary tabular-nums">{value}</p>
+      <p className="mt-2 font-display text-[1.875rem] leading-none text-text-primary tabular-nums sm:text-[2.25rem]">{value}</p>
       {hint && <p className="mt-1.5 text-sm text-text-secondary">{hint}</p>}
     </>
   );
-  const cls = "block rounded-2xl border border-border bg-bg-surface p-5";
+  const cls = "block rounded-2xl border border-border bg-bg-surface p-4 sm:p-5";
   return href ? (
     <Link href={href} className={cn(cls, "transition-colors hover:border-border-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary")}>
       {body}
@@ -78,14 +78,15 @@ export default function DeskToday() {
           </Link>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile label="Booked today" value={bookedToday.length} hint="appointments happening today" href="/desk/bookings" />
           <Tile label="Made today" value={madeTodayCount} hint="appointments booked on calls today" />
           <Tile label="Calls today" value={callsToday} hint="not counting practice calls" />
           <Tile href="/desk/bookings" label="Upcoming" value={bookings.fromCalls ? bookings.data.length : upcoming} hint={bookings.fromCalls ? "appointments booked in the last 30 days" : "appointments still to come"} />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="What the speech models cost">
+        {/* What the speech costs is for the desk at the computer; on a phone, Today stays on bookings and calls. */}
+        <div className="hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4" aria-label="What the speech models cost">
           <UsageTiles />
         </div>
 
