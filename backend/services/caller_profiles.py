@@ -562,13 +562,33 @@ def _time_phrase(hhmm: str, lang: str) -> str:
     return clock
 
 
-def _booking_words(booking: Optional[Dict[str, str]], lang: str, today: date) -> Optional[Tuple[str, str]]:
-    """(day phrase, time phrase) of a booking in `lang`; either may be empty; None when there is nothing to say."""
+_NEAR_DAYS = {   # an upcoming booking today or tomorrow is spoken as such, not as a weekday
+    "en": ("today", "tomorrow"), "hi": ("आज", "कल"), "mr": ("आज", "उद्या"), "hinglish": ("aaj", "kal"),
+}
+
+
+def _is_upcoming(booking: Optional[Dict[str, str]], now: datetime) -> bool:
+    """True when the booking's date is after today, or is today at or after the current time (no time: the whole day)."""
+    if not booking or not booking.get("date") or not caller_memory._valid_iso_date(booking["date"]):
+        return False
+    d = datetime.strptime(booking["date"], "%Y-%m-%d").date()
+    if d != now.date():
+        return d > now.date()
+    hhmm = booking.get("time") or ""
+    return not hhmm or hhmm[:5] >= now.strftime("%H:%M")
+
+
+def _booking_words(booking: Optional[Dict[str, str]], lang: str, today: date,
+                   upcoming: bool = False) -> Optional[Tuple[str, str]]:
+    """(day phrase, time phrase) of a booking in `lang`; either may be empty; None when there is nothing to say. An upcoming
+    booking today or tomorrow says so ("today", "आज", "उद्या")."""
     if not booking:
         return None
     day = ""
     if booking.get("date") and caller_memory._valid_iso_date(booking["date"]):
-        day = _day_phrase(datetime.strptime(booking["date"], "%Y-%m-%d").date(), lang, today)
+        d = datetime.strptime(booking["date"], "%Y-%m-%d").date()
+        ahead = (d - today).days
+        day = _NEAR_DAYS[lang][ahead] if upcoming and ahead in (0, 1) else _day_phrase(d, lang, today)
     at = _time_phrase(booking["time"], lang) if booking.get("time") else ""
     return (day, at) if (day or at) else None
 
@@ -612,35 +632,50 @@ def family_question(profile: Dict[str, Any], lang: str) -> Optional[str]:
 
 
 def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Sequence[str]] = None,
-                       today: Optional[date] = None, notice: bool = False) -> Optional[Tuple[str, str]]:
+                       today: Optional[date] = None, notice: bool = False,
+                       now: Optional[datetime] = None) -> Optional[Tuple[str, str]]:
     """(language, words) the agent says to a known caller instead of its usual greeting, or None when the profile has
     neither a name nor a last booking to speak of (then the agent's own greeting plays). `notice` adds, once, that the agent
     keeps the caller's details to help next time and how to have them deleted (REMEMBER_NOTICE).
 
-        hi  नमस्ते प्रिया जी, पिछली बार आपने मंगलवार 4 बजे की अपॉइंटमेंट ली थी। आज कैसे मदद करूँ?
-        mr  नमस्कार प्रिया जी, मागच्या वेळी तुम्ही मंगळवारी 4 वाजताची अपॉइंटमेंट घेतली होती. आज कशी मदत करू?
+    A booking that is still ahead is named as the caller's appointment; one that has passed as the last one:
+
+        en  Hello Priya, welcome back. Your appointment is on Friday at 3 PM. How can I help today?
+        hi  नमस्ते प्रिया जी, फिर से आपका स्वागत है। आपकी अपॉइंटमेंट कल 3 बजे है। आज कैसे मदद करूँ?
         en  Hello Priya, last time you booked an appointment for Tuesday at 4 PM. How can I help today?
+        mr  नमस्कार प्रिया जी, मागच्या वेळी तुम्ही मंगळवारी 4 वाजताची अपॉइंटमेंट घेतली होती. आज कशी मदत करू?
+
+    `now` (default: the clock) decides "still ahead"; `today` alone means the start of that day.
     """
     if not profile:
         return None
     name = profile.get("display_name")
-    today = today or datetime.now().date()
+    if now is None:
+        now = datetime.combine(today, datetime.min.time()) if today else datetime.now()
+    today = today or now.date()
     lang = greeting_language(profile, supported)
-    words = _booking_words(profile.get("last_booking"), lang, today)
+    booking = profile.get("last_booking")
+    upcoming = _is_upcoming(booking, now)
+    words = _booking_words(booking, lang, today, upcoming)
     if not name and not words:
         return None
     if lang == "hi":
         who = f"नमस्ते {name} जी" if name else "नमस्ते"
         ask = "आज कैसे मदद करूँ?"
-        if words:
-            slot = " ".join(w for w in (words[0], f"{words[1]} बजे" if words[1] else "") if w)
+        slot = " ".join(w for w in (words[0], f"{words[1]} बजे" if words[1] else "") if w) if words else ""
+        if words and upcoming:
+            lead = f"{who}, फिर से आपका स्वागत है। आपकी अपॉइंटमेंट {slot} है।"
+        elif words:
             lead = f"{who}, पिछली बार आपने {slot} की अपॉइंटमेंट ली थी।"
         else:
             lead = f"{who}, फिर से आपका स्वागत है।"
     elif lang == "mr":
         who = f"नमस्कार {name} जी" if name else "नमस्कार"
         ask = "आज कशी मदत करू?"
-        if words:
+        if words and upcoming:
+            slot = " ".join(w for w in (words[0], f"{words[1]} वाजता" if words[1] else "") if w)
+            lead = f"{who}, पुन्हा स्वागत आहे. तुमची अपॉइंटमेंट {slot} आहे."
+        elif words:
             slot = " ".join(w for w in (words[0], f"{words[1]} वाजताची" if words[1] else "") if w)
             lead = f"{who}, मागच्या वेळी तुम्ही {slot} अपॉइंटमेंट घेतली होती."
         else:
@@ -648,8 +683,10 @@ def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Se
     elif lang == "hinglish":
         who = f"Namaste {name} ji" if name else "Namaste"
         ask = "Aaj kaise madad karoon?"
-        if words:
-            slot = " ".join(w for w in (words[0], f"{words[1]} baje" if words[1] else "") if w)
+        slot = " ".join(w for w in (words[0], f"{words[1]} baje" if words[1] else "") if w) if words else ""
+        if words and upcoming:
+            lead = f"{who}, phir se swagat hai. Aapki appointment {slot} hai."
+        elif words:
             lead = f"{who}, pichli baar aapne {slot} ki appointment li thi."
         else:
             lead = f"{who}, phir se swagat hai."
@@ -659,6 +696,10 @@ def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Se
         ask = "How can I help today?"
         if words:
             slot = f"{words[0]} at {words[1]}" if words[0] and words[1] else (words[0] or f"{words[1]}")
+        if words and upcoming:
+            near = words[0] in _NEAR_DAYS["en"] or not words[0]
+            lead = f"{who}, welcome back. Your appointment is {'' if near else 'on '}{slot}."
+        elif words:
             lead = f"{who}, last time you booked an appointment for {slot}."
         else:
             lead = f"{who}, welcome back."
