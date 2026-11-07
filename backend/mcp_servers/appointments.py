@@ -1,6 +1,6 @@
 """A local MCP server for the front desk of a clinic or small office: free slots, booking, finding and cancelling appointments.
 
-Runs over stdio, so Vakya (services/tools.py) and any other MCP client (the language model Desktop, MCP Inspector, ...) can use it:
+Runs over stdio, so Vakya (services/tools.py) and any other MCP client (a desktop assistant, MCP Inspector, ...) can use it:
 
     cd backend && .venv/bin/python -m mcp_servers.appointments
 
@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - depends on the installed SDK major ver
     from mcp.server.fastmcp.exceptions import ToolError
 
 try:
-    import fcntl  # one booking file shared by several server processes (Vakya and the language model Desktop at once)
+    import fcntl  # one booking file shared by several server processes (Vakya and another MCP client at once)
 except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
@@ -621,7 +621,7 @@ def main() -> None:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     try:
         from services.parent_watch import watch_parent
-        watch_parent()  # exit when the process that started this server (Vakya, the language model Desktop) goes away
+        watch_parent()  # exit when the process that started this server (Vakya, another MCP client) goes away
     except ImportError:  # pragma: no cover
         pass
     mcp.run()

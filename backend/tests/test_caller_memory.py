@@ -167,7 +167,8 @@ def test_email_and_age():
 def test_one_answer_with_everything():
     got = read("My name is Priya Sharma, my number is 98765 43210, tomorrow at 5 baje",
                "What are the patient details?")
-    assert got == {"name": "Priya Sharma", "phone": "9876543210", "date": "2026-10-24", "time": "17:00"}
+    assert got == {"name": "Priya Sharma", "phone": "9876543210", "phone_confirmed": "yes", "date": "2026-10-24",
+                   "time": "17:00"}
 
 
 # ============================================================================================ merging
@@ -198,8 +199,10 @@ def test_what_the_form_and_the_tool_calls_know_are_listed_with_the_tool_argument
 def test_the_slots_line_has_the_agreed_wording():
     line = tools.slots_line({"name": "Priya Sharma", "phone": "9876543210", "date": "2026-10-25", "time": "17:00"})
     assert line == ("(Details the caller already gave in this conversation: name Priya Sharma, phone 9876543210, date "
-                    "2026-10-25, time 17:00. Do not ask for these again. If you still need other details, ask for all "
-                    "the missing ones together in one short question.)")
+                    "2026-10-25, time 17:00. Do not ask for these again. The phone number is from an earlier call and not "
+                    "yet confirmed: ask once, early, \"Same number as last time, ending NNNN?\" (its last four digits), then "
+                    "never again. The name is settled: never ask for it again; say it only in the final read-back. If you "
+                    "still need other details, ask for all the missing ones together in one short question.)")
 
 
 def test_the_owner_sees_a_masked_number_and_email():

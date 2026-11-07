@@ -5,6 +5,7 @@ memory, the reply prompt, the voice plan and the stored turn. The blocking endpo
 import asyncio
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,8 +18,8 @@ try:
     from core.errors import AppError
     from services import (
         agent_prompt, agent_store, asr, caller_memory, caller_profiles, canned_reply, fact_sheet, gnani, gnani_gateway, grounding,
-        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
-        speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
+        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, readback, sentences as sentences_mod, speaking,
+        speech_numbers, spoken_digits, storage, synthesis, tools as tools_mod, turn_taking, voice_store, when,
     )
     from services import booking_evidence, call_events, call_notes
     from services.speaking import TtsPlan
@@ -27,8 +28,8 @@ except ImportError:  # pragma: no cover
     from backend.core.errors import AppError
     from backend.services import (
         agent_prompt, agent_store, asr, caller_memory, caller_profiles, canned_reply, fact_sheet, gnani, gnani_gateway, grounding,
-        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
-        speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
+        hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, readback, sentences as sentences_mod, speaking,
+        speech_numbers, spoken_digits, storage, synthesis, tools as tools_mod, turn_taking, voice_store, when,
     )
     from backend.services import booking_evidence, call_events, call_notes
     from backend.services.speaking import TtsPlan
@@ -409,6 +410,14 @@ async def turn_context(run: TurnRun, conversation_id: Optional[str], t: float) -
     asr.qu_module().note_answered(run.conversation_id)
     # What to search for: the transcript with the agent's names snapped, a follow-up condensed into a standalone
     # question (services/query_understanding.py). The language model still sees run.user_text.
+    skip = await retrieval_skip_reason(run, previous_reply)
+    if skip:
+        # A booking step ("Monday", "five pm", "yes", a name, a number) or an agent with no documents has nothing to look up:
+        # the embedding call and the search (550-1000 ms on the 8 Nov 2026 call) are left out.
+        run.search_query = run.user_text
+        run.chunks, run.retrieval, run.retrieval_confidence = [], {**knowledge.summarise_retrieval([]), "skipped": skip}, None
+        run.timings["retrieval_ms"] = 0
+        return time.time()
     run.search_query, _query_info = await asr.qu_module().turn_search_query(
         getattr(run, "agent", None), user_id, run.storage_mode, run.user_text, run.history,
         answering_agent=_asks_for_detail(previous_reply))
@@ -418,6 +427,57 @@ async def turn_context(run: TurnRun, conversation_id: Optional[str], t: float) -
     run.retrieval = signals or None
     run.retrieval_confidence = signals.get("confidence")   # contract 2: read by services/grounding.py
     return run.mark("retrieval_ms", t)
+
+
+# A caller who is asking for information, not answering a booking question
+_INFO_QUESTION = re.compile(
+    r"\b(?:what|which|how|where|why|who|whom|whose|price|prices|cost|costs|fee|fees|charge|charges|insurance|address|location|"
+    r"timing|timings|hours|policy|policies|offer|offers|services?|kya|kaise|kahan|kahaan|kyun|kyon|kitna|kitne|kitni|kaun|kab|"
+    r"fees|rate|rates)\b|क्या|कैसे|कहाँ|कहां|क्यों|कितना|कितने|कितनी|कौन|कब|काय|कुठे|किती|कसे|फीस|शुल्क|पता",
+    re.IGNORECASE)
+_BOOK_INTENT = re.compile(r"\b(?:book|booking|appointment|appointments|slot|schedule|reschedule|cancel|postpone)\b|बुक|अपॉइंटमेंट|अपॉइन्टमेंट|एपॉइंटमेंट",
+                         re.IGNORECASE)
+MAX_STEP_WORDS = 8
+
+
+def booking_step(user_text: str, previous_reply: Optional[str]) -> bool:
+    """Is what the caller said a step of a booking, not a question for the documents: a yes or a no, a day, a date, a time, a
+    phone number, or the short answer to a detail the agent just asked for (a name)? Short, and never an information
+    question ("what are your fees", "kya aap ... ?")."""
+    text = (user_text or "").strip()
+    words = re.findall(r"[\w\u0900-\u097F]+", text)
+    if not words or len(words) > MAX_STEP_WORDS + 4 or _INFO_QUESTION.search(text):
+        return False
+    if _BOOK_INTENT.search(text):    # "I want to book an appointment": the tools answer it
+        return True
+    if len(words) > MAX_STEP_WORDS:
+        return False
+    if len(words) <= 3 and (readback.leading_yes(text) or readback.is_affirmative(text)):
+        return True
+    if re.search(r"\b(?:no|nope|nahi|nahin|nai)\b|नहीं|नही|नाही", text, re.IGNORECASE) and len(words) <= 3:
+        return True
+    if when.time_mentions(text) or when.resolve_date(text, None).date is not None or spoken_digits.find_mobile(text):
+        return True
+    return len(words) <= 5 and turn_taking.asks_for_detail(previous_reply)
+
+
+async def retrieval_skip_reason(run: TurnRun, previous_reply: Optional[str]) -> Optional[str]:
+    """Why this turn needs no knowledge retrieval, or None: "no_documents" (the agent has none uploaded; local store, where
+    it is known) or "booking_step" (an agent with booking tools and a caller who is giving a booking detail). RETRIEVAL_SKIP=off
+    turns it off."""
+    if os.getenv("RETRIEVAL_SKIP", "on").strip().lower() in ("off", "0", "false", "no"):
+        return None
+    try:
+        if run.local and not await asyncio.to_thread(
+                lambda: bool(state.local_db.select("documents", lambda r: r.get("agent_id") == run.agent_id, limit=1))):
+            return "no_documents"
+        from services import schedule_tools  # noqa: PLC0415
+        has_tools = bool((run.agent or {}).get("tools")) or schedule_tools.has_schedules(run.agent_id)
+        if has_tools and booking_step(run.user_text, previous_reply):
+            return "booking_step"
+    except Exception as e:  # noqa: BLE001 - a doubt means: retrieve as before
+        log.debug("retrieval skip check failed: %r", e)
+    return None
 
 
 # The agent's previous reply asked the caller for a detail (a name, a number, a date...): the caller's next words answer
@@ -691,6 +751,7 @@ async def turn_spoken(language: str, text: str, fallback: bool, *, use_llm: bool
     streaming turn converts the later sentences of a reply in the background) and is used as it is. Hindi speech gets
     its numbers in the form the Hindi voice reads correctly (speech_numbers.hindi_numbers_for_speech)."""
     tts_language = "hi" if language == "hinglish" else language
+    text = speech_numbers.spoken_dates(text)   # "2026-11-09" and a year after a month are never said aloud
     spoken_text = text
     if fallback and language == "hinglish":
         tts_language = "en"  # the canned fallback line is English
@@ -819,7 +880,7 @@ async def turn_blocking(run: TurnRun, file_bytes: bytes, conversation_id: Option
     conversation_id, history, chunks = run.conversation_id, run.history, run.chunks
     hit = run.canned
 
-    # 3. LLM (Embeddings Flash through the OpenAI-compatible endpoint), grounded on retrieved context
+    # 3. LLM (the hosted language model), grounded on retrieved context
     fallback = False
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None

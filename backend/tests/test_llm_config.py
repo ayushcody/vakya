@@ -37,7 +37,7 @@ def test_the_key_is_llm_api_key_else_embeddings_api_key(clean, monkeypatch):
 
 def test_status_without_and_with_a_key(clean, monkeypatch):
     st = llm.status()
-    assert st == {"provider": "openai-compatible", "base_url": embeddings.DEFAULT_BASE_URL, "model": embeddings.DEFAULT_CHAT_MODEL,
+    assert st == {"provider": "openai-compatible", "label": "Embeddings Flash", "base_url": embeddings.DEFAULT_BASE_URL, "model": embeddings.DEFAULT_CHAT_MODEL,
                   "configured": False, "reason": "Needs a Embeddings key", "keys": {"keys": 0, "available": 0}}
     assert llm.NEEDS_KEY_MESSAGE == "Needs a Embeddings key"
     monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")

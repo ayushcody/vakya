@@ -179,12 +179,17 @@ def resolve_schedule(agent_id: str, name: Any) -> Tuple[Optional[dict], Optional
 
 # ---------------------------------------------------------------------------------------------- answers
 
+def _say_date(d: date) -> str:
+    """"Monday 9 November": how a date is said aloud (never 2026-11-09, never the year)."""
+    return f"{av.WEEKDAYS_EN[d.weekday()]} {d.day} {av.MONTHS_EN[d.month - 1]}"
+
+
 def _human(value: Optional[dict], nights: bool = False) -> Optional[dict]:
     """{"date", "weekday", "time"} of a free option, for the model."""
     if not value:
         return None
     start = datetime.fromisoformat(value["start"]).replace(tzinfo=None)
-    out = {"date": start.date().isoformat(), "weekday": av.WEEKDAYS_EN[start.weekday()]}
+    out = {"date": start.date().isoformat(), "weekday": av.WEEKDAYS_EN[start.weekday()], "say_date": _say_date(start.date())}
     if not nights:
         out["time"] = start.strftime("%H:%M")
     return out
@@ -197,7 +202,7 @@ def _check(schedule: dict, args: dict) -> Tuple[bool, Any]:
     stay = schedule["kind"] == "nights"
     res = engine.check(day=day, at=at, nights=args.get("nights") if stay else None, caller=True)
     out = {"schedule": schedule["name"], "available": res["available"], "reason": res["reason"],
-           "date": day.isoformat() if day else None, "time": at}
+           "date": day.isoformat() if day else None, "say_date": _say_date(day) if day else None, "time": at}
     if stay:
         out["nights"] = res.get("nights") or 1
     if res.get("requested"):
@@ -207,7 +212,8 @@ def _check(schedule: dict, args: dict) -> Tuple[bool, Any]:
         out["alternatives"] = [x for x in (out["before"], out["after"]) if x]
     out["say"] = res["spoken"]
     if res["available"]:
-        out["next_step"] = "Read the day, date and time back, ask 'Shall I book it?', and call book after a yes."
+        out["next_step"] = ("Call book now with the name and number from the call details: it answers with the one read-back "
+                            "sentence to say. Say dates as say_date, never as YYYY-MM-DD.")
     return True, out
 
 

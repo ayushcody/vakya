@@ -6,7 +6,7 @@
 
 **A phone front desk for Indian small businesses. It answers in Hindi, Marathi and English, checks the schedule for a free time, reads every number and date back, and books only after the caller says yes.**
 
-Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech by **Gnani Prisma, Timbre and voice cloning** · replies by **Embeddings Flash** · telephony by **Vobiz** · Hindi, Marathi, English and code-mixed speech over 8 kHz phone audio.
+Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech by **Gnani Prisma, Timbre and voice cloning** · replies by a **hosted language model** · telephony by **Vobiz** · Hindi, Marathi, English and code-mixed speech over 8 kHz phone audio.
 
 | Deliverable | Link |
 | --- | --- |
@@ -63,7 +63,7 @@ A short example, written by us (invented clinic, invented number, not a recordin
 
 **Status:** all three are covered by tests against fakes and none has been run against the live API. [`docs/GNANI.md`](docs/GNANI.md) lists exactly what is guessed. The first thing to do with a key is `backend/bench/gnani_smoke.py`.
 
-**What reasons, honestly:** the model that decides what to say and which tool to call is **Embeddings Flash** (Google, hosted), not a Gnani model. Document search uses Embeddings embeddings, with keyword search as the backup. The caller's words and the passages of the business's documents a turn needs reach Google when it answers. Gnani does the speech; Embeddings does the thinking.
+**What reasons, honestly:** the model that decides what to say and which tool to call is a hosted language model, not a Gnani model. Document search uses hosted embeddings, with keyword search as the backup. The caller's words and the passages of the business's documents a turn needs reach the model's provider when it answers. Gnani does the speech; the language model does the thinking.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ flowchart LR
     C["Caller<br/>Vobiz line, 8 kHz"] -->|audio| G["Gnani gateway<br/>one slot, cache, breaker,<br/>budget, ledger"]
     G -->|audio| P["Gnani Prisma v3<br/>codemix, keyterms"]
     P -->|text| T["Turn manager<br/>barge-in, read-back then commit,<br/>slot memory, caller memory"]
-    T <-->|prompt, tool calls| L["Embeddings Flash with tools<br/>schedules (check, list, book, cancel),<br/>knowledge search, calendar"]
+    T <-->|prompt, tool calls| L["Language model with tools<br/>schedules (check, list, book, cancel),<br/>knowledge search, calendar"]
     T -->|reply text| S["Gnani Timbre<br/>raw 8 kHz, or a cloned voice"]
     S --> G
     G -->|audio| C
@@ -124,7 +124,7 @@ Everything lives in `backend/.env`; [`backend/.env.example`](backend/.env.exampl
 | `GNANI_API_KEY` | Gnani Prisma, Timbre and cloning (header `X-API-Key-ID`) | Nothing can hear or speak |
 | `GNANI_STT_MODEL`, `GNANI_STT_FORMAT`, `GNANI_VOICES`, `GNANI_KEYTERMS` | Prisma model and output format (`codemix` by default), Timbre voice names, extra keyterms. See [`docs/GNANI.md`](docs/GNANI.md) | Defaults |
 | `GNANI_CREDIT_BUDGET`, `GNANI_CREDIT_RESERVE_PCT` | The credit budget and the share kept for live calls | 5000 and 20 |
-| `EMBEDDINGS_API_KEY` | Embeddings Flash for replies and Embeddings embeddings for document search | No replies; search falls back to keywords |
+| `EMBEDDINGS_API_KEY` | Embeddings embeddings for document search, and Embeddings Flash for replies when it is the reply model | Search falls back to keywords; no Embeddings replies |
 | `EMBEDDINGS_API_KEYS` | Extra Embeddings keys (other Google accounts), separated by commas, spaces or new lines. When one key hits its quota or is invalid, the next takes over at once | Only `EMBEDDINGS_API_KEY` is used |
 | `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls. `./vakya start` opens a tunnel to the phone-only port 8021 | The browser web call still works |
 | `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_FILE` | Sync bookings to a Google Calendar | Bookings stay in Vakya's own list |
@@ -151,7 +151,7 @@ The facts the website quotes live in one file, [`frontend/src/components/site/su
 - **Synthetic audio, simulated noise.** The report card will show where the cliff is, not what a real caller will score. Repeat it on real recordings.
 - **Caller Theatre ran on a scripted model, text only.** The audio run and a Embeddings Flash run are pending.
 - **Digits are the hard part.** Whether Prisma hears a ten-digit phone number whole is not measured; hence the read-back.
-- **Reasoning is not Gnani's.** Embeddings Flash, hosted by Google. A Google key and Google's rate limits are in the path of every reply.
+- **Reasoning is not Gnani's.** Replies come from a hosted language model. The caller's words reach its provider, and its key and rate limits are in the path of every reply.
 - **No second speech model.** If Gnani is out of credits, rate-limited or down, a live caller gets a held line and a callback offer, not an answer.
 - **Missed-call callback, inbound calls on your own number and Google Calendar sync are untested live.** The call logic ran on an earlier trial line; the Vobiz adapter and the callback are tested with fakes.
 - **The agent's scheduling tools have only been tested with a scripted model.** The availability engine is deterministic and tested directly; a real model choosing when to check, offer and book has not been exercised on a real call.
@@ -163,8 +163,8 @@ The facts the website quotes live in one file, [`frontend/src/components/site/su
 
 | Name | Role |
 | --- | --- |
-| Ayush Chougula | Phone pipeline, schedules, Gnani integration, this site |
-| Teammate (TBC) | Role to be confirmed |
+| Ayush Chougula | Phone pipeline, Gnani integration, every integration (Vobiz telephony, WhatsApp confirmations, Google Calendar sync), schedules and booking, caller memory, the noise report card |
+| Atharva | UI: the desk (Today, Bookings, Schedules, Calls, Front desk, Proof), the phone layout and the site |
 
 ## Licence
 

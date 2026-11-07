@@ -125,15 +125,16 @@ def system_block() -> dict:
 def services_block() -> List[dict]:
     """The hosted services the app uses and whether each has its key. Nothing is requested."""
     try:
-        from services import embeddings, gnani, retrieval
+        from services import embeddings, gnani, llm, retrieval
     except ImportError:  # pragma: no cover
-        from backend.services import embeddings, gnani, retrieval
+        from backend.services import embeddings, gnani, llm, retrieval
+    st = llm.status()
     emb = _safe(retrieval.embedder_status, {}) or {}
     return [
         {"id": "gnani", "label": "Gnani AI (Prisma hears, Timbre speaks)", "where": "hosted", "configured": gnani.configured(),
          "reason": None if gnani.configured() else "Needs a Gnani key"},
-        {"id": "llm", "label": f"Language model ({embeddings.chat_model()})", "where": "hosted", "configured": embeddings.llm_configured(),
-         "reason": None if embeddings.llm_configured() else "Needs a Embeddings key"},
+        {"id": "llm", "label": f"Language model ({st['label']})", "where": "hosted", "configured": bool(st["configured"]),
+         "reason": st["reason"]},
         {"id": "embeddings", "label": f"Knowledge search ({emb.get('model', embeddings.embed_model())})", "where": "hosted",
          "configured": bool(emb.get("configured")), "reason": emb.get("reason"), "mode": emb.get("mode")},
     ]

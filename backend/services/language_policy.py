@@ -281,6 +281,39 @@ def _is_ultra_short(user_text: str) -> bool:
     return len(_letter_words(user_text)) <= 2
 
 
+# Words a phone caller says to agree, refuse or fill a pause, in any script: they say nothing about the language the caller
+# wants. Prisma hears an English "yeah" as the Hindi "या" ("or"), so "या, please।" must not turn an English call into Hindi.
+_ACK_WORDS = frozenset(unicodedata.normalize("NFC", w) for w in (
+    "yes", "yeah", "yep", "yup", "ya", "yea", "ok", "okay", "sure", "please", "plz", "pls", "no", "nope", "right", "fine",
+    "good", "thanks", "thank", "you", "hello", "hi", "hmm", "uh", "um", "do", "it", "go", "ahead", "alright", "correct",
+    "haan", "han", "haa", "ji", "nahi", "nahin", "theek", "thik", "hai", "ho", "accha", "achha", "bilkul", "pakka",
+    "हाँ", "हां", "हा", "जी", "ठीक", "है", "नहीं", "नही", "अच्छा", "बिल्कुल", "पक्का", "या", "याह", "येह", "यस", "प्लीज", "प्लीज़",
+    "ओके", "ओके", "थैंक्स", "धन्यवाद", "शुक्रिया", "हो", "होय", "नाही", "बरं", "बर"))
+
+
+def _share_in_script(text: str, language: str) -> float:
+    """The share of the letters of `text` that are written in the script of `language` (Latin scripts count as one)."""
+    counts = letter_counts(text)
+    total = sum(counts.values())
+    if not total:
+        return 0.0
+    key = "latin" if language in LATIN_CODES else language
+    return counts.get(key, 0) / total
+
+
+def is_clear_language_turn(user_text: str, language: str) -> bool:
+    """Does this turn show that the caller really speaks `language`, so the reply may switch to it? A turn of
+    acknowledgements ("yeah", "या", "हाँ", "ok", "please") never does. Otherwise it takes a clear sentence: at least three
+    words, or (an Indian script only) two words or more written almost entirely in that script. One short or ambiguous token
+    keeps the call's language."""
+    words = [unicodedata.normalize("NFC", w.lower()) for w in _letter_words(user_text)]
+    if not words or all(w in _ACK_WORDS for w in words):
+        return False
+    if len(words) >= 3:
+        return True
+    return language in INDIC_CODES and len(words) >= 2 and _share_in_script(user_text, language) >= 0.8
+
+
 def decide(user_text: str, supported: Optional[Sequence[str]] = None, sticky: Optional[str] = None,
            previous_agent_text: Optional[str] = None) -> LanguageDecision:
     """The whole policy for one caller turn. `sticky` is the language the caller asked for earlier in this conversation
@@ -300,10 +333,12 @@ def decide(user_text: str, supported: Optional[Sequence[str]] = None, sticky: Op
     if choice:
         reason = "explicit" if (req is not None and req.supported) else "sticky"
         return LanguageDecision(_apply_choice(choice, user_text), choice, choice != sticky, req, unsupported, reason)
-    if _is_ultra_short(user_text) and base in ("en", codes[0]) and previous_agent_text:
-        # nothing to read a language from ("ok", "thanks", a phone number): stay in the language of the last reply
+    if previous_agent_text and (user_text or "").strip():
+        # The call has a language already (the agent's last reply). A turn changes it only when it is a clear sentence in
+        # another language; a short or ambiguous one ("yeah", "या", "ok", "हाँ", a phone number) keeps the call's language.
         prev = detect_language(previous_agent_text, codes)
-        if prev != base:
+        if prev != base and (_is_ultra_short(user_text) and base in ("en", codes[0])
+                             or not is_clear_language_turn(user_text, base)):
             return LanguageDecision(prev, None, False, req, unsupported, "inherit")
     return LanguageDecision(base, None, False, req, unsupported, "script" if (user_text or "").strip() else "default")
 

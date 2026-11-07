@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from services import llm, tools
+from services import llm, speech_numbers, tools
 from tests.test_tools_client import BOOK, BOOKED, CANCEL, MESSAGES, FakeHub
 from tests.test_turn_stream import FakeStream, names, parse, rig  # noqa: F401  (rig is a fixture)
 from tests.test_offline_agents import LOCAL, env, make_agent  # noqa: F401
@@ -205,7 +205,8 @@ def test_streaming_turn_books_through_the_json_protocol_and_streams_the_confirma
     events = [(e, d) for e, d in parse(rig.post(a["id"])) if not d.get("filler")]
     [row] = bookings(appt)
     spoken = [d["text"] for e, d in events if e == "sentence"]
-    assert spoken == ["Done.", f"Booking {row['booking_id']} is set for {day} at 11:00."]
+    said_day = speech_numbers.spoken_dates(day)           # an ISO date is never said or stored: "Wednesday 11 November"
+    assert spoken == ["Done.", f"Booking {row['booking_id']} is set for {said_day} at 11:00."]
     done = events[-1][1]
     assert [c["name"] for c in done["tool_calls"]] == ["book_appointment"] and done["fallback"] is False
     assert done["timings"]["tools_ms"] > 0 and done["timings"]["llm_first_token_ms"] <= done["timings"]["llm_ms"]

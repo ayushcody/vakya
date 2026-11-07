@@ -313,7 +313,7 @@ def test_create_agent_without_llm_is_503(app_client, env, monkeypatch):
 
 def test_health_reports_the_language_model(app_client, env, monkeypatch):
     llm_part = app_client.get("/api/health").json()["llm"]
-    assert set(llm_part) == {"active", "model", "providers", "usage_today"}
+    assert set(llm_part) == {"active", "model", "label", "providers", "usage_today"}
     assert llm_part["active"] is None and llm_part["providers"][0]["reason"] == "Needs a Embeddings key"
     monkeypatch.setenv("EMBEDDINGS_API_KEY", "test-key")
     assert app_client.get("/api/health").json()["llm"]["active"] == "embeddings"

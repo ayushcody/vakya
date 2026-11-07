@@ -169,12 +169,42 @@ _NEW = re.compile(r"(?:^|\s)(?:what|which|how|when|where|why|who|is it|are you|d
                   r"क्या|कब|कितना|कितने|कौन|कैसे|कहाँ|कहां|क्यों|काय|केव्हा|किती|कुठे|कोण|कसे)(?=\s|$)")
 
 
+# Prisma often hears a phone caller's "yeah" as the Hindi "या" ("or"), alone or with a polite word: "या, please।". Straight
+# after a read-back that is a yes: only when "या" opens the turn and nothing else but polite or yes words follows.
+_MISHEARD_YEAH = re.compile(r"^(?:या|याह|येह|येअ|यॅ)(?=\s|$)")
+_POLITE = {"please", "plz", "pls", "yes", "sure", "ok", "okay", "do", "it", "go", "ahead", "haan", "हाँ", "हां", "जी", "ji",
+           "कर", "दो", "करो", "प्लीज", "प्लीज़", "यस"}
+
+
+def _fix_misheard_yes(low: str) -> str:
+    low = low.replace("।", " ").strip()
+    m = _MISHEARD_YEAH.match(low)
+    if not m:
+        return low
+    rest = low[m.end():].split()
+    return "yeah " + " ".join(rest) if all(w in _POLITE for w in rest) else low
+
+
+def leading_yes(text: Optional[str]) -> bool:
+    """The caller's turn OPENS with a yes ("Yeah, sure. Monday, it's three pm"): a yes-word in its first three words and no
+    no-word there. For an answer to a question about a detail, where the rest of the turn may carry another detail."""
+    low = re.sub(r"[^\w\u0900-\u097F' ]+", " ", _norm(text))
+    low = re.sub(r"\s+", " ", _fix_misheard_yes(re.sub(r"\s+", " ", low).strip()))
+    head = " ".join(low.split()[:3])
+    return bool(head) and bool(_YES.search(head)) and not _NO.search(head)
+
+
+def mentions_whatsapp(text: Optional[str]) -> bool:
+    """The agent's turn names WhatsApp (in Latin or Devanagari letters): the read-back carried the consent question."""
+    return bool(re.search(r"whats\s?app|व्हॉट्स\s?ॲ?ए?प|व्हाट्स\s?ऐ?ए?प|वॉट्स\s?ऐ?ए?प|व्हॉट्सअ|व्हाट्सऐ|व्हाट्सएप", _norm(text)))
+
+
 def is_affirmative(text: Optional[str], d: Optional[Date] = None, t: Optional[Time] = None) -> bool:
     """The caller's latest turn is a yes to what was read back: a yes-word, no no-word, no other time or date, no new question,
-    and short (a long turn is a request, not a yes)."""
+    and short (a long turn is a request, not a yes). A misheard "या" (Prisma's "yeah") counts too."""
     raw = str(text or "")
     low = re.sub(r"[^\w\u0900-\u097F' ]+", " ", _norm(raw))
-    low = re.sub(r"\s+", " ", low).strip()
+    low = re.sub(r"\s+", " ", _fix_misheard_yes(re.sub(r"\s+", " ", low).strip())).replace("।", " ").strip()
     if not low or len(low.split()) > 12:
         return False
     if _NO.search(low) or _NEW.search(low) or not _YES.search(low):
@@ -213,11 +243,15 @@ def _time_words(t: Time, lang: str) -> str:
     return f"{period} {clock} वाजता"
 
 
-def sentences(args: Dict[str, Any], action: str = "book") -> Dict[str, str]:
+_WHATSAPP_CLAUSE = {"en": "and I'll send the confirmation on WhatsApp", "hi": "और मैं WhatsApp पर कन्फ़र्मेशन भेज दूँगी",
+                    "mr": "आणि मी WhatsApp वर कन्फर्मेशन पाठवेन"}
+
+
+def sentences(args: Dict[str, Any], action: str = "book", whatsapp: bool = False) -> Dict[str, str]:
     """The read-back of a booking in English, Hindi and Marathi, ending in the confirmation question. Dates, times, the name
     and the last four digits of the phone are written as they must be spoken (digits, never words). `action` "move" reads
     back the NEW day and time of an existing booking ("Moving your booking to Thursday 6 November at 4 pm. Shall I go
-    ahead?")."""
+    ahead?"). `whatsapp` adds the WhatsApp confirmation to the same sentence, so the caller's one yes covers it too."""
     d = _date(args.get("date"))
     t = _time(args.get("time"))
     name = str(args.get("name") or "").strip()
@@ -245,7 +279,8 @@ def sentences(args: Dict[str, Any], action: str = "book") -> Dict[str, str]:
             out[lang] = f"{lead} " + ", ".join(x for x in (head, who, number) if x) + ". " + ask
             continue
         ask = {"en": "Shall I book it?", "hi": "क्या मैं बुक कर दूँ?", "mr": "मी बुक करू का?"}[lang]
-        out[lang] = ", ".join(x for x in (head, who, number) if x) + ". " + ask
+        bits = [x for x in (head, who, number) if x] + ([_WHATSAPP_CLAUSE[lang]] if whatsapp else [])
+        out[lang] = ", ".join(bits) + ". " + ask
     return out
 
 

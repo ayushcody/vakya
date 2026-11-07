@@ -22,7 +22,7 @@ card shows `http://localhost:8021`-style links that only open on this computer, 
 ## What the visitor sees
 
 * A page branded "Vakya" with the agent's name, a plain statement that they are talking to an AI (their voice is
-  recorded while they speak, sent to Gnani to be turned into text and answered by Embeddings, and the conversation may be saved), and a big
+  recorded while they speak, sent to Gnani to be turned into text and answered by the reply model, and the conversation may be saved), and a big
   **Start talking** button.
 * After the browser's microphone prompt the call is hands-free: speak, pause, the agent answers out loud. Speaking over
   the agent cuts it off. The microphone has echo cancellation on; headphones help.
@@ -57,7 +57,7 @@ every visitor shares one bucket, so the per-IP limits become overall limits (saf
 
 ## Speech and replies
 
-A web call uses the same stack as a phone call: the visitor's recording goes to Gnani Prisma (a 16 kHz clip per turn), Embeddings Flash writes the reply, and Gnani Timbre speaks it as a 24 kHz clip. If Gnani is busy or down, the visitor hears the short pre-rendered line and is offered a callback; there is no second speech model. Each web call spends Gnani credits, which the usage ledger counts (`docs/GNANI.md`).
+A web call uses the same stack as a phone call: the visitor's recording goes to Gnani Prisma (a 16 kHz clip per turn), the language model writes the reply, and Gnani Timbre speaks it as a 24 kHz clip. If Gnani is busy or down, the visitor hears the short pre-rendered line and is offered a callback; there is no second speech model. Each web call spends Gnani credits, which the usage ledger counts (`docs/GNANI.md`).
 
 ## Public routes
 

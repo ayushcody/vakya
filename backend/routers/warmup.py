@@ -80,7 +80,7 @@ async def _warm_gnani() -> str:
 async def _warm_llm() -> str:
     st = llm.status()
     if not st["configured"]:
-        raise Skipped(st["reason"] or "Needs a Embeddings key")
+        raise Skipped(st["reason"] or "Needs a language model key")
 
     def work() -> str:
         try:
@@ -238,7 +238,7 @@ async def _step(results: Dict[str, dict], name: str, fn: Callable[[], Awaitable[
 
 async def _warm_llm_connection() -> str:
     if not llm.configured():
-        raise Skipped(llm.status()["reason"] or "Needs a Embeddings key")
+        raise Skipped(llm.status()["reason"] or "Needs a language model key")
     if not llm._prewarm_targets():
         raise Skipped("no hosted language model is configured")
     await asyncio.to_thread(llm.prewarm, wait=True)

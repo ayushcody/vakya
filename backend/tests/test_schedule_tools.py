@@ -50,15 +50,15 @@ def test_a_free_time_is_reported_free(clinic):
     ok, v = run("check_availability", date=THURSDAY, time="18:00")
     assert ok and v["available"] is True and v["schedule"] == "Doctor consultations" and v["weekday"] == "Thursday"
     assert "before" not in v and v["say"]["en"] == "Thursday at 6 pm is free."
-    assert "Shall I book it" in v["next_step"]
+    assert "call book now" in v["next_step"].lower() and v["say_date"] == v["say_date"].strip()
 
 
 def test_a_taken_time_comes_with_the_nearest_options(clinic):
     assert book()[0]
     ok, v = run("check_availability", date=THURSDAY, time="18:00")
     assert ok and v["available"] is False and v["reason"] == "full"
-    assert v["before"] == {"date": THURSDAY, "weekday": "Thursday", "time": "17:30"}
-    assert v["after"] == {"date": THURSDAY, "weekday": "Thursday", "time": "18:30"}
+    assert v["before"] == {"date": THURSDAY, "weekday": "Thursday", "say_date": "Thursday 5 November", "time": "17:30"}
+    assert v["after"] == {"date": THURSDAY, "weekday": "Thursday", "say_date": "Thursday 5 November", "time": "18:30"}
     assert v["alternatives"] == [v["before"], v["after"]]
     assert v["say"]["en"] == "Thursday at 6 pm is already taken. 5:30 pm or 6:30 pm, which would suit you?"
     assert v["say"]["hi"].startswith("गुरुवार शाम छह बजे वाला समय भरा हुआ है।")
@@ -95,7 +95,8 @@ def test_a_stay(clock):
     assert ok and b["nights"] == 2 and b["date"] == "2026-11-12" and b["check_out"] == "2026-11-14T11:00"
     ok, v = run("check_availability", date="2026-11-13", nights=2)
     assert v["available"] is False and v["reason"] == "full"
-    assert v["before"] == {"date": "2026-11-10", "weekday": "Tuesday"} and v["after"] == {"date": "2026-11-14", "weekday": "Saturday"}
+    assert v["before"] == {"date": "2026-11-10", "weekday": "Tuesday", "say_date": "Tuesday 10 November"}
+    assert v["after"] == {"date": "2026-11-14", "weekday": "Saturday", "say_date": "Saturday 14 November"}
     ok, rooms = run("list_free_slots", date="2026-11-12")
     assert ok and rooms["free"][0] == {"date": "2026-11-14", "rooms_left": 1}
 

@@ -46,17 +46,17 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
     from core import offline
-    from services import spoken_digits, turn_taking, when
+    from services import readback, spoken_digits, turn_taking, when
 except ImportError:  # pragma: no cover - imported as backend.services.caller_memory
     from backend.core import offline
-    from backend.services import spoken_digits, turn_taking, when
+    from backend.services import readback, spoken_digits, turn_taking, when
 
 log = logging.getLogger("vakya.caller_memory")
 
-FIELDS = ("name", "person", "relation", "phone", "date", "time", "reason", "doctor", "age", "email", "other")
+FIELDS = ("name", "person", "relation", "phone", "phone_confirmed", "date", "time", "reason", "doctor", "age", "email", "other")
 # the order the details are listed to the model in
-ORDER = ("name", "person", "relation", "phone", "date", "time", "doctor", "reason", "age", "email", "other")
-MAX_LEN = {"name": 60, "person": 60, "relation": 24, "phone": 15, "date": 10, "time": 5, "reason": 100, "doctor": 60,
+ORDER = ("name", "person", "relation", "phone", "phone_confirmed", "date", "time", "doctor", "reason", "age", "email", "other")
+MAX_LEN = {"name": 60, "person": 60, "relation": 24, "phone": 15, "phone_confirmed": 3, "date": 10, "time": 5, "reason": 100, "doctor": 60,
            "age": 3, "email": 80, "other": 100}
 # Details that belong to the agent's trade (the template's `remember` schema: a party size, a preferred stylist...) are kept in
 # the same form under "f_<key>". `person` is who the booking is for when that is not the caller, `relation` how they are
@@ -597,6 +597,17 @@ def _extract_when(text: str, asked: "turn_taking.Asked", now: datetime) -> Dict[
     return out
 
 
+# The agent's last sentence asks about the number on the line ("Same number as last time, ending 6295?", "Shall I use the
+# number ending in 6295?", "इसी नंबर पर?")
+_PHONE_ASK = re.compile(r"\b(?:number|mobile|phone|contact|nambar)\b|नंबर|नम्बर|मोबाइल|फ़ोन|फोन|अंक|\bending\b", re.IGNORECASE)
+
+
+def asked_about_number(agent_text: Optional[str]) -> bool:
+    """The agent's last sentence is a question about the phone number it already has."""
+    parts = [p for p in re.split(r"(?<=[.!?।？])\s+", str(agent_text or "").strip()) if p.strip()]
+    return bool(parts) and parts[-1].rstrip().endswith(("?", "？")) and bool(_PHONE_ASK.search(parts[-1]))
+
+
 def extract(text: str, agent_text: Optional[str] = None, now: Optional[datetime] = None,
             schema: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """The details in what the caller said, by rules. `agent_text` is the agent's previous reply (what was just asked).
@@ -611,6 +622,8 @@ def extract(text: str, agent_text: Optional[str] = None, now: Optional[datetime]
     phone = spoken_digits.find_mobile(text)
     if phone:
         found["phone"] = phone
+    if phone or (asked_about_number(agent_text) and readback.leading_yes(text)):
+        found["phone_confirmed"] = "yes"   # the caller gave the number, or said yes to "same number, ending ...?": settled for this call
     email = _extract_email(text)
     if email:
         found["email"] = email
@@ -738,6 +751,10 @@ def prompt_slots(form: Optional[Dict[str, str]], tool_slots: Optional[Dict[str, 
     out: Dict[str, str] = {}
     for k, v in merged.items():
         if k == "relation":
+            continue
+        if k == "phone_confirmed":
+            if str(v).lower() == "yes" and merged.get("phone"):
+                out["phone confirmed"] = "yes"
             continue
         if k == "person":
             rel = merged.get("relation")

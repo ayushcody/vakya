@@ -1,6 +1,6 @@
 """GET /api/privacy/attestation: a signed statement of how this server is configured to handle data.
 
-It attests CONFIGURATION (is offline mode on, which model and speech-recognition providers can run, which outbound
+It attests CONFIGURATION (is offline mode on, which hosted language model and speech-recognition providers can run, which outbound
 services are switched on), not network traffic: it cannot prove that no packet left the machine, only what the
 software is set to allow. It is signed with the same Ed25519 key as receipts (see docs/RECEIPT_SPEC.md), so anyone can
 check it with the key at /.well-known/vakya-receipt-key."""
