@@ -1,71 +1,72 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ArrowRight, Phone } from "lucide-react";
 import { ErrorBoundary } from "@/components/ui";
 import { PageShell } from "@/components/ui/PageHeader";
 import { BookingList } from "@/components/desk/BookingList";
 import { NeedsAttention } from "@/components/desk/NeedsAttention";
-import { RecentCalls } from "@/components/desk/RecentCalls";
-import { ScheduleGlance } from "@/components/desk/ScheduleGlance";
 import { TodayQueue } from "@/components/queue/TodayQueue";
 import { SetupChecklist } from "@/components/agents/AgentHeader";
-import { UsageTiles } from "@/components/usage/UsageTiles";
+import { usePhoneConnected } from "@/components/agents/agentStatus";
 import { isSameDay, isToday, madeToday, useBookings } from "@/components/desk/calls";
+import { formatDate } from "@/lib/formatDate";
 import { useAgents } from "@/hooks/useApi";
-import { useNow } from "@/hooks/useNow";
 import { cn } from "@/lib/utils";
+import { LiveCalls, useLiveCalls } from "./calls/LiveCalls";
 
-function greeting(hour: number): string {
-  if (hour < 5) return "Hello";
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One sentence instead of a wall of tiles: what the front desk did today, in words. */
+function todaySentence(calls: number, booked: number, missed: number): string {
+  if (calls === 0) return "No calls yet today.";
+  const tail = missed === 0 ? "None needed a person." : `${plural(missed, "call needs", "calls need")} a person.`;
+  return `Vakya answered ${plural(calls, "call", "calls")} today and booked ${booked}. ${tail}`;
 }
 
-const subscribeNever = () => () => {};
-
-function Tile({ label, value, hint, href }: { label: string; value: number | string; hint?: string; href?: string }) {
-  const body = (
-    <>
-      <p className="text-xs font-semibold uppercase tracking-[1px] text-text-secondary">{label}</p>
-      <p className="mt-2 font-display text-[1.875rem] leading-none text-text-primary tabular-nums sm:text-[2.25rem]">{value}</p>
-      {hint && <p className="mt-1.5 text-sm text-text-secondary">{hint}</p>}
-    </>
-  );
-  const cls = "block rounded-2xl border border-border bg-bg-surface p-4 sm:p-5";
-  return href ? (
-    <Link href={href} className={cn(cls, "transition-colors hover:border-border-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary")}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cls}>{body}</div>
+/** The quiet line shown while nobody is on the phone. */
+function LineState() {
+  const phone = usePhoneConnected();
+  const live = useLiveCalls();
+  if ((live.data?.calls.length ?? 0) > 0) return null;
+  return (
+    <p className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary">
+      <span
+        className={cn("size-2 shrink-0 rounded-full", phone ? "bg-accent-success" : "bg-border-3")}
+        aria-hidden
+      />
+      {phone === undefined ? "Checking the phone line…" : phone ? "Line connected. Waiting for calls." : "Phone line not connected yet."}
+    </p>
   );
 }
 
-/** Today: what the receptionist booked and how the calls went, what needs a person, and a way to try a call. */
+/** Today answers three questions, top to bottom: what is happening now, what needs me, what is next. */
 export default function DeskToday() {
-  // The server renders "Hello"; the browser swaps in the right greeting for its own clock without a mismatch.
-  const hello = useSyncExternalStore(subscribeNever, () => greeting(new Date().getHours()), () => "Hello");
   const bookings = useBookings(30);
   const agents = useAgents();
-  const now = useNow();
   const first = agents.data?.[0];
   const setupIncomplete = !!first && (first.document_count === 0 || !first.voice_id || first.system_instructions.trim() === "");
 
-  const bookedToday = bookings.data.filter((b) => isToday(b));
-  const madeTodayCount = bookings.data.filter((b) => madeToday(b)).length;
-  const upcoming = bookings.data.filter((b) => b.status === "booked" && (b.start ? new Date(b.start).getTime() > now : false)).length;
-  const callsToday = bookings.calls.filter((c) => isSameDay(c.when) && !c.practice).length;
+  const today = bookings.data
+    .filter((b) => isToday(b) && b.status === "booked")
+    .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""));
+  const callsToday = bookings.calls.filter((c) => isSameDay(c.when) && !c.practice);
+  const missed = callsToday.filter((c) => c.outcome.key === "handed_off" || c.outcome.key === "couldnt_answer").length;
+  const bookedOnCalls = bookings.data.filter((b) => madeToday(b)).length;
 
   return (
     <ErrorBoundary>
-      <PageShell width="wide" className="space-y-6">
-        <header data-area="desk" className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-[var(--area-accent)] pl-4">
+      <PageShell width="wide" className="space-y-7">
+        <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--area-accent)]">{hello}</p>
-            <h1 className="font-display text-[clamp(1.75rem,2.6vw,2.5rem)] font-normal leading-[1.08] tracking-[-0.005em] text-text-primary">Today</h1>
+            <p className="text-sm font-medium text-accent-primary">{formatDate(new Date())}</p>
+            <h1 className="font-display text-[clamp(1.75rem,2.6vw,2.5rem)] font-normal leading-[1.08] text-text-primary">Today</h1>
+            <p className="mt-1.5 text-[15px] text-text-secondary">
+              {todaySentence(callsToday.length, bookedOnCalls, missed)}{" "}
+              <Link href="/desk/week" className="whitespace-nowrap font-medium text-accent-primary hover:underline">
+                This week <ArrowRight className="inline size-3.5" aria-hidden />
+              </Link>
+            </p>
           </div>
           <Link
             href="/desk/try"
@@ -78,39 +79,30 @@ export default function DeskToday() {
           </Link>
         </header>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Tile label="Booked today" value={bookedToday.length} hint="appointments happening today" href="/desk/bookings" />
-          <Tile label="Made today" value={madeTodayCount} hint="appointments booked on calls today" />
-          <Tile label="Calls today" value={callsToday} hint="not counting practice calls" />
-          <Tile href="/desk/bookings" label="Upcoming" value={bookings.fromCalls ? bookings.data.length : upcoming} hint={bookings.fromCalls ? "appointments booked in the last 30 days" : "appointments still to come"} />
-        </div>
+        <section aria-label="Now">
+          <LiveCalls />
+          <LineState />
+        </section>
 
-        {/* What the speech costs is for the desk at the computer; on a phone, Today stays on bookings and calls. */}
-        <div className="hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4" aria-label="What the speech models cost">
-          <UsageTiles />
-        </div>
+        <NeedsAttention />
 
-        <section aria-labelledby="today-bookings-title">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 id="today-bookings-title" className="text-sm font-semibold text-text-primary">Appointments today</h2>
+        <section aria-labelledby="next-title" className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="next-title" className="text-sm font-semibold text-text-primary">
+              Next up {today.length > 0 && <span className="ml-1 font-normal text-text-muted">{today.length}</span>}
+            </h2>
             <Link href="/desk/bookings" className="inline-flex min-h-8 items-center gap-1 text-sm font-medium text-accent-primary hover:underline">
               All bookings <ArrowRight className="size-3.5" aria-hidden />
             </Link>
           </div>
           <BookingList
-            bookings={bookedToday}
+            bookings={today}
             onChanged={() => void bookings.mutate()}
-            emptyTitle="No appointments today"
-            emptyText="Appointments that start today appear here, with the date and time the front desk read back."
+            emptyTitle="Nothing booked for today"
+            emptyText="Appointments for today appear here in time order, with who booked them."
           />
+          <TodayQueue />
         </section>
-
-        <TodayQueue />
-
-        <ScheduleGlance />
-
-        <NeedsAttention />
-        <RecentCalls limit={5} />
 
         {setupIncomplete && first && (
           <section aria-labelledby="setup-title" className="max-w-md">

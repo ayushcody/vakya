@@ -9,6 +9,7 @@ import { useConsentMode, useEngines, useHealth } from "@/hooks/useApi";
 import { HearingSettings } from "@/components/hearing/HearingSettings";
 import { WhatsAppSettings } from "@/components/whatsapp/WhatsAppSettings";
 import { SpeechModelsCard } from "@/components/usage/SpeechModelsCard";
+import { UsageTiles } from "@/components/usage/UsageTiles";
 import { PhoneDeskSettings } from "@/components/phone/PhoneDeskSettings";
 import { api } from "@/lib/api";
 import { llmLabel } from "@/lib/llm";
@@ -70,6 +71,12 @@ function SettingsContent() {
       description="What the front desk runs on: the speech providers, how consent is collected, the phone line and privacy. These are read from the server. To change one, edit backend/.env and restart; keys are never shown here."
     >
       <div className="space-y-6">
+        <section aria-labelledby="usage-title">
+          <h2 id="usage-title" className="mb-3 font-display text-lg font-semibold text-text-primary">Usage, last 7 days</h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <UsageTiles />
+          </div>
+        </section>
         <Section id="providers" title="Speech providers" intro="Prisma (Gnani) hears the caller; Timbre (Gnani) speaks and clones consented voices; a language model decides what to say.">
           {engines.isLoading ? (
             <Skeleton className="my-3 h-16 w-full" />

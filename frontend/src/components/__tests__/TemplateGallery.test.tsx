@@ -69,8 +69,8 @@ describe("front-desk cards", () => {
     expect(within(card).getByText("Timings, doctors and appointments.")).toBeTruthy();
     const chips = within(within(card).getByRole("list", { name: "How it sounds" })).getAllByRole("listitem");
     expect(chips.map((c) => c.textContent)).toEqual(["Warm and calm", "Patient", "Clear", "Reassuring"]);
-    expect(card.querySelector("img")?.getAttribute("src")).toBe("/illustrations/clinic.svg");
-    expect(document.querySelector('[data-desk="hotel"] img')?.getAttribute("src")).toBe("/illustrations/hotel.svg");
+    expect(card.querySelector("img")?.getAttribute("src")).toBe("/illustrations/clinic-icon.svg");
+    expect(document.querySelector('[data-desk="hotel"] img')?.getAttribute("src")).toBe("/illustrations/hotel-icon.svg");
     expect(within(card).getByText(/English, Hindi/)).toBeTruthy();
     expect(screen.queryByText("en")).toBeNull(); // no raw codes
   });
@@ -117,7 +117,7 @@ describe("front-desk cards", () => {
     setup([], [CLINIC], onScratch);
     fireEvent.click(screen.getByRole("button", { name: /Start from scratch/ }));
     expect(onScratch).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('[data-desk="custom"] img')?.getAttribute("src")).toBe("/illustrations/custom.svg");
+    expect(document.querySelector('[data-desk="custom"] img')?.getAttribute("src")).toBe("/illustrations/custom-icon.svg");
   });
 
   it("still list a template from an older server (no persona) with the old id drawn as custom", () => {
@@ -126,7 +126,7 @@ describe("front-desk cards", () => {
     const card = document.querySelector('[data-desk="clinic_receptionist"]') as HTMLElement;
     expect(within(card).getByRole("heading", { level: 3 }).textContent).toBe("Custom front desk");
     expect(within(card).getByText("For a clinic.")).toBeTruthy();
-    expect(card.querySelector("img")?.getAttribute("src")).toBe("/illustrations/custom.svg");
+    expect(card.querySelector("img")?.getAttribute("src")).toBe("/illustrations/custom-icon.svg");
     expect(within(card).queryByRole("list", { name: "How it sounds" })).toBeNull();
   });
 });

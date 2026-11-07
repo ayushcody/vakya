@@ -111,17 +111,18 @@ afterEach(() => {
 });
 
 describe("Today", () => {
-  it("leads with a Try a call button, counts appointments today and bookings made today from the bookings store", async () => {
+  it("leads with a Try a call button, says the day in one sentence and lists what is next", async () => {
     view(<DeskToday />);
     expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Try a call" })).toHaveAttribute("href", "/desk/try");
     // A10 starts today; A11 was made today and is upcoming; A12 is cancelled and counts nowhere
-    const section = await screen.findByRole("heading", { name: "Appointments today" });
+    const section = await screen.findByRole("heading", { name: /Next up/ });
     await waitFor(() => expect(screen.getByRole("button", { name: /Priya Sharma/ })).toBeInTheDocument());
     expect(screen.getByText("with Dr. Meera Kulkarni")).toBeInTheDocument();
-    const tiles = screen.getAllByText(/^\d+$/).map((e) => e.textContent);
-    expect(new Date().toISOString()).toBe(now); // the clock is frozen, so "23:59 today" is always still to come
-    expect(tiles.slice(0, 4)).toEqual(["1", "1", "2", "2"]); // booked today, made today, calls today (c1 and c3), upcoming (A10 tonight and A11)
+    expect(new Date().toISOString()).toBe(now);
+    // calls today: c1 and c3; booked on calls today: A11
+    expect(await screen.findByText(/Vakya answered 2 calls today and booked 1\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /This week/ })).toHaveAttribute("href", "/desk/week");
     expect(section).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /All bookings/ })).toHaveAttribute("href", "/desk/bookings");
   });
@@ -136,22 +137,20 @@ describe("Today", () => {
     await waitFor(() => expect(screen.getByText("booking A12 with Dr. Meera on Monday 2026-10-19 10:30")).toBeInTheDocument());
   });
 
-  it("lists recent calls, links each to its transcript, and says what needs attention from real data", async () => {
+  it("says what needs a person from real data", async () => {
     (hooks.useAgents as jest.Mock).mockReturnValue({ data: [{ ...agent, document_count: 0 }], isLoading: false, mutate: jest.fn() });
     serve({ "/api/phone/status": { configured: false, missing: ["VOBIZ_AUTH_ID"] } });
     view(<DeskToday />);
     expect(await screen.findByText(/The front desk has no documents/)).toBeInTheDocument();
     expect(await screen.findByText(/Your phone line is not connected/)).toBeInTheDocument();
     expect(await screen.findByText(/1 call needs a person or could not be answered/)).toBeInTheDocument();
-    const recent = screen.getByRole("heading", { name: "Recent calls" }).closest("section")!;
-    await waitFor(() => expect(within(recent).getAllByRole("link", { name: /Booked|Couldn't answer/ }).length).toBeGreaterThan(0));
-    expect(within(recent).getAllByRole("link").some((a) => a.getAttribute("href") === "/desk/calls?call=c1")).toBe(true);
+    expect(screen.getByRole("heading", { name: /Needs you/ })).toBeInTheDocument();
   });
 
   it("says nothing needs attention when everything is set up", async () => {
     serve({ "/api/calls?": { calls: [call("c1")], days: 30 } });
     view(<DeskToday />);
-    expect(await screen.findByText("Nothing needs your attention right now.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing needs you right now.")).toBeInTheDocument();
   });
 
   it("offers the setup checklist while the receptionist is not finished", async () => {

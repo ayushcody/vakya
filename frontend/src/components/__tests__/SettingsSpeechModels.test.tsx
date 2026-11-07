@@ -42,7 +42,7 @@ describe("Settings: speech models and the telephony provider", () => {
     serve([]);
     view();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings.slice(0, 3)).toEqual(["Speech providers", "Speech models", "Consent"]);
+    expect(headings.slice(0, 4)).toEqual(["Usage, last 7 days", "Speech providers", "Speech models", "Consent"]);
     expect(await screen.findAllByText("No GNANI_API_KEY is set, so this cannot work yet.")).toHaveLength(4);
     for (const name of ["Speech providers", "Speech models"]) {
       const section = screen.getByRole("heading", { name }).closest("[aria-labelledby]") as HTMLElement;

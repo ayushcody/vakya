@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
-import { BookingsIcon, CallsIcon, OverviewIcon, WeekIcon, type NavIconProps } from "@/components/icons/NavIcons";
+import { AgentsIcon, BookingsIcon, CallsIcon, OverviewIcon, type NavIconProps } from "@/components/icons/NavIcons";
 import { cn } from "@/lib/utils";
 
 const TABS: { label: string; href: string; icon: ComponentType<NavIconProps> }[] = [
   { label: "Today", href: "/desk", icon: OverviewIcon },
   { label: "Bookings", href: "/desk/bookings", icon: BookingsIcon },
   { label: "Calls", href: "/desk/calls", icon: CallsIcon },
-  { label: "This week", href: "/desk/week", icon: WeekIcon },
+  { label: "Front desk", href: "/desk/receptionist", icon: AgentsIcon },
 ];
 
 /**
