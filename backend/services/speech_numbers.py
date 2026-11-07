@@ -126,3 +126,43 @@ def hindi_numbers_for_speech(text: str) -> str:
     t = _DECIMAL.sub(lambda m: f"{m.group(1)} दशमलव {' '.join(m.group(2))}", t)
     t = _PERCENT.sub(r"\1 प्रतिशत", t)
     return re.sub(r"[ \t]{2,}", " ", t)
+
+
+# ------------------------------------------------------------------------------------------------ dates
+
+_EN_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_EN_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November",
+              "December")
+_HI_WEEKDAYS = ("सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार")
+_HI_MONTHS = ("जनवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर")
+_MR_WEEKDAYS = ("सोमवार", "मंगळवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार")
+_MR_MONTHS = ("जानेवारी", "फेब्रुवारी", "मार्च", "एप्रिल", "मे", "जून", "जुलै", "ऑगस्ट", "सप्टेंबर", "ऑक्टोबर", "नोव्हेंबर",
+              "डिसेंबर")
+_WEEKDAY_ALT = "|".join(_EN_WEEKDAYS + _HI_WEEKDAYS + _MR_WEEKDAYS[1:2])
+_MONTH_ALT = "|".join(sorted(set(_EN_MONTHS + _HI_MONTHS + _MR_MONTHS), key=len, reverse=True))
+_ISO_DATE = re.compile(r"(?:\b(" + _WEEKDAY_ALT + r")\b[,\s]+)?(?<![\d-])(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\d-])",
+                       re.IGNORECASE)
+_DAY_MONTH_YEAR = re.compile(r"(\b\d{1,2}(?:st|nd|rd|th)?\s+(?:" + _MONTH_ALT + r"))\s*,?\s+20\d{2}\b", re.IGNORECASE)
+_MONTH_DAY_YEAR = re.compile(r"((?:" + _MONTH_ALT + r")\s+\d{1,2}(?:st|nd|rd|th)?)\s*,?\s+20\d{2}\b", re.IGNORECASE)
+_MARATHI_HINTS = re.compile(r"आहे|आणि|वाजता|साठी|करू|का\?")
+
+
+def spoken_dates(text: str) -> str:
+    """A date said the way a person says it: "2026-11-09" (or "Monday, 2026-11-09") becomes "Monday 9 November" in the language
+    of the sentence, and a year after a month ("9 November 2026") is dropped. A caller hears neither digits of an ISO date nor
+    the year of next week. The text shown and stored is left to the caller of this function."""
+    from datetime import date  # noqa: PLC0415
+    deva = bool(re.search(r"[ऀ-ॿ]", text or ""))
+    lang = "mr" if deva and _MARATHI_HINTS.search(text) else "hi" if deva else "en"
+    days = {"en": _EN_WEEKDAYS, "hi": _HI_WEEKDAYS, "mr": _MR_WEEKDAYS}[lang]
+    months = {"en": _EN_MONTHS, "hi": _HI_MONTHS, "mr": _MR_MONTHS}[lang]
+
+    def one(m: "re.Match") -> str:
+        try:
+            d = date(int(m.group(2)), int(m.group(3)), int(m.group(4)))
+        except ValueError:
+            return m.group(0)
+        return f"{days[d.weekday()]} {d.day} {months[d.month - 1]}"
+    out = _ISO_DATE.sub(one, text or "")
+    out = _DAY_MONTH_YEAR.sub(r"\1", out)
+    return _MONTH_DAY_YEAR.sub(r"\1", out)

@@ -78,11 +78,13 @@ function Show-Keys {
         Bad 'GNANI_API_KEY is not set: the agent can neither hear nor speak'
         Fix 'add GNANI_API_KEY=... to backend\.env'
     }
-    if ((Get-Setting 'EMBEDDINGS_API_KEY') -or (Get-Setting 'EMBEDDINGS_API_KEYS') -or (Get-Setting 'LLM_API_KEY')) {
+    if (Get-Setting 'LLM_PRIMARY_KEY') {
+        Ok 'Language model key set'
+    } elseif ((Get-Setting 'EMBEDDINGS_API_KEY') -or (Get-Setting 'EMBEDDINGS_API_KEYS') -or (Get-Setting 'LLM_API_KEY')) {
         Ok 'Embeddings key set (language model and knowledge search)'
     } else {
-        Bad 'No Embeddings key: the agent cannot answer'
-        Fix 'add EMBEDDINGS_API_KEY=... (or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend\.env'
+        Bad 'No language model key: the agent cannot answer'
+        Fix 'add LLM_PRIMARY_KEY=... (or EMBEDDINGS_API_KEY=..., or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend\.env'
     }
 }
 
@@ -472,7 +474,7 @@ function Invoke-Doctor {
         Ok ("Language model: {0} ({1})" -f $llm.active, $llm.model)
     } elseif ($llm) {
         Warn 'No language model: agents cannot answer'
-        Fix 'add EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS (or LLM_API_KEY) to backend\.env, then .\vakya.ps1 restart'
+        Fix 'add LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS, or LLM_API_KEY) to backend\.env, then .\vakya.ps1 restart'
     }
 
     $sb = $health.supabase

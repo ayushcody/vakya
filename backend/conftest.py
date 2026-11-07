@@ -55,7 +55,7 @@ def _gnani_gateway_clean(monkeypatch, tmp_path):
 def _no_embeddings_by_default(monkeypatch):
     """No test calls Embeddings with the developer's real key: the language-model and embedding keys are empty (a test that needs
     them sets its own, with a fake HTTP layer) and the on-disk embedding cache is off."""
-    for name in ("EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDINGS_EMBED_MODEL", "EMBEDDINGS_EMBED_DIM"):
+    for name in ("EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_PROVIDER", "LLM_PRIMARY_KEY", "LLM_PRIMARY_BASE_URL", "LLM_PRIMARY_MODEL", "LLM_EFFORT", "EMBEDDINGS_EMBED_MODEL", "EMBEDDINGS_EMBED_DIM"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("EMBED_DISK_CACHE", "off")
     from services import embeddings as _embeddings

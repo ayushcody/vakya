@@ -170,7 +170,7 @@ def index_questions_for_documents(store, encode: Callable[[List[str]], Sequence]
               "errors": []}
     if not dry_run and chat is None:
         if not question_index.available():
-            report["status"] = "no language model (set EMBEDDINGS_API_KEY)"
+            report["status"] = "no language model (set LLM_PRIMARY_KEY or EMBEDDINGS_API_KEY)"
             return report
     grouped = _group_rows(store)
     for doc in store.select("documents", _mine(agent_id, user_id)):

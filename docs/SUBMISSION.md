@@ -12,7 +12,8 @@ A voice front desk for Indian small businesses, led by the clinic, that answers 
 
 ## Team
 
-Ayush Chougula (primary). Teammate: **TBC** (name, role, email, as registered with the challenge). Two people at most.
+- **Ayush Chougula** (primary registrant): the phone pipeline and every integration: Gnani (Prisma, Timbre, cloning, the gateway), Vobiz telephony, WhatsApp confirmations and Google Calendar sync; schedules and the booking rules, caller memory, and the noise report card.
+- **Atharva** (teammate): the UI. The desk (Today, Bookings, Schedules, Calls, Front desk, Proof), the desk on a phone, and the public site. **TBC:** his surname and registered email as on the challenge form.
 
 ## Problem
 

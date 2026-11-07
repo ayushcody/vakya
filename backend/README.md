@@ -6,8 +6,7 @@ reads every number and date back, commits only on a spoken yes, and leaves a sig
 `/verify`. Returning callers are remembered.
 
 Speech recognition, speech and voice cloning come from Gnani's Prisma and Timbre (`GNANI_API_KEY`, see `../docs/GNANI.md`).
-The language model is Embeddings Flash, hosted, through the OpenAI-compatible provider (`LLM_BASE_URL`, `LLM_MODEL` and
-`LLM_API_KEY`, or `EMBEDDINGS_API_KEY`); knowledge search uses Embeddings embeddings with a keyword (BM25) backup. Nothing runs on
+The language model is hosted (`services/llm.py`; keys and options in `.env.example`); knowledge search uses hosted embeddings with a keyword (BM25) backup. Nothing runs on
 the machine except the app itself, so it needs only a small Python environment.
 
 ## Layout
@@ -51,5 +50,5 @@ cd backend && .venv/bin/python -m pytest -q
 ## Credits and licences
 
 - Speech: [Gnani AI](https://gnani.ai) Prisma (recognition), Timbre (speech) and voice cloning, a hosted API.
-- Agents: Embeddings Flash (hosted) for the language model and for embeddings.
+- Agents: a hosted language model, hosted embeddings.
 - Frameworks: [FastAPI](https://fastapi.tiangolo.com/), [Next.js](https://nextjs.org/).

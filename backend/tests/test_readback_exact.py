@@ -117,7 +117,8 @@ def test_a_no_a_change_or_a_new_request_is_not(said):
 READ_BACK = rb.sentences(ARGS)["en"]
 
 
-def test_offer_then_pick_gets_a_proper_read_back_first(hub):
+def test_offer_then_pick_gets_a_proper_read_back_first(hub, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_CONFIRMATIONS", "off")     # the WhatsApp clause has its own tests (test_call_flow_8nov.py)
     offer = "Thursday 6 pm is busy, but I can do 5:45 pm or 7 pm. Which suits you?"
     c = tools.execute(BOOK, ARGS, previous_agent_text=offer, caller_text="7 pm then, I am Priya Sharma, 9876543210")
     assert c.ok is False and c.value.startswith("NOT DONE") and hub.calls == []

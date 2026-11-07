@@ -57,7 +57,7 @@ def test_ready_says_when_the_embeddings_key_is_missing(app_client, monkeypatch):
     monkeypatch.setenv("GNANI_API_KEY", "test-key-not-real")
     body = get(app_client, "/api/ready")
     assert body["embeddings_configured"] is False and body["ok"] is False
-    assert any("Needs a Embeddings key" in p for p in body["problems"])
+    assert any("set LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY)" in p for p in body["problems"])
 
 
 def test_ready_reports_an_open_breaker_and_a_held_back_desk_lane(app_client, monkeypatch):

@@ -5,7 +5,7 @@ earlier on the same call) and **this number** (so the next call, in either direc
 
 ## 1. Within a call: nothing is left out
 
-Embeddings Flash is shown the dialogue so far (`backend/services/call_notes.py`, used by `turn_messages`):
+The reply model is shown the dialogue so far (`backend/services/call_notes.py`, used by `turn_messages`):
 
 | Situation | What the model sees |
 |---|---|

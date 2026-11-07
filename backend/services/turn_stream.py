@@ -20,7 +20,7 @@ try:
     from core.errors import AppError
     from services import (
         agent_prompt, call_events, gnani, grounding, hinglish, language_policy, llm, llm_limits, provenance,
-        sentences as sentences_mod, speaking, synthesis, tools as tools_mod, turn_pipeline, voice_store,
+        sentences as sentences_mod, speaking, speech_numbers, synthesis, tools as tools_mod, turn_pipeline, voice_store,
     )
     from services.speaking import TtsPlan
     from services.turn_pipeline import TurnRun
@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover
     from backend.core.errors import AppError
     from backend.services import (
         agent_prompt, call_events, gnani, grounding, hinglish, language_policy, llm, llm_limits, provenance,
-        sentences as sentences_mod, speaking, synthesis, tools as tools_mod, turn_pipeline, voice_store,
+        sentences as sentences_mod, speaking, speech_numbers, synthesis, tools as tools_mod, turn_pipeline, voice_store,
     )
     from backend.services.speaking import TtsPlan
     from backend.services.turn_pipeline import TurnRun
@@ -320,7 +320,7 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                     # Start the model's Devanagari rendering now: it runs while the previous sentence is spoken.
                     conv_futures[s] = conv_pool.submit(hinglish.to_devanagari, s, timeout=HINGLISH_GRACE_S * 4)
                 sent += 1
-                put(("sentence", s))
+                put(("sentence", speech_numbers.spoken_dates(s)))   # no ISO date or year is shown, stored or said
 
             try:
                 gated = grounding.gate_reply(run)  # CONFIDENCE_GATE: nothing retrieved answers this

@@ -59,7 +59,7 @@ def test_rules_that_must_stay(clinic):
 def test_the_section_stays_short(clinic):
     """Words as a stable stand-in for tokens (2026-10-19: clinic 849 -> 614).
     22 Oct 2026: +20 words for the read-back rule and the dates-in-code rule; the budget moved by the same amount."""
-    assert len(tools.tools_prompt(clinic, json_protocol=True).split()) <= 470       # was 606
+    assert len(tools.tools_prompt(clinic, json_protocol=True).split()) <= 570       # was 606; +86 words on 8 Nov 2026: one read-back, number asked once, WhatsApp in the read-back, short spoken dates
 
 
 def test_a_non_string_argument_shows_its_type():

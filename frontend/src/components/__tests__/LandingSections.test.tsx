@@ -61,16 +61,16 @@ describe("landing sections", () => {
     expect(figure).toHaveTextContent(/it is not a recording/);
   });
 
-  it("names Prisma, Timbre and cloning with their exact API names, and says they are not yet live-tested", () => {
+  it("names Prisma, Timbre and cloning with their exact API names, and says what has run live", () => {
     const { container } = render(<BuiltOnGnani />);
-    expect(container.textContent).toContain("Integrated. Live numbers coming.");
+    expect(container.textContent).toContain("Live on Gnani since 5 Nov.");
     for (const m of GNANI_MODELS) for (const a of m.api) expect(container.textContent).toContain(a);
     expect(container.textContent).toContain("POST /stt/v3");
     expect(container.textContent).toContain("wss://api.vachana.ai/stt/v3/stream");
     expect(container.textContent).toContain("POST /api/v1/tts/inference");
     expect(container.textContent).toContain("vachana-vc-v1");
-    expect(container.textContent).toMatch(/not yet been run against the live API/);
-    expect(container.textContent).toMatch(/Embeddings Flash/);
+    expect(container.textContent).toMatch(/Voice cloning, the realtime stream and a real phone call have not run live yet/);
+    expect(container.textContent).toMatch(/hosted language model/);
     expect(container.textContent).toMatch(/no second speech model/i);
   });
 
@@ -111,10 +111,10 @@ describe("landing sections", () => {
     expect(container.textContent).toMatch(/Synthetic audio, simulated noise/);
   });
 
-  it("shows the team with a placeholder teammate, and claims no users or partnership", () => {
+  it("shows the team, Ayush and Atharva, and claims no users or partnership", () => {
     const { container } = render(<Team />);
     expect(screen.getByText("Ayush Chougula")).toBeInTheDocument();
-    expect(screen.getByText("Teammate (TBC)")).toBeInTheDocument();
+    expect(screen.getByText("Atharva")).toBeInTheDocument();
     expect(container.textContent).toContain("not affiliated with Gnani AI");
     expect(container.textContent).toContain("invented");
   });

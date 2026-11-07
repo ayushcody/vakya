@@ -540,6 +540,47 @@ def _record_consent(agreed: bool) -> dict:
         return {"status": "recorded", "agreed": agreed, "number_ending": phone[-4:]}
 
 
+def consent_state(phone: Any) -> Optional[bool]:
+    """The number's WhatsApp consent: True (agreed), False (declined), None (never answered). Never raises."""
+    try:
+        number = _digits(phone)
+        if not number:
+            return None
+        row = _load()["consent"].get(number)
+        return bool(row.get("agreed")) if row else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def asks_consent(phone: Any) -> bool:
+    """Should the read-back of a booking for `phone` also say that the confirmation goes out on WhatsApp? Yes while the number
+    has not answered and WhatsApp confirmations are on (the caller's yes to the read-back is then the consent)."""
+    return bool(_digits(phone)) and enabled() and consent_state(phone) is None
+
+
+def consent_from_readback(phone: Any) -> dict:
+    """The caller said yes to a read-back that named the WhatsApp confirmation: that yes is the consent, so the agent never
+    asks a separate question. Recorded as `record_consent` records an answer (agreed, time, conversation id); a number that
+    already answered (either way) is left as it is. Never raises."""
+    try:
+        number = _digits(phone)
+        if not number or not enabled():
+            return {"status": "off"}
+        with _lock:
+            data = _load()
+            if number in data["consent"]:
+                return {"status": "already_answered", "agreed": bool(data["consent"][number].get("agreed"))}
+            data["consent"][number] = {"agreed": True, "at": _iso(), "conversation_id": current_call_id(), "via": "read-back"}
+            for scope, ask in list(data["asks"].items()):
+                if ask.get("phone") == number:
+                    data["asks"].pop(scope)
+            _save(data)
+        return {"status": "recorded", "agreed": True, "number_ending": number[-4:]}
+    except Exception:  # noqa: BLE001
+        log.exception("consent_from_readback failed")
+        return {"status": "off"}
+
+
 def call_ended(conversation_id: Optional[str]) -> int:
     """The call ended (a hangup callback or the stream closing; safe to call twice): its messages go after the delay.
     Never raises. Returns how many items were pulled forward."""

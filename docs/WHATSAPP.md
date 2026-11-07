@@ -2,7 +2,7 @@
 
 After a call in which a booking was made, moved or cancelled, the caller gets **one** WhatsApp message a short while after hanging up, showing the final state. Book 3 pm: "Booked ... 3:00 pm". Next call, move to 4 pm: "Moved ... from ... 3:00 pm to ... 4:00 pm". Next call, cancel: "Cancelled". The code is `backend/services/booking_notify.py` (outbox, consent, timing), `backend/services/whatsapp.py` (Meta's WhatsApp Cloud API client) and `backend/routers/whatsapp.py` (the Settings page's data).
 
-WhatsApp is the only messaging provider here. Speech is Gnani and the language model is Embeddings, as everywhere else in Vakya.
+WhatsApp is the only messaging provider here. Speech is Gnani and the language model is hosted, as everywhere else in Vakya.
 
 ## What happens
 

@@ -1,7 +1,7 @@
 # Local MCP servers
 
 Servers for the [Model Context Protocol](https://modelcontextprotocol.io) that Vakya agents use as tools. Each runs
-over stdio, so any MCP client can use it too: the language model Desktop, the MCP Inspector, or your own code.
+over stdio, so any MCP client can use it too: a desktop assistant, the MCP Inspector, or your own code.
 
 ## appointments
 
@@ -33,7 +33,7 @@ the API exits. In the Playground a small chip under the reply shows what the age
 Cancelling asks first: the agent must say "Shall I cancel booking A12?" in one reply, and the tool only runs on the
 caller's yes in the next one.
 
-### Use it in the language model Desktop (or any MCP client)
+### Use it in any MCP client
 
 Run it from the `backend` directory with the project's Python:
 
@@ -42,7 +42,7 @@ cd backend
 .venv/bin/python -m mcp_servers.appointments
 ```
 
-the language model Desktop (`llm_desktop_config.json`, use absolute paths):
+In your MCP client's config file (use absolute paths):
 
 ```json
 {

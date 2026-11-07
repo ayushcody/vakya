@@ -1,6 +1,10 @@
 """The language model: one chat-completion client for every model call in Vakya (replies, tool turns, side tasks).
 
-It speaks the OpenAI-compatible chat API of a hosted model, by default Google's Embeddings Flash. Settings (backend/.env):
+It speaks to one of two hosted models, chosen by LLM_PROVIDER (primary or embeddings; unset means primary when LLM_PRIMARY_KEY is
+set, else embeddings). The primary model goes through its provider's SDK in services/primary_llm.py, which
+turns the OpenAI-shaped messages and tools below into its request shape and back; LLM_PRIMARY_KEY, LLM_PRIMARY_MODEL and LLM_EFFORT
+are described there. Embeddings is the OpenAI-compatible chat API of Google's Embeddings Flash. Everything else in this module (the
+no-key line, the usage meter, the fallbacks) is the same for both. The Embeddings settings (backend/.env):
   LLM_BASE_URL  default https://generativelanguage.googleapis.com/v1beta/openai/
   LLM_MODEL     default the stable Embeddings Flash (services/embeddings.py)
   LLM_API_KEY   the key (never rotated); EMBEDDINGS_API_KEY / EMBEDDINGS_API_KEYS are accepted too (several keys take turns when
@@ -53,16 +57,27 @@ except ImportError:  # the pooled client needs httpx (in requirements.txt); with
 
 try:
     from core import offline
-    from services import embeddings
+    from services import primary_llm, embeddings
 except ImportError:  # pragma: no cover - running from a different cwd
     from backend.core import offline
-    from backend.services import embeddings
+    from backend.services import primary_llm, embeddings
 
 log = logging.getLogger("vakya.llm")
 
-PROVIDER = "openai-compatible"
+PROVIDER = "openai-compatible"      # the Embeddings (OpenAI-compatible) path
+PRIMARY = primary_llm.PROVIDER        # the primary model's path ("primary")
 NO_KEY_PROVIDER = "no-key"          # the provider name of a fixed no-key line
 NEEDS_KEY_MESSAGE = "Needs a Embeddings key"
+NEEDS_PRIMARY_KEY_MESSAGE = primary_llm.NEEDS_KEY_MESSAGE
+
+
+def active_provider() -> str:
+    """The provider name of the reply model in use right now: "primary" or "openai-compatible" (Embeddings)."""
+    return PRIMARY if primary_llm.provider() == "primary" else PROVIDER
+
+
+def active_model() -> str:
+    return primary_llm.model() if active_provider() == PRIMARY else embeddings.chat_model()
 
 
 class LLMUnavailable(RuntimeError):
@@ -104,6 +119,14 @@ class LLMStreamInterrupted(RuntimeError):
 # ---------------------------------------------------------------------------------------------- configuration
 
 def _unavailable_reason() -> Optional[str]:
+    if active_provider() == PRIMARY:
+        if offline.enabled() and not offline.is_local_url(primary_llm.base_url()):
+            return offline.reason("the hosted language model")
+        if primary_llm.sdk_missing():
+            return "The language model SDK is not installed (pip install -r requirements.txt)"
+        if not primary_llm.api_key():
+            return NEEDS_PRIMARY_KEY_MESSAGE
+        return None if primary_llm.model() else "Set LLM_PRIMARY_MODEL in backend/.env"
     if offline.enabled() and not offline.is_local_url(embeddings.base_url()):
         return offline.reason("the hosted language model")
     if not embeddings.llm_configured():
@@ -116,7 +139,8 @@ def is_unconfigured(e: BaseException) -> bool:
     that failed: the turn then says `no_key_reply` instead of its generic fallback line."""
     if not isinstance(e, LLMUnavailable):
         return False
-    return any(r == NEEDS_KEY_MESSAGE or str(r).startswith("Offline mode") for r in e.reasons.values())
+    return any(r in (NEEDS_KEY_MESSAGE, NEEDS_PRIMARY_KEY_MESSAGE) or str(r).startswith("Offline mode")
+               for r in e.reasons.values())
 
 
 def configured() -> bool:
@@ -130,9 +154,16 @@ last_failures: Dict[str, str] = {}
 
 
 def status() -> dict:
-    """The model this backend talks to and whether it can: {"provider", "base_url", "model", "configured", "reason"}."""
+    """The model this backend talks to and whether it can: {"provider", "label", "base_url", "model", "configured", "reason",
+    "keys"}. `provider` is "primary" or "openai-compatible" (Embeddings); `label` is the name for people ("Hosted language model",
+    "Embeddings Flash")."""
     reason = _unavailable_reason()
-    return {"provider": PROVIDER, "base_url": embeddings.base_url(), "model": embeddings.chat_model(),
+    if active_provider() == PRIMARY:
+        n = 1 if primary_llm.api_key() else 0
+        return {"provider": PRIMARY, "label": primary_llm.label(), "base_url": primary_llm.base_url(), "model": primary_llm.model(),
+                "configured": reason is None, "reason": reason, "keys": {"keys": n, "available": n}}
+    return {"provider": PROVIDER, "label": "Embeddings Flash" if embeddings.uses_embeddings() else embeddings.chat_model(),
+            "base_url": embeddings.base_url(), "model": embeddings.chat_model(),
             "configured": reason is None, "reason": reason, "keys": _key_counts()}
 
 
@@ -702,6 +733,8 @@ def _openai_stream(model: str, messages: List[dict], *, temperature: float, max_
             if isinstance(usage, dict) and usage:
                 info["usage"] = usage
             for choice in obj.get("choices") or []:
+                if choice.get("finish_reason"):
+                    info["finish_reason"] = choice["finish_reason"]
                 delta = choice.get("delta") or {}
                 if delta.get("tool_calls"):
                     deltas.feed(delta["tool_calls"])
@@ -717,9 +750,19 @@ def _no_key_result(language: Optional[str]) -> ChatResult:
     return ChatResult(no_key_reply(language), NO_KEY_PROVIDER, "", 0)
 
 
-def _fail(e: BaseException) -> LLMUnavailable:
-    last_failures[PROVIDER] = f"failed: {type(e).__name__}: {str(e)[:200]}"
-    return LLMUnavailable({PROVIDER: last_failures[PROVIDER]})
+def _fail(e: BaseException, provider: str = PROVIDER) -> LLMUnavailable:
+    detail = primary_llm.error_text(e) if provider == PRIMARY else f"{type(e).__name__}: {str(e)[:200]}"
+    last_failures[provider] = f"failed: {detail}"
+    return LLMUnavailable({provider: last_failures[provider]})
+
+
+def _primary_chat(messages: List[dict], *, max_tokens: int, timeout: float, tools: Optional[List[dict]],
+                 started: float) -> ChatResult:
+    """One blocking primary-model request as a ChatResult. The temperature is not sent (the model rejects it)."""
+    out = primary_llm.complete(messages, max_tokens=_with_reasoning_room(max_tokens, primary_llm.effort()), timeout=timeout,
+                              tools=tools)
+    return ChatResult(out["text"], PRIMARY, primary_llm.model(), int((time.time() - started) * 1000), out["usage"],
+                      tool_calls=out["tool_calls"])
 
 
 def chat(messages: List[dict], *, json_mode: bool = False, temperature: float = 0.3, max_tokens: int = 400,
@@ -736,27 +779,31 @@ def chat(messages: List[dict], *, json_mode: bool = False, temperature: float = 
     LLMUnavailable is raised, which a side task takes as "skip". Any failure of the request raises LLMUnavailable.
 
     `json_tools` is accepted and ignored (it served a provider that rejected native tool calls)."""
+    provider = active_provider()
     reason = _unavailable_reason()
     if reason:
         if no_key_line:
             return _no_key_result(language)
-        raise LLMUnavailable({PROVIDER: reason})
+        raise LLMUnavailable({provider: reason})
     if json_mode and not any("json" in (m.get("content") or "").lower() for m in messages if isinstance(m.get("content"), str)):
         messages = [*messages, {"role": "system", "content": "Respond with a single JSON object only."}]
     if tools and tool_choice == "none":
         messages, tools = _plain_text_messages(messages), None
-    model = embeddings.chat_model()
+    model = active_model()
     t = time.time()
     try:
-        res = _chat_result(_openai_chat(model, messages, temperature=temperature, max_tokens=max_tokens,
-                                        timeout=timeout, tools=tools), model, t)
+        if provider == PRIMARY:
+            res = _primary_chat(messages, max_tokens=max_tokens, timeout=timeout, tools=tools, started=t)
+        else:
+            res = _chat_result(_openai_chat(model, messages, temperature=temperature, max_tokens=max_tokens,
+                                            timeout=timeout, tools=tools), model, t)
         if json_mode:
             res.text = json.dumps(extract_json(res.text))
     except Exception as e:  # noqa: BLE001
         log.warning("language model request failed: %s", e)
-        raise _fail(e) from e
-    _record_usage(PROVIDER, res.usage)
-    last_failures.pop(PROVIDER, None)
+        raise _fail(e, provider) from e
+    _record_usage(provider, res.usage)
+    last_failures.pop(provider, None)
     return res
 
 
@@ -794,10 +841,11 @@ class ChatStream:
             self._gen.close()
 
     def _run(self) -> Iterator[str]:
+        provider = active_provider()
         reason = _unavailable_reason()
         if reason:
             if not self.no_key_line:
-                raise LLMUnavailable({PROVIDER: reason})
+                raise LLMUnavailable({provider: reason})
             line = no_key_reply(self.language)
             self.provider, self.model, self.first_token_ms, self.text = NO_KEY_PROVIDER, "", 0, line
             self.result = StreamResult(line, NO_KEY_PROVIDER, "", 0, {}, 0)
@@ -805,17 +853,21 @@ class ChatStream:
             return
         info: dict = {}
         self.info = info
-        model = embeddings.chat_model()
+        model = active_model()
         info["model"] = model
         t0 = time.time()
         deadline = t0 + self.total_timeout if self.total_timeout else None
         produced = ""
-        stream = _openai_stream(model, self.messages, temperature=self.temperature, max_tokens=self.max_tokens,
-                                timeout=self.timeout, info=info, tools=self.tools)
+        if provider == PRIMARY:
+            stream = primary_llm.stream(self.messages, max_tokens=_with_reasoning_room(self.max_tokens, primary_llm.effort()),
+                                       timeout=self.timeout, info=info, tools=self.tools)
+        else:
+            stream = _openai_stream(model, self.messages, temperature=self.temperature, max_tokens=self.max_tokens,
+                                    timeout=self.timeout, info=info, tools=self.tools)
         try:
             for piece in stream:
                 if not produced:
-                    self.provider, self.model = PROVIDER, model
+                    self.provider, self.model = provider, model
                     self.first_token_ms = int((time.time() - t0) * 1000)
                 produced += piece
                 self.text = produced
@@ -829,23 +881,24 @@ class ChatStream:
             stream.close()
             if produced:
                 log.warning("language model stopped mid-reply: %s", e)
-                raise LLMStreamInterrupted(PROVIDER, model, produced, e) from e
+                raise LLMStreamInterrupted(provider, model, produced, e) from e
             log.warning("language model failed to stream: %s", e)
-            raise _fail(e) from e
+            raise _fail(e, provider) from e
         usage = info.get("usage") or {}
         self.tool_calls = info.get("tool_calls") or []
         if produced or self.tool_calls:
-            self.provider, self.model = PROVIDER, model
+            self.provider, self.model = provider, model
             if self.first_token_ms is None:
                 self.first_token_ms = int((time.time() - t0) * 1000)
-            self.result = StreamResult(produced, PROVIDER, model, int((time.time() - t0) * 1000), usage,
+            self.result = StreamResult(produced, provider, model, int((time.time() - t0) * 1000), usage,
                                        self.first_token_ms, tool_calls=self.tool_calls)
-            _record_usage(PROVIDER, usage)
-            last_failures.pop(PROVIDER, None)
+            _record_usage(provider, usage)
+            last_failures.pop(provider, None)
             return
-        log.warning("language model streamed an empty reply")
-        last_failures[PROVIDER] = "failed: empty reply"
-        raise LLMUnavailable({PROVIDER: "failed: empty reply"})
+        log.warning("language model streamed an empty reply (finish_reason=%s, usage=%s, tools offered=%d)",
+                    info.get("finish_reason"), usage or None, len(self.tools or []))
+        last_failures[provider] = "failed: empty reply"
+        raise LLMUnavailable({provider: "failed: empty reply"})
 
 
 def chat_stream(messages: List[dict], *, temperature: float = 0.3, max_tokens: int = 400, timeout: float = 30.0,
@@ -891,18 +944,27 @@ def _origin(url: str) -> str:
 
 def _prewarm_targets() -> List[str]:
     """The origins a reply will connect to right now: the model's, when it is configured."""
-    return [_origin(embeddings.base_url())] if configured() else []
+    if not configured():
+        return []
+    url = primary_llm.endpoint() if active_provider() == PRIMARY else embeddings.base_url()
+    return [_origin(url)] if url else []
 
 
 def _prewarm_now() -> None:
     client = _client()
-    if client is None:
+    use_primary = active_provider() == PRIMARY
+    if client is None and not use_primary:
         return
     for url in _prewarm_targets():
         started = time.time()
         try:
             # A HEAD to the origin: no key is sent and no token is spent, the answer (usually a 404) does not matter. It
-            # leaves a TCP + TLS connection in the pool, which the first real request of a reply then reuses.
+            # leaves a TCP + TLS connection in the pool, which the first real request of a reply then reuses (the primary
+            # model's connection is warmed on its SDK's own pool).
+            if use_primary:
+                primary_llm.prewarm_connection(url)
+                log.info("LLM connection to %s warm (%d ms)", url, int((time.time() - started) * 1000))
+                continue
             client.head(url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
                         timeout=httpx.Timeout(5.0))
             log.info("LLM connection to %s warm (%d ms)", url, int((time.time() - started) * 1000))

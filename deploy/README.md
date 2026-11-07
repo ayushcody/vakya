@@ -34,7 +34,7 @@ Copy `.env.example` to `.env` and fill it. The settings that matter:
 | Setting | Purpose |
 | --- | --- |
 | `GNANI_API_KEY` | Gnani Prisma, Timbre and voice cloning. Without it nothing can hear or speak. |
-| `EMBEDDINGS_API_KEY` | Embeddings Flash for replies and Embeddings embeddings for document search. |
+| `EMBEDDINGS_API_KEY` | Embeddings embeddings for document search, and Embeddings Flash for replies when `LLM_PROVIDER=embeddings`. |
 | `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls. |
 | `PUBLIC_BASE_URL` | The public HTTPS address of the phone-only port, for example `https://phone.example.in`. |
 | `CORS_ORIGINS` | The origin of the web app, no trailing slash. |
@@ -55,6 +55,6 @@ The API keeps agents, documents, call records, caller profiles, voices and recei
 ## 5. What to expect
 
 - **Cold start.** The first request after a deploy is a little slower while the API opens its connections to Gnani and Embeddings. Place one test call before presenting.
-- **Rate limits.** Gnani allows one active request at a time and Embeddings has its own limits. When Gnani is busy the caller hears a short held line and is offered a callback (`docs/GNANI.md`).
+- **Rate limits.** Gnani allows one active request at a time and the language model has its own limits. When Gnani is busy the caller hears a short held line and is offered a callback (`docs/GNANI.md`).
 - **One replica.** The gateway's one-request-at-a-time rule and the in-memory live-call log live in one process. Run one API replica.
 - **Untested.** This deployment path has not been run against a live Gnani key or a live Vobiz number.

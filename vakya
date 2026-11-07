@@ -93,8 +93,9 @@ install_hint() {  # package name -> how to install it on this OS
 key_report() {  # shared by setup, warm and doctor: one line per key, with the fix when it is missing
     if [[ -n "$(gnani_key)" ]]; then ok "Gnani key set (speech: Prisma listening, Timbre speaking, voice cloning)"
     else bad "GNANI_API_KEY is not set: the agent can neither hear nor speak"; fix "add GNANI_API_KEY=... to backend/.env"; fi
-    if [[ -n "$(embeddings_key)" ]]; then ok "Embeddings key set (language model and knowledge search)"
-    else bad "No Embeddings key: the agent cannot answer"; fix "add EMBEDDINGS_API_KEY=... (or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend/.env"; fi
+    if [[ -n "$(setting LLM_PRIMARY_KEY)" ]]; then ok "Language model key set"
+    elif [[ -n "$(embeddings_key)" ]]; then ok "Embeddings key set (language model and knowledge search)"
+    else bad "No language model key: the agent cannot answer"; fix "add LLM_PRIMARY_KEY=... (or EMBEDDINGS_API_KEY=..., or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend/.env"; fi
 }
 key_summary() { key_report; }
 
@@ -536,7 +537,7 @@ llm = h.get("llm") or {}
 if llm.get("active"):
     ok(f"Language model: {llm['active']} ({llm.get('model')})")
 elif "llm" in h:
-    warn("No language model: agents cannot answer", "add EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS (or LLM_API_KEY) to backend/.env, then ./vakya restart")
+    warn("No language model: agents cannot answer", "add LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS, or LLM_API_KEY) to backend/.env, then ./vakya restart")
 sb = h.get("supabase") or {}
 if sb.get("configured"):
     ok("Supabase connected" if sb.get("reachable") else "Supabase configured but unreachable")

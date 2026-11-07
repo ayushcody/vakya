@@ -12,7 +12,7 @@ MSGS = [{"role": "user", "content": "hi"}]
 def use_endpoint(monkeypatch, url=None, key="secret", model="tiny", effort=None):
     """Point services/llm.py at `url` with a key. `effort`: LLM_REASONING_EFFORT (None leaves the default)."""
     for name in ("LLM_BASE_URL", "LLM_API_KEY", "EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_MODEL", "LLM_REASONING_EFFORT", "LLM_RETRIES",
-                 "LLM_RETRY_MAX_WAIT_S", "VAKYA_OFFLINE"):
+                 "LLM_RETRY_MAX_WAIT_S", "VAKYA_OFFLINE", "LLM_PROVIDER", "LLM_PRIMARY_KEY", "LLM_PRIMARY_MODEL", "LLM_EFFORT"):
         monkeypatch.delenv(name, raising=False)
     if url:
         monkeypatch.setenv("LLM_BASE_URL", url)

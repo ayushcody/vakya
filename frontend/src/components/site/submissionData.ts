@@ -30,8 +30,8 @@ export const SUBMISSION = {
 export const GNANI_STATUS = {
   integrated: true,
   liveRun: false,
-  short: "Integrated. Live numbers coming.",
-  long: "The Gnani code paths are written and tested against fakes. They have not yet been run against the live API because our key has not arrived, so this site publishes no recognition or voice number yet.",
+  short: "Live on Gnani since 5 Nov.",
+  long: "Prisma and Timbre have run against the live API since 5 Nov 2026, and the noise report card is measured on Prisma v3. Voice cloning, the realtime stream and a real phone call have not run live yet.",
 } as const;
 
 export interface GnaniModel {
@@ -70,7 +70,7 @@ export const GNANI_MODELS: GnaniModel[] = [
 
 /** What reasons, and what happens when Gnani cannot answer. */
 export const REASONING = {
-  llm: "Embeddings Flash (Google, hosted) writes the replies and chooses the tools. Embeddings embeddings search the business's documents, with keyword search as the backup. Gnani does the speech; Embeddings does the thinking.",
+  llm: "A hosted language model writes the replies and chooses the tools. Hosted embeddings search the business's documents, with keyword search as the backup. Gnani does the speech; the language model does the thinking.",
   whenBusy: "There is no second speech model. When Gnani is busy or down, the caller hears a short Timbre line rendered ahead of time and is offered a callback.",
 } as const;
 
@@ -131,7 +131,7 @@ export const LIMITATIONS: { title: string; body: string }[] = [
   },
   {
     title: "Reasoning is not Gnani's",
-    body: "Embeddings Flash, hosted by Google, writes the replies. Document text and the caller's words reach Google when it does. When Gnani is down there is no second speech model: the caller hears a short held line and is offered a callback.",
+    body: "Replies come from a hosted language model. Document text and the caller's words reach that provider when it answers. When Gnani is down there is no second speech model: the caller hears a short held line and is offered a callback.",
   },
   {
     title: "Not a legal product",
@@ -142,8 +142,8 @@ export const LIMITATIONS: { title: string; body: string }[] = [
 /* ------------------------------------------------------------------ team */
 
 export const TEAM: { name: string; role: string; tbc?: boolean }[] = [
-  { name: "Ayush Chougula", role: "Builds the phone pipeline, the schedules and this site" },
-  { name: "Teammate (TBC)", role: "Role to be confirmed", tbc: true },
+  { name: "Ayush Chougula", role: "Builds the phone pipeline and every integration: Gnani, Vobiz, Google Calendar and messaging; schedules, booking and the noise report card" },
+  { name: "Atharva", role: "Owns the UI: the desk, the phone layout and this site" },
 ];
 
 /* ------------------------------------------------------------------ the example call on the landing page */

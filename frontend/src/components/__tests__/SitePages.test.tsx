@@ -103,7 +103,7 @@ describe("page content", () => {
     expect(container.querySelector("#demo")).toHaveTextContent("Demo video: 9 Nov");
     // the main call to action goes to the web call, with no partnership claim
     for (const a of screen.getAllByRole("link", { name: "Try a call" })) expect(a).toHaveAttribute("href", "/desk/try");
-    expect(container.querySelector("#gnani")).toHaveTextContent("Integrated. Live numbers coming.");
+    expect(container.querySelector("#gnani")).toHaveTextContent("Live on Gnani since 5 Nov.");
     expect(container.querySelector("#team")).toHaveTextContent("not affiliated with Gnani AI");
     // nothing from the removed platform
     expect(container.textContent).not.toMatch(/WhatsApp|widget|Hear a voice/i);
