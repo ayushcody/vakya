@@ -1,6 +1,6 @@
 # Vakya measured results
 
-Read this first. Almost nothing about Vakya has been measured on its current stack, and this page says so rather than carrying numbers over from an earlier one. **Gnani Prisma, Timbre and cloning have not been run against the live API**, so no accuracy, latency, noise or cost figure here says anything about them. Everything that has been measured is synthetic: no real caller has used Vakya and no real phone line carried these tests.
+Read this first. Two things are measured: the acoustic-stress report card on **Gnani Prisma v3.0** (live API, 6 Nov 2026) and a **scripted** Caller Theatre run. Gnani voice cloning, the realtime Prisma stream, latency on a live phone turn and credits per call have not been measured, so no figure here says anything about them. Everything that has been measured is synthetic: no real caller has used Vakya and no real phone line carried these tests.
 
 ## Measured
 
@@ -8,7 +8,7 @@ Read this first. Almost nothing about Vakya has been measured on its current sta
 
 Nine synthetic callers phone a front desk (an elderly Marathi caller, a rushed Hinglish caller, street noise, one wrong digit, a full slot, a cancellation, a returning caller, a request to note an ID number, a two-night hotel stay). The score comes from what ended up in the booking system. Run 20261104-052003: **9 of 9 passed, 41 of 41 booking fields correct.** Latency is not reported: with a scripted model the first reply takes a few milliseconds, which says nothing about a real model.
 
-**This is a scripted run.** The model step was a deterministic stand-in, not Embeddings Flash, and the input was typed text: speech recognition, the caller voices and the line noise were not exercised (the audio run is pending the Gnani key). What the pass shows is that the tool loop, the schedule store, the availability rules, the read-back and the confirm-before-cancel rule work end to end. It says nothing about what a language model does with the same calls, and any timing is the stand-in's, not a model's (shown as "scripted model, latency not meaningful"). One run per scenario. Method, scenarios and the findings the theatre made: `docs/THEATRE.md`.
+**This is a scripted run.** The model step was a deterministic stand-in, not Embeddings Flash, and the input was typed text: speech recognition, the caller voices and the line noise were not exercised (the audio run has not been made yet). What the pass shows is that the tool loop, the schedule store, the availability rules, the read-back and the confirm-before-cancel rule work end to end. It says nothing about what a language model does with the same calls, and any timing is the stand-in's, not a model's (shown as "scripted model, latency not meaningful"). One run per scenario. Method, scenarios and the findings the theatre made: `docs/THEATRE.md`.
 
 ### Code tests
 
