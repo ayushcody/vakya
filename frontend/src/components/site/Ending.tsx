@@ -118,18 +118,18 @@ const FAQ_ITEMS: Item[] = [
   },
   {
     q: "How well does it hear a noisy phone line?",
-    text: "We do not know yet, and we say so. The report card plays the same 24 invented booking calls clean, over an 8 kHz phone line, through street noise and through a phone codec, with and without the business's own names as keyterms, and scores whether the name, day and time came through. It shows \"Gnani Prisma run pending\" and an empty table until Prisma has heard them. Even then the audio is synthetic, so repeat it on real recordings before relying on a number.",
+    text: "On synthetic calls, well. The report card plays the same 24 invented booking calls clean, over an 8 kHz phone line, through street noise and through a phone codec, with and without the business's own names as keyterms, and scores whether the name, day and time came through. On Gnani Prisma v3.0 (6 Nov 2026) the phone line and the codec cost nothing, and only noise as loud as the speech started to lose a field, which the keyterms won back. Ten-digit phone numbers suffer first in noise. The audio is synthetic, so repeat it on real recordings before relying on a number.",
     a: (
       <>
         <p>
-          We do not know yet, and we say so. The{" "}
+          On synthetic calls, well. The{" "}
           <Link className={link} href="/report-card">
             report card
           </Link>{" "}
           plays the same 24 invented booking calls clean, over an 8 kHz phone line, through street noise and through a phone codec, with and without the business&apos;s own names as
           keyterms, and scores whether the name, day and time came through.
         </p>
-        <p>It shows &ldquo;Gnani Prisma run pending&rdquo; and an empty table until Prisma has heard them. Nothing is estimated in the meantime.</p>
+        <p>On Gnani Prisma v3.0 (6 Nov 2026) the phone line and the codec cost nothing, and only noise as loud as the speech started to lose a field, which the keyterms won back. Ten-digit phone numbers suffer first in noise.</p>
         <p>Even then the audio is synthetic. Repeat it on real recordings before relying on a number. Whatever the table says, the agent reads every number back.</p>
       </>
     ),

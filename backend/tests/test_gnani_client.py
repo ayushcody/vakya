@@ -237,3 +237,55 @@ def test_a_cloned_voice_sends_only_the_documented_fields(api):
     body = json.loads(api.requests[0].content)
     assert set(body) == {"text", "model", "speaker_embedding", "audio_config"}
     assert body["audio_config"]["container"] == "wav"
+
+
+# ---- the edge firewall: an HTML 403 is one blocked request, not a rejected key (seen live 6 Nov 2026)
+
+FIREWALL_PAGE = '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->'
+
+
+def _wav(samples=(1000, -1000, 500, -500) * 400) -> bytes:
+    import array
+    import io
+    import wave
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(array.array("h", samples).tobytes())
+    return out.getvalue()
+
+
+def test_a_firewall_page_is_a_blocked_request_not_an_auth_failure(api):
+    api.reply = lambda r: httpx.Response(403, text=FIREWALL_PAGE, headers={"server": "cloudflare"})
+    with pytest.raises(AppError) as e:
+        gc._request("POST", gc.STT_PATH)
+    assert e.value.code == "PROVIDER_ERROR" and gc.is_blocked(e.value)
+    # the API's own 403 (JSON) is still a rejected key
+    api.reply = lambda r: httpx.Response(403, json={"detail": "Invalid API key"})
+    with pytest.raises(AppError) as e:
+        gc._request("POST", gc.STT_PATH)
+    assert e.value.code == "PROVIDER_AUTH" and not gc.is_blocked(e.value)
+
+
+def test_a_blocked_recognition_is_sent_once_more_slightly_quieter(api):
+    sent = []
+
+    def reply(request):
+        sent.append(request.content)
+        if len(sent) == 1:
+            return httpx.Response(403, text=FIREWALL_PAGE)
+        return httpx.Response(200, json={"transcript": "माझे नाव सचिन शिंदे आहे"})
+    api.reply = reply
+    out = gc._transcribe_raw(_wav(), language="indic-auto", model="prisma-v3.0", fmt="codemix", keyterms=None, topic=None,
+                             previous_text=None, filename="a.wav", content_type="audio/wav")
+    assert out["text"] == "माझे नाव सचिन शिंदे आहे" and len(sent) == 2 and sent[0] != sent[1]
+
+
+def test_a_blocked_request_does_not_pause_gnani(monkeypatch):
+    from services import gnani_gateway as gw
+    blocked = AppError("PROVIDER_ERROR", "blocked", 502, {"provider": "gnani", "status": 403, "blocked": True})
+    reason, counts, retryable = gw._classify(blocked)
+    assert reason == "request_rejected" and counts is False and retryable is False
+    assert gw._classify(AppError("PROVIDER_AUTH", "x", 502, {"status": 401}))[0] == "auth_rejected"

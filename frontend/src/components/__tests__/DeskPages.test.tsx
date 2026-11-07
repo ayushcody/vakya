@@ -217,7 +217,7 @@ describe("Report card", () => {
   it("renders the stress-test report with its caveat inside the desk", () => {
     view(<DeskReportCardPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Report card" })).toBeInTheDocument();
-    expect(screen.getByText("Gnani Prisma run pending")).toBeInTheDocument();
+    expect(screen.queryByText("Gnani Prisma run pending")).toBeNull();
     expect(screen.getByRole("table", { name: /Task completion by condition/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Public page/ })).toHaveAttribute("href", "/report-card");
   });

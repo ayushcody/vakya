@@ -89,7 +89,7 @@ The long version is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Only what has been measured is here.
 
 - **Caller Theatre, scripted run: 9 of 9 scenarios passed, 41 of 41 booking fields correct.** This is a **scripted** run: the model step was a deterministic stand-in rather than Embeddings Flash, and the input was typed text, so speech recognition, the caller voices and the line noise were not exercised. It shows the tools, the schedule rules and the read-back work end to end; it says nothing about what a language model does with the same calls, and its latency is not meaningful (the stand-in answers instantly, so no timing is reported). One run per scenario (20261104-052003), made before the tenth scenario was added. [`docs/THEATRE.md`](docs/THEATRE.md).
-- **Everything else is pending on Gnani.** The acoustic-stress report card (the same 24 invented booking calls clean, over an 8 kHz line, through street noise at 10, 5 and 0 dB and through G.711, with and without keyterms, scored on whether the name, day and time came through) shows "Gnani Prisma run pending" and an empty table at `/report-card`. Prisma and Timbre latency and credits per call are likewise unmeasured. Nothing from an earlier stack is carried over. [`docs/STRESS_REPORT.md`](docs/STRESS_REPORT.md), [`docs/RESULTS.md`](docs/RESULTS.md).
+- **The acoustic-stress report card is measured on Gnani Prisma v3.0 (6 Nov 2026).** The same 24 invented booking calls (Hindi, Marathi, Hinglish) clean, over an 8 kHz line, through G.711 and in street noise at 10, 5 and 0 dB, scored on whether the name, day and time came through: 100% in every condition down to 5 dB noise, 96% at 0 dB (100% with keyterms), median 0.8 s per clip. Ten-digit phone numbers are the first field noise takes (3 of 6 at 5 dB). The audio is synthetic. Latency and credits per live call are not measured yet. [`docs/STRESS_REPORT.md`](docs/STRESS_REPORT.md), [`docs/RESULTS.md`](docs/RESULTS.md).
 
 Reproduce the report card once a key is set: `./vakya stress --conditions all --provider gnani --keyterms`.
 
@@ -147,7 +147,7 @@ The facts the website quotes live in one file, [`frontend/src/components/site/su
 
 ## Limitations
 
-- **Gnani models not yet run live.** Integrated and tested against fakes; the report card is empty until Prisma has been run.
+- **Measured on synthetic calls, not yet on recorded ones.** The report card ran on Gnani Prisma with calls spoken by Timbre; a real caller may score lower.
 - **Synthetic audio, simulated noise.** The report card will show where the cliff is, not what a real caller will score. Repeat it on real recordings.
 - **Caller Theatre ran on a scripted model, text only.** The audio run and a Embeddings Flash run are pending.
 - **Digits are the hard part.** Whether Prisma hears a ten-digit phone number whole is not measured; hence the read-back.

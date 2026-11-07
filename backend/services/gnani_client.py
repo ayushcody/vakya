@@ -17,16 +17,19 @@ backoff, a circuit breaker, a response cache, the usage ledger); the three publi
 it and the `_..._raw` functions do the HTTP. A refusal by the gateway leaves as the same codes as a failure here.
 
 Errors leave as `AppError` (core/errors.py): 402 -> PROVIDER_CREDITS (out of credits), 429 -> RATE_LIMITED, 401/403 ->
-PROVIDER_AUTH, a timeout or an unreachable host -> PROVIDER_UNAVAILABLE, anything else 4xx/5xx -> PROVIDER_ERROR. The API
+PROVIDER_AUTH (but a 403 that is the edge firewall's HTML page is one blocked request: PROVIDER_ERROR with
+details.blocked, and a recognition is sent once more at 98% volume), a timeout or an unreachable host -> PROVIDER_UNAVAILABLE, anything else 4xx/5xx -> PROVIDER_ERROR. The API
 key travels only in the X-API-Key-ID header and is never logged or put in an error message."""
 from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import os
 import re
+import sys
 import threading
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
 
@@ -127,9 +130,50 @@ def _raise_for(status: int, body: Any, retry_after: Optional[float] = None) -> N
         raise AppError("PROVIDER_CREDITS", "Gnani AI reports the account is out of credits.", 402, details)
     if status == 429:
         raise AppError("RATE_LIMITED", "Gnani AI rate limit reached. Please slow down.", 429, details)
+    if status == 403 and _is_firewall_page(snippet):
+        # Gnani's edge firewall (Cloudflare) sometimes blocks one request on its bytes alone and answers with an HTML page.
+        # Seen 6 Nov 2026 on one Marathi clip: the same key answered the next clip at once, and the same clip at 98% volume.
+        # It is one blocked request, not a dead key, so it must not pause the account.
+        details["blocked"] = True
+        raise AppError("PROVIDER_ERROR", "Gnani AI's firewall blocked this one request (the key is fine).", 502, details)
     if status in (401, 403):
         raise AppError("PROVIDER_AUTH", "Gnani AI rejected the API key.", 502, details)
     raise AppError("PROVIDER_ERROR", f"Gnani AI returned HTTP {status}.", 502, details)
+
+
+def _is_firewall_page(body: str) -> bool:
+    """True for an HTML error page (what the edge firewall sends), as opposed to the API's own JSON error."""
+    head = (body or "").lstrip()[:200].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html")
+
+
+def is_blocked(e: BaseException) -> bool:
+    return isinstance(e, AppError) and isinstance(e.details, dict) and bool(e.details.get("blocked"))
+
+
+def _quieter_wav(audio: bytes, gain: float = 0.98) -> Optional[bytes]:
+    """The same 16-bit PCM WAV at `gain` volume (every sample changes, nothing audible does), or None when it is not one."""
+    try:
+        import array
+        import wave
+        with wave.open(io.BytesIO(audio)) as w:
+            params = w.getparams()
+            frames = w.readframes(w.getnframes())
+        if params.sampwidth != 2:
+            return None
+        samples = array.array("h", frames)
+        if sys.byteorder == "big":
+            samples.byteswap()
+        quiet = array.array("h", (int(round(s * gain)) for s in samples))
+        if sys.byteorder == "big":
+            quiet.byteswap()
+        out = io.BytesIO()
+        with wave.open(out, "wb") as o:
+            o.setparams(params)
+            o.writeframes(quiet.tobytes())
+        return out.getvalue()
+    except Exception:  # noqa: BLE001 - not a WAV we can read: no second try
+        return None
 
 
 def _retry_after(resp: "httpx.Response") -> Optional[float]:
@@ -269,9 +313,15 @@ def _transcribe_raw(audio: bytes, *, language: str, model: str, fmt: str, keyter
     rid = (request_id or "").strip()
     if rid:
         extra["headers"] = {REQUEST_ID_HEADER: rid}
-    resp = _request("POST", STT_PATH, files={"audio_file": (filename, audio, content_type)},
-                    data=_stt_form(language, model, fmt, keyterms, topic, previous_text, speaker_names, substitution_map),
-                    **extra)
+    form = _stt_form(language, model, fmt, keyterms, topic, previous_text, speaker_names, substitution_map)
+    try:
+        resp = _request("POST", STT_PATH, files={"audio_file": (filename, audio, content_type)}, data=dict(form), **extra)
+    except AppError as e:
+        quieter = _quieter_wav(audio) if is_blocked(e) else None
+        if quieter is None:
+            raise
+        log.warning("Gnani's firewall blocked one recognition request; sending it once more at 98%% volume")
+        resp = _request("POST", STT_PATH, files={"audio_file": (filename, quieter, content_type)}, data=dict(form), **extra)
     try:
         data = resp.json()
     except ValueError as e:

@@ -4,9 +4,28 @@ How well does a voice receptionist hear a booking when the line is bad? `backend
 
 Ideas it follows: TRACE, "Voice Agents under Acoustic Stress" (arXiv 2609.29452); codec factors for Hindi ASR (2606.09335); Voice of India's accepted-spelling scoring (2604.19151); entity hit rate from the TTS-STT Flywheel paper (2605.03073).
 
-> **Status: Gnani Prisma run pending.** Nothing has been measured, so this document and the `/report-card` page publish no number. Numbers recorded on any earlier recogniser were removed because they did not describe the product as it is now. The page shows an empty table that fills in from a results file as soon as the run exists.
+> **First Gnani run: 6 Nov 2026, Prisma v3.0 (codemix), 24 clips per condition** (full table in
+> `backend/bench/results/stress_report-2026-11-06.json`, published on `/report-card`).
 >
-> When it does fill in, read it with two cautions: the audio is **synthetic speech**, not real callers, and the degradations are simulated, not recorded. Each condition is 24 clips, so one clip is about 4 points of task completion: differences of one or two clips are noise. Use the table to see the *shape* (where the cliff is), and repeat it on real recordings before quoting a number.
+> | Condition | Task completion, plain | with keyterms | Entity hit rate, plain |
+> |---|---:|---:|---:|
+> | clean | 100% | 100% | 100% |
+> | 8 kHz telephone band | 100% | 100% | 100% |
+> | G.711 codec | 100% | 100% | 100% |
+> | noise 10 dB | 100% | 100% | 99% |
+> | noise 5 dB | 100% | 100% | 97% |
+> | noise 0 dB | 96% | 100% | 96% |
+> | 8 kHz + noise 5 dB | 95% (n=21) | 100% | 99% |
+>
+> Median recognition time 0.8 s per clip in every condition. Three clips of the plain 8 kHz + noise run were refused by
+> Gnani's rate limit and are left out (n=21), not counted as passes. AMR was skipped (no encoder in this ffmpeg).
+> Gnani's edge firewall blocked one Marathi clip (`mr-06`) outright; the client now treats that as one blocked request
+> and sends it again at 98% volume, which goes through (`backend/services/gnani_client.py`).
+>
+> Read it with two cautions: the audio is **synthetic speech** (Gnani Timbre), not real callers, and the degradations are
+> simulated, not recorded. Each condition is 24 clips, so one clip is about 4 points: differences of one or two clips are
+> noise. The shape is the finding: the telephone band and the codec cost nothing, and only 0 dB noise (noise as loud as
+> the speech) starts to lose fields, which the clinic's own words (keyterms) win back.
 
 ## Run it
 

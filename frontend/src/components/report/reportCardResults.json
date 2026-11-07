@@ -1,3 +1,906 @@
 {
-  "run": null
+  "run": {
+    "date": "2026-11-06",
+    "model": "prisma-v3.0 (codemix)",
+    "tasks": 24,
+    "commit": "e7f676c",
+    "rows": [
+      {
+        "condition": "clean",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.057,
+        "latencyS": 0.86,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 83.3,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.027,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.116,
+        "latencyS": 0.87,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.028,
+        "latencyS": 0.86,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.05,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.035,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.073,
+        "latencyS": 0.83,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.044,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.024,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 83.3,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.032,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.024,
+        "latencyS": 0.84,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.016,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.042,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 66.7,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.036,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.029,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.061,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.095,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 88.9,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 66.7,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.059,
+        "latencyS": 0.84,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 0.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.115,
+        "latencyS": 0.83,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.112,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 66.7,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.032,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.027,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.024,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.044,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "all",
+        "keyterms": true,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.047,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "hi",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.03,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "mr",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.038,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "hi-en",
+        "keyterms": true,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.072,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.014,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.006,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.0,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "clean",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.037,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.016,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.011,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.0,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.037,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.018,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 83.3,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.016,
+        "latencyS": 0.79,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.0,
+        "latencyS": 0.83,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_10db",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.037,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.02,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.016,
+        "latencyS": 0.79,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 0.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.01,
+        "latencyS": 0.83,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 50.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_5db",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.036,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 95.8,
+        "wer": 0.089,
+        "latencyS": 0.82,
+        "hitByKind": {
+          "amount": 88.9,
+          "date": 100.0,
+          "name": 95.8,
+          "phone": 66.7,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 87.5,
+        "wer": 0.053,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 87.5,
+          "phone": 0.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.096,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "noise_0db",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.117,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 66.7,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "all",
+        "keyterms": false,
+        "n": 24,
+        "taskCompletion": 100.0,
+        "wer": 0.014,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.006,
+        "latencyS": 0.81,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.0,
+        "latencyS": 0.87,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "g711",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.037,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "all",
+        "keyterms": false,
+        "n": 21,
+        "taskCompletion": 95.2,
+        "wer": 0.038,
+        "latencyS": 0.83,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 95.2,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "hi",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 100.0,
+        "wer": 0.024,
+        "latencyS": 0.8,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "mr",
+        "keyterms": false,
+        "n": 8,
+        "taskCompletion": 87.5,
+        "wer": 0.034,
+        "latencyS": 0.85,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 87.5,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      },
+      {
+        "condition": "tel8k+noise_5db",
+        "language": "hi-en",
+        "keyterms": false,
+        "n": 5,
+        "taskCompletion": 100.0,
+        "wer": 0.067,
+        "latencyS": 0.84,
+        "hitByKind": {
+          "amount": 100.0,
+          "date": 100.0,
+          "name": 100.0,
+          "phone": 100.0,
+          "time": 100.0
+        }
+      }
+    ]
+  }
 }

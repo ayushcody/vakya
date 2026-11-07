@@ -29,7 +29,7 @@ Vakya is a phone front desk for small businesses in India. It answers calls (Vob
 
 ## Measured numbers
 
-One thing is measured: **Caller Theatre, scripted model, text run, 9 of 9 scenarios passed, 41 of 41 booking fields correct.** It shows the tools and rules work end to end, not what a model does; its latency is not meaningful (scripted model) and is not reported. **Everything else is pending on Gnani:** the acoustic-stress report card on Prisma (the `/report-card` page is empty and says "Gnani Prisma run pending"), Prisma and Timbre latency, credits per call. See `docs/RESULTS.md`.
+Two things are measured: **Caller Theatre, scripted model, text run, 9 of 9 scenarios passed, 41 of 41 booking fields correct.** It shows the tools and rules work end to end, not what a model does; its latency is not meaningful (scripted model) and is not reported. **The acoustic-stress report card is measured on Gnani Prisma v3.0 (6 Nov 2026).** The same 24 invented booking calls (Hindi, Marathi, Hinglish) clean, over an 8 kHz line, through G.711 and in street noise at 10, 5 and 0 dB, scored on whether the name, day and time came through: 100% in every condition down to 5 dB noise, 96% at 0 dB (100% with keyterms), median 0.8 s per clip. Ten-digit phone numbers are the first field noise takes (3 of 6 at 5 dB). The audio is synthetic. Still pending: latency and credits per live call. See `docs/RESULTS.md`.
 
 ## Known issues
 
