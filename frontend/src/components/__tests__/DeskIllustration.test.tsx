@@ -27,10 +27,10 @@ describe("DeskIllustration", () => {
   it("draws the scene for a known front desk, decorative by default", () => {
     const { container } = render(<DeskIllustration id="hotel" />);
     const img = container.querySelector("img")!;
-    expect(img.getAttribute("src")).toBe("/illustrations/hotel-icon.svg");
+    expect(img.getAttribute("src")).toBe("/illustrations/hotel.svg");
     expect(img.getAttribute("alt")).toBe("");
     expect(img.getAttribute("aria-hidden")).toBe("true");
-    expect(img.parentElement!.className).toContain("aspect-[320/220]");
+    expect(img.getAttribute("width")).toBe("320");
   });
 
   it("draws the 32 px glyph as an icon", () => {
@@ -43,9 +43,9 @@ describe("DeskIllustration", () => {
 
   it("keeps the 320 x 220 ratio when given a width", () => {
     const { container } = render(<DeskIllustration id="clinic" size={160} />);
-    const panel = container.firstElementChild as HTMLElement;
-    expect(panel.style.width).toBe("160px");
-    expect(panel.style.height).toBe("110px");
+    const img = container.querySelector("img")!;
+    expect(img.style.width).toBe("160px");
+    expect(img.style.height).toBe("110px");
   });
 
   it("is announced only when it has a label", () => {
@@ -61,7 +61,7 @@ describe("DeskIllustration", () => {
   it("falls back to custom when the file fails to load", () => {
     const { container } = render(<DeskIllustration id="office" />);
     fireEvent.error(container.querySelector("img")!);
-    expect(container.querySelector("img")!.getAttribute("src")).toBe("/illustrations/custom-icon.svg");
+    expect(container.querySelector("img")!.getAttribute("src")).toBe("/illustrations/custom.svg");
   });
 });
 
@@ -183,6 +183,6 @@ describe("landing strip: For every front desk", () => {
     ).toBeTruthy();
     const items = screen.getAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual(DESK_IDS.map((id) => deskTypes[id].label));
-    expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("src"))).toEqual(DESK_IDS.map((id) => `/illustrations/${id}-icon.svg`));
+    expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("src"))).toEqual(DESK_IDS.map((id) => `/illustrations/${id}.svg`));
   });
 });

@@ -40,7 +40,7 @@ describe("AgentHeader", () => {
   it("shows the agent's type illustration, the type label and the persona chips", () => {
     render(header(agent({ template_id: "hotel" })), hotel);
     const art = screen.getByTestId("desk-illustration").querySelector("img")!;
-    expect(art.getAttribute("src")).toBe("/illustrations/hotel-icon.svg");
+    expect(art.getAttribute("src")).toBe("/illustrations/hotel.svg");
     expect(screen.getByTestId("desk-type").textContent).toBe("Hotel front desk");
     const chips = within(screen.getByRole("list", { name: "How it sounds" })).getAllByRole("listitem");
     expect(chips.map((c) => c.textContent)).toEqual(["Courteous", "Polished", "Quick", "Helpful"]);
@@ -49,12 +49,12 @@ describe("AgentHeader", () => {
   it("uses the type this browser remembers when the server did not store one", () => {
     rememberDeskType("a1", "hotel");
     render(header(agent()), hotel);
-    expect(screen.getByTestId("desk-illustration").querySelector("img")!.getAttribute("src")).toBe("/illustrations/hotel-icon.svg");
+    expect(screen.getByTestId("desk-illustration").querySelector("img")!.getAttribute("src")).toBe("/illustrations/hotel.svg");
   });
 
   it("falls back to the custom desk, without a type label or persona chips", () => {
     render(header(agent()), hotel);
-    expect(screen.getByTestId("desk-illustration").querySelector("img")!.getAttribute("src")).toBe("/illustrations/custom-icon.svg");
+    expect(screen.getByTestId("desk-illustration").querySelector("img")!.getAttribute("src")).toBe("/illustrations/custom.svg");
     expect(screen.getByTestId("desk-type").textContent).toBe("Front desk");
     expect(screen.queryByRole("list", { name: "How it sounds" })).toBeNull();
   });
