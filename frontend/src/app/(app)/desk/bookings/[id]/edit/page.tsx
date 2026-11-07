@@ -28,7 +28,7 @@ function EditSchedule({ id }: { id: string }) {
   if (!schedule) {
     return (
       <PageShell width="default">
-        <EmptyState icon={<CalendarX />} title="This schedule is not here any more" description="It may have been deleted." action={<LinkButton href="/desk/bookings">Back to bookings</LinkButton>} />
+        <EmptyState icon={<CalendarX />} title="This schedule is not here any more" description="It may have been deleted." action={<LinkButton href="/desk/schedules">Back to schedules</LinkButton>} />
       </PageShell>
     );
   }

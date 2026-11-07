@@ -5,15 +5,16 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
+import type { NavIconProps } from "./icons/NavIcons";
 import {
-  AgentsIcon,
-  BookingsIcon,
-  CallsIcon,
-  OverviewIcon,
-  SettingsIcon,
-  VerifyIcon,
-  type NavIconProps,
-} from "./icons/NavIcons";
+  BookingsDuoIcon,
+  CallsDuoIcon,
+  FrontDeskIcon,
+  ProofIcon,
+  ScheduleIcon,
+  SettingsDuoIcon,
+  TodayIcon,
+} from "./icons/DuoNavIcons";
 import { useHealth } from "@/hooks/useApi";
 import { useAuth } from "./AuthProvider";
 import { Logo, LogoMark } from "./Logo";
@@ -26,20 +27,24 @@ interface NavItem {
   icon: ComponentType<NavIconProps>;
   /** Pages reached from this item that should mark it as current (This week opens from Today, Callers from Calls). */
   also?: string[];
+  /** Overrides the default "this page or below it" check. */
+  match?: (pathname: string) => boolean;
 }
 
 /** The desk: the four pages a front desk uses every day, then the evidence. Each has its own icon. Try a call is the
  *  button on Today, This week opens from Today, Callers from Calls. The command palette lists every page. */
 export const NAV: NavItem[] = [
-  { label: "Today", href: "/desk", icon: OverviewIcon, also: ["/desk/week"] },
-  { label: "Bookings", href: "/desk/bookings", icon: BookingsIcon },
-  { label: "Calls", href: "/desk/calls", icon: CallsIcon, also: ["/desk/callers"] },
-  { label: "Front desk", href: "/desk/receptionist", icon: AgentsIcon, also: ["/desk/try"] },
-  { label: "Proof", href: "/desk/proof", icon: VerifyIcon, also: ["/desk/report-card", "/desk/theatre"] },
+  { label: "Today", href: "/desk", icon: TodayIcon, also: ["/desk/week"] },
+  { label: "Bookings", href: "/desk/bookings", icon: BookingsDuoIcon, match: (p) => p === "/desk/bookings" },
+  // A schedule opens at /desk/bookings/<id> (and a new one at /desk/bookings/new), so those pages belong to Schedules.
+  { label: "Schedules", href: "/desk/schedules", icon: ScheduleIcon, match: (p) => p === "/desk/schedules" || p.startsWith("/desk/bookings/") },
+  { label: "Calls", href: "/desk/calls", icon: CallsDuoIcon, also: ["/desk/callers"] },
+  { label: "Front desk", href: "/desk/receptionist", icon: FrontDeskIcon, also: ["/desk/try"] },
+  { label: "Proof", href: "/desk/proof", icon: ProofIcon, also: ["/desk/report-card", "/desk/theatre"] },
 ];
 
 /** Settings sits apart at the foot of the list. */
-const FOOT_ITEMS: NavItem[] = [{ label: "Settings", href: "/desk/settings", icon: SettingsIcon }];
+const FOOT_ITEMS: NavItem[] = [{ label: "Settings", href: "/desk/settings", icon: SettingsDuoIcon }];
 
 /** The one line at the foot of the sidebar. */
 export type SystemState = "ready" | "starting" | "attention";
@@ -91,6 +96,7 @@ export function DeskSidebar({ collapsed = false, onToggleCollapsed }: Props) {
   const under = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const isActive = (href: string) => {
     const item = [...NAV, ...FOOT_ITEMS].find((i) => i.href === href);
+    if (item?.match) return item.match(pathname);
     if (item?.also?.some(under)) return true;
     if (href === "/desk") return pathname === "/desk";
     return under(href);

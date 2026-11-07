@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 import BookingsPage from "@/app/(app)/desk/bookings/page";
+import SchedulesPage from "@/app/(app)/desk/schedules/page";
 import { ScheduleGlance } from "@/components/desk/ScheduleGlance";
 import { ScheduleView } from "@/components/schedules/ScheduleView";
 import { api } from "@/lib/api";
@@ -109,8 +110,8 @@ beforeEach(() => {
 
 describe("Bookings overview", () => {
   it("shows a card for each schedule with hours in plain words and today's count", async () => {
-    view(<BookingsPage />);
-    expect(screen.getByRole("heading", { level: 1, name: /Bookings for/ })).toBeInTheDocument();
+    view(<SchedulesPage />);
+    expect(screen.getByRole("heading", { level: 1, name: /Schedules for/ })).toBeInTheDocument();
     const link = await screen.findByRole("link", { name: /Doctor consultations/ });
     expect(link).toHaveAttribute("href", "/desk/bookings/S1");
     expect(within(link).getByText("Every day, 10 to 11 am")).toBeInTheDocument();
@@ -121,14 +122,14 @@ describe("Bookings overview", () => {
   });
 
   it("makes every card as wide as its column, so cards in a list are the same width on a phone", async () => {
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     const cards = await screen.findAllByRole("link", { name: /Open calendar|New schedule/ });
     expect(cards.length).toBeGreaterThanOrEqual(3);
     for (const c of cards) expect(c.className).toMatch(/\bw-full\b/);
   });
 
   it("filters by front desk and remembers the choice", async () => {
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     await screen.findByRole("link", { name: /Doctor consultations/ });
     fireEvent.click(screen.getByRole("button", { name: /Front desk: All front desks/ }));
     fireEvent.click(screen.getByRole("option", { name: "Harbour Hotel" }));
@@ -141,13 +142,13 @@ describe("Bookings overview", () => {
 
   it("starts on the remembered front desk", async () => {
     localStorage.setItem("vakya-bookings-desk", "a1");
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByRole("button", { name: /Front desk: Sunrise Clinic/ })).toBeInTheDocument();
   });
 
   it("explains schedules in a sentence and offers to create one when there are none", async () => {
     serve({ "/api/schedules": { schedules: [] } });
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByText("No schedules yet")).toBeInTheDocument();
     expect(screen.getByText(/A schedule says which days and hours callers can book/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Create a schedule/ })).toHaveAttribute("href", "/desk/bookings/new");
@@ -156,7 +157,7 @@ describe("Bookings overview", () => {
   it("lists the upcoming bookings, with the schedule they are on", async () => {
     view(<BookingsPage />);
     expect(await screen.findByText(/Priya Sharma/)).toBeInTheDocument();
-    expect(screen.getAllByText("Doctor consultations").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Doctor consultations").length).toBeGreaterThan(0);
   });
 
   it("lists the upcoming bookings as an explorer list: Name, When, Schedule, Front desk, Source, Status", async () => {
@@ -174,7 +175,7 @@ describe("Bookings overview", () => {
 
   it("opens the drawer of the booking named in ?booking=", async () => {
     mockSearch = "booking=A5";
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Priya Sharma/)).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
@@ -182,7 +183,7 @@ describe("Bookings overview", () => {
 
   it("says quietly that a ?booking= it does not know was not found, and opens nothing", async () => {
     mockSearch = "booking=A99";
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByRole("status")).toHaveTextContent(/Booking A99 was not found/);
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -191,7 +192,7 @@ describe("Bookings overview", () => {
 
   it("says in plain words when the schedules cannot be loaded", async () => {
     serve({ "/api/schedules": () => { throw new Error("boom"); } });
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByText("Could not load the schedules")).toBeInTheDocument();
     expect(screen.queryByText(/boom/)).not.toBeInTheDocument();
   });
@@ -199,13 +200,13 @@ describe("Bookings overview", () => {
   it("sends someone with no front desk and no schedule to set one up", async () => {
     (hooks.useAgents as jest.Mock).mockReturnValue({ data: [], isLoading: false, mutate: jest.fn() });
     serve({ "/api/schedules": { schedules: [] } });
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByText("Set up a front desk first")).toBeInTheDocument();
   });
 
   it("still shows schedules that belong to no front desk", async () => {
     (hooks.useAgents as jest.Mock).mockReturnValue({ data: [], isLoading: false, mutate: jest.fn() });
-    view(<BookingsPage />);
+    view(<SchedulesPage />);
     expect(await screen.findByRole("link", { name: /Doctor consultations/ })).toBeInTheDocument();
   });
 });

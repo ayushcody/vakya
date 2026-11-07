@@ -25,6 +25,7 @@ export const PAGE_ACTIONS: PaletteAction[] = [
   { id: "go-today", label: "Go to Today", hint: "Page", href: "/desk", keywords: "home overview dashboard start bookings" },
   { id: "go-week", label: "Go to This week", hint: "Page", href: "/desk/week", keywords: "report summary insights busiest hours after hours languages missed weekly" },
   { id: "go-receptionist", label: "Go to Front desk", hint: "Page", href: "/desk/receptionist", keywords: "agent set up template hours slots languages documents voice phone number" },
+  { id: "go-schedules", label: "Go to Schedules", hint: "Page", href: "/desk/schedules", keywords: "hours slots calendar block busy timings" },
   { id: "go-calls", label: "Go to Calls", hint: "Page", href: "/desk/calls", keywords: "phone transcripts history live monitor takeover" },
   { id: "go-bookings", label: "Go to Bookings", hint: "Page", href: "/desk/bookings", keywords: "appointments booked slots" },
   { id: "go-callers", label: "Go to Callers", hint: "Page", href: "/desk/callers", keywords: "remembered returning profiles forget" },

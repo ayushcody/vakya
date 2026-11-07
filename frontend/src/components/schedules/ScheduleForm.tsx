@@ -172,7 +172,7 @@ export function ScheduleForm({ schedule }: { schedule?: Schedule }) {
       await deleteSchedule(schedule.id, force);
       await mutate((k) => typeof k === "string" && k.startsWith("/api/schedules"));
       toast.success("Schedule deleted");
-      router.push("/desk/bookings");
+      router.push("/desk/schedules");
     } catch (e) {
       if (hasBookingsError(e) && !force) setConfirmDelete("force");
       else toast.error(plainError(e, "Could not delete the schedule."));
