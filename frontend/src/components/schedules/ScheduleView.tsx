@@ -108,7 +108,7 @@ export function ScheduleView({ id }: { id: string }) {
           icon={<CalendarX />}
           title="This schedule is not here any more"
           description="It may have been deleted. Go back to the list to pick another one."
-          action={<LinkButton href="/desk/bookings">Back to bookings</LinkButton>}
+          action={<LinkButton href="/desk/schedules">Back to schedules</LinkButton>}
         />
       </PageShell>
     );
@@ -241,7 +241,7 @@ function Loaded({ schedule }: { schedule: Schedule }) {
   return (
     <PageShell width="full" className="space-y-6">
       <header className="space-y-3">
-        <Link href="/desk/bookings" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary">
+        <Link href="/desk/schedules" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary">
           <ArrowLeft aria-hidden className="size-4" /> All schedules
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-4">

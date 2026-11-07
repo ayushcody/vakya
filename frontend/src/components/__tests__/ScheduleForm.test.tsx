@@ -269,7 +269,7 @@ describe("Edit schedule", () => {
     expect(screen.queryByText(/HAS_BOOKINGS/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete it and its bookings" }));
     await waitFor(() => expect(del).toHaveBeenLastCalledWith("/api/schedules/S1?force=1"));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/desk/bookings"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/desk/schedules"));
   });
 
   it("says so when the schedule is gone", async () => {
