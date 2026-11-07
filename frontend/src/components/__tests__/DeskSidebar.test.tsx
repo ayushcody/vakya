@@ -25,21 +25,26 @@ const desktop = () => document.querySelector("aside") as HTMLElement;
 const mainNav = () => within(desktop()).getByRole("navigation", { name: "Main" });
 const linkRows = (root: HTMLElement) => within(root).getAllByRole("link").map((a) => [a.textContent?.trim(), a.getAttribute("href")]);
 
-test("one app for one job: the ten pages of the desk, then the public receipt check", async () => {
+test("the desk: five daily pages and Settings at the foot, each with its own icon", async () => {
   await open("/desk");
   expect(linkRows(mainNav())).toEqual([
     ["Today", "/desk"],
-    ["This week", "/desk/week"],
-    ["Front desk", "/desk/receptionist"],
-    ["Calls", "/desk/calls"],
     ["Bookings", "/desk/bookings"],
-    ["Callers", "/desk/callers"],
-    ["Try a call", "/desk/try"],
-    ["Report card", "/desk/report-card"],
-    ["Caller Theatre", "/desk/theatre"],
+    ["Calls", "/desk/calls"],
+    ["Front desk", "/desk/receptionist"],
+    ["Proof", "/desk/proof"],
     ["Settings", "/desk/settings"],
-    ["Check a receipt", "/verify"],
   ]);
+  const icons = within(mainNav()).getAllByRole("link").map((a) => a.querySelector("svg")?.innerHTML);
+  expect(new Set(icons).size).toBe(icons.length);
+});
+
+test("a page opened from an item marks that item: This week under Today, Callers under Calls, Report card under Proof", async () => {
+  for (const [path, item] of [["/desk/week", "Today"], ["/desk/callers", "Calls"], ["/desk/report-card", "Proof"], ["/desk/try", "Front desk"]]) {
+    const { unmount } = await open(path);
+    expect(within(mainNav()).getByRole("link", { name: item })).toHaveAttribute("aria-current", "page");
+    unmount();
+  }
 });
 
 test("there is no area switch and nothing from the old platform", async () => {
@@ -68,7 +73,7 @@ test("the mobile drawer opens from the top bar, lists the same pages and closes"
   await open("/desk");
   fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
-  expect(within(drawer).getAllByRole("link", { name: /Today|This week|Front desk|Calls|Bookings|Callers|Try a call|Report card|Caller Theatre|Settings/ })).toHaveLength(10);
+  expect(within(drawer).getAllByRole("link", { name: /^(Today|Bookings|Calls|Front desk|Proof|Settings)$/ })).toHaveLength(6);
   fireEvent.click(within(drawer).getByRole("button", { name: "Close menu" }));
   await act(async () => {});
   expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();

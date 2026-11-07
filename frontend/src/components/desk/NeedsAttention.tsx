@@ -65,7 +65,7 @@ export function NeedsAttention() {
   return (
     <section aria-labelledby="attention-title">
       <h2 id="attention-title" className="mb-2 text-sm font-semibold text-text-primary">
-        Needs your attention
+        Needs you
         {items.length > 0 && (
           <span className="ml-2 rounded-full bg-accent-warning/15 px-2 py-0.5 text-xs text-warning-text">{items.length}</span>
         )}
@@ -73,7 +73,7 @@ export function NeedsAttention() {
       {items.length === 0 ? (
         <p className="flex items-center gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary">
           <CheckCircle2 className="size-4 shrink-0 text-accent-success" aria-hidden />
-          Nothing needs your attention right now.
+          Nothing needs you right now.
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border bg-bg-surface">

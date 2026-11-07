@@ -7,13 +7,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import {
   AgentsIcon,
-  AnalyticsIcon,
   BookingsIcon,
-  CallersIcon,
   CallsIcon,
   OverviewIcon,
-  WeekIcon,
-  TryIcon,
   SettingsIcon,
   VerifyIcon,
   type NavIconProps,
@@ -28,24 +24,22 @@ interface NavItem {
   label: string;
   href: string;
   icon: ComponentType<NavIconProps>;
+  /** Pages reached from this item that should mark it as current (This week opens from Today, Callers from Calls). */
+  also?: string[];
 }
 
-/** The desk: one app for one job (answering and booking calls). The command palette lists the same pages. */
+/** The desk: the four pages a front desk uses every day, then the evidence. Each has its own icon. Try a call is the
+ *  button on Today, This week opens from Today, Callers from Calls. The command palette lists every page. */
 export const NAV: NavItem[] = [
-  { label: "Today", href: "/desk", icon: OverviewIcon },
-  { label: "This week", href: "/desk/week", icon: WeekIcon },
-  { label: "Front desk", href: "/desk/receptionist", icon: AgentsIcon },
-  { label: "Calls", href: "/desk/calls", icon: CallsIcon },
+  { label: "Today", href: "/desk", icon: OverviewIcon, also: ["/desk/week"] },
   { label: "Bookings", href: "/desk/bookings", icon: BookingsIcon },
-  { label: "Callers", href: "/desk/callers", icon: CallersIcon },
-  { label: "Try a call", href: "/desk/try", icon: TryIcon },
-  { label: "Report card", href: "/desk/report-card", icon: AnalyticsIcon },
-  { label: "Caller Theatre", href: "/desk/theatre", icon: TryIcon },
-  { label: "Settings", href: "/desk/settings", icon: SettingsIcon },
+  { label: "Calls", href: "/desk/calls", icon: CallsIcon, also: ["/desk/callers"] },
+  { label: "Front desk", href: "/desk/receptionist", icon: AgentsIcon, also: ["/desk/try"] },
+  { label: "Proof", href: "/desk/proof", icon: VerifyIcon, also: ["/desk/report-card", "/desk/theatre"] },
 ];
 
-/** Public page outside the desk: anyone can check a clip, so it also works as a link to share. */
-const PUBLIC_ITEMS: NavItem[] = [{ label: "Check a receipt", href: "/verify", icon: VerifyIcon }];
+/** Settings sits apart at the foot of the list. */
+const FOOT_ITEMS: NavItem[] = [{ label: "Settings", href: "/desk/settings", icon: SettingsIcon }];
 
 /** The one line at the foot of the sidebar. */
 export type SystemState = "ready" | "starting" | "attention";
@@ -94,9 +88,12 @@ export function DeskSidebar({ collapsed = false, onToggleCollapsed }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
+  const under = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const isActive = (href: string) => {
+    const item = [...NAV, ...FOOT_ITEMS].find((i) => i.href === href);
+    if (item?.also?.some(under)) return true;
     if (href === "/desk") return pathname === "/desk";
-    return pathname === href || pathname.startsWith(href + "/");
+    return under(href);
   };
 
   const name =
@@ -152,8 +149,8 @@ export function DeskSidebar({ collapsed = false, onToggleCollapsed }: Props) {
       {/* In the drawer the whole panel scrolls (one scroll area), so the list and the footer are always reachable on a short phone. */}
       <nav aria-label="Main" className={cn("flex-1 px-2 pb-3 pt-4", !inDrawer && "overflow-y-auto overflow-x-hidden")}>
         <div className="space-y-0.5">{NAV.map((item) => navLink(item, compact, inDrawer))}</div>
-        <div role="group" aria-label="Public pages" className={cn("mt-4 border-t border-border pt-3", compact && "mt-3")}>
-          {PUBLIC_ITEMS.map((item) => navLink(item, compact, inDrawer))}
+        <div role="group" aria-label="Settings" className={cn("mt-4 border-t border-border pt-3", compact && "mt-3")}>
+          {FOOT_ITEMS.map((item) => navLink(item, compact, inDrawer))}
         </div>
       </nav>
 

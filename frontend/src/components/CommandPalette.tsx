@@ -31,6 +31,7 @@ export const PAGE_ACTIONS: PaletteAction[] = [
   { id: "go-try", label: "Go to Try a call", hint: "Page", href: "/desk/try", keywords: "test web call phone call me practice demo" },
   { id: "go-report", label: "Go to Report card", hint: "Page", href: "/desk/report-card", keywords: "acoustic stress noise 8 khz codec task completion accuracy" },
   { id: "go-theatre", label: "Go to Caller Theatre", hint: "Page", href: "/desk/theatre", keywords: "synthetic callers scenarios scorer edge case aadhaar cancellation test" },
+  { id: "go-proof", label: "Go to Proof", hint: "Page", href: "/desk/proof", keywords: "evidence report card noise theatre receipt verify judges" },
   { id: "go-settings", label: "Go to Settings", hint: "Page", href: "/desk/settings", keywords: "gnani prisma timbre provider consent privacy phone" },
   { id: "go-verify", label: "Check a voice receipt", hint: "Page", href: "/verify", keywords: "verify receipt clip" },
   { id: "clone", label: "Clone a voice", hint: "Action", href: "/desk/receptionist?tab=voice&new=1", keywords: "new voice record consent" },
