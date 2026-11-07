@@ -118,9 +118,10 @@ describe("page content", () => {
     expect(within(screen.getByRole("navigation", { name: "Next page" })).getByRole("link")).toHaveAttribute("href", "/report-card");
   });
 
-  it("/report-card holds the method, the empty stress-test tables and the pending note, then a Next link to Caller Theatre", () => {
+  it("/report-card holds the method, the measured stress-test tables and no pending note, then a Next link to Caller Theatre", () => {
     renderAt("/report-card", () => <ReportCardPage />);
-    expect(screen.getByText("Gnani Prisma run pending")).toBeInTheDocument();
+    expect(screen.queryByText("Gnani Prisma run pending")).toBeNull();
+    expect(screen.getByText(/Measured on Gnani Prisma v3.0 on 6 Nov 2026/)).toBeInTheDocument();
     expect(screen.getByRole("table", { name: /Task completion by condition/ })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: /Share of each field found/ })).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Next page" })).getByRole("link")).toHaveAttribute("href", "/theatre");

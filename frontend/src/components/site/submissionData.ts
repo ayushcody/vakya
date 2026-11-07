@@ -102,16 +102,16 @@ export const THEATRE_RUN = {
 
 export const LIMITATIONS: { title: string; body: string }[] = [
   {
-    title: "Gnani models not yet run live",
-    body: "Prisma, Timbre and cloning are integrated and tested against fakes. The first live run needs our API key. Until then the report card is empty and says so.",
+    title: "Measured on synthetic calls, not yet on recorded ones",
+    body: "Prisma and Timbre run live: the report card was measured on Gnani Prisma v3.0 on 6 Nov 2026. Its calls are spoken by Timbre, not by real callers, so it shows where the cliff is, not what a real caller will score.",
   },
   {
     title: "Synthetic audio, simulated noise",
-    body: "The report card will use invented bookings spoken by synthetic voices, with noise and codecs added by software. It will show where the cliff is, not what a real caller will score.",
+    body: "The report card uses invented bookings spoken by synthetic voices, with noise and codecs added by software. Each condition is 24 clips, so one clip is about 4 points.",
   },
   {
     title: "Digits are the hard part",
-    body: "Whether Prisma hears a ten-digit phone number whole is not measured yet. That is why the agent reads every number back and commits only on a spoken yes.",
+    body: "A ten-digit phone number is the first field noise takes: heard whole in every clean, 8 kHz and codec clip, but in only 3 of the 6 clips that have one at 5 dB street noise. That is why the agent reads every number back and commits only on a spoken yes.",
   },
   {
     title: "Missed-call callback not tried on a live number",

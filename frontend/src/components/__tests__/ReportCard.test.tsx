@@ -15,14 +15,17 @@ const SAMPLE: StressRun = {
 };
 
 describe("report card results file", () => {
-  it("is empty until Gnani Prisma has been run, so no number is published", () => {
-    expect(STRESS_RUN).toBeNull();
+  it("holds the Gnani Prisma run of 6 Nov 2026, with a plain and a keyterm row for every condition", () => {
+    expect(STRESS_RUN).not.toBeNull();
+    expect(STRESS_RUN!.model).toContain("prisma-v3.0");
+    for (const c of CONDITIONS) for (const k of [false, true])
+      expect(STRESS_RUN!.rows.some((r) => r.condition === c.id && r.language === "all" && r.keyterms === k)).toBe(true);
   });
 });
 
 describe("ReportCard with no run", () => {
   it("says the Gnani Prisma run is pending, before any table", () => {
-    render(<ReportCard />);
+    render(<ReportCard run={null} />);
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent("Gnani Prisma run pending");
     expect(note).toHaveTextContent("synthetic speech");
@@ -30,7 +33,7 @@ describe("ReportCard with no run", () => {
   });
 
   it("explains the method: calls, line, score and keyterms", () => {
-    render(<ReportCard />);
+    render(<ReportCard run={null} />);
     const method = screen.getByRole("heading", { name: "How it is measured" }).closest("section")!;
     for (const t of ["The calls", "The line", "The score", "With and without keyterms"]) expect(within(method).getByText(t)).toBeInTheDocument();
     expect(method).toHaveTextContent("8 kHz");
@@ -39,7 +42,7 @@ describe("ReportCard with no run", () => {
   });
 
   it("prints every condition with an empty, labelled cell and no percentage anywhere", () => {
-    const { container } = render(<ReportCard />);
+    const { container } = render(<ReportCard run={null} />);
     const table = screen.getByRole("table", { name: /Task completion by condition/ });
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(CONDITIONS.length);
@@ -49,7 +52,7 @@ describe("ReportCard with no run", () => {
   });
 
   it("lists the fields that will show which part of the booking was lost", () => {
-    render(<ReportCard />);
+    render(<ReportCard run={null} />);
     const table = screen.getByRole("table", { name: /Share of each field found/ });
     expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Condition", "Name", "Date", "Time", "Amount", "Phone number"]);
   });

@@ -33,7 +33,7 @@ A caller rings the business's number (the lead story is a clinic), or gives a mi
 ## What is novel
 
 - **The read-back as a product rule**, driven by the nature of the line: phone audio is 8 kHz and noisy and a digit is easy to mishear, so the agent never trusts a transcript for a number or date and commits only on a yes. How often Prisma hears a number whole is what the report card will measure.
-- **An acoustic-stress report card** designed to be published with its failures: the same 24 invented booking calls played clean, over an 8 kHz band, in street noise at 10, 5 and 0 dB and through G.711, with and without keyterms, scored on task completion (name, day and time heard) with accepted spellings in both scripts, not on word error alone. **The Prisma run is pending; the page is empty and says so.**
+- **An acoustic-stress report card** designed to be published with its failures: the same 24 invented booking calls played clean, over an 8 kHz band, in street noise at 10, 5 and 0 dB and through G.711, with and without keyterms, scored on task completion (name, day and time heard) with accepted spellings in both scripts, not on word error alone. **Measured on Gnani Prisma v3.0 on 6 Nov 2026: 100% task completion down to 5 dB street noise, 96% at 0 dB (100% with keyterms).**
 - **Caller Theatre:** ten scripted synthetic callers phone a front desk and are scored from what ended up in the booking system, not from how the call sounded. 9 of 9 passed on a scripted model in the published run, made before the tenth scenario was added (text run, latency not meaningful); the audio run and a Embeddings run are pending.
 - **Proof of booking and Watch it think:** a signed receipt per booking over the caller's words, the read-back and the yes; a split screen shows the agent's tool calls and what it remembers while a call is live.
 - **A Gnani gateway and cost meter:** credits per call and per booking, estimated and labelled as estimates until the rates are measured.
@@ -51,7 +51,7 @@ Almost nothing is measured on the current stack, and we say so. **Caller Theatre
 
 ## Limitations
 
-Gnani models not yet run live, so the report card is empty. Synthetic audio and simulated noise. Caller Theatre ran on a scripted model. The missed-call callback is built and tested with fakes, not yet tried on a live Vobiz number. Inbound calls on your own number and real Google Calendar sync are untested live. The Vobiz line has carried no real call yet; the call logic ran live on an earlier trial line. The agent's use of the scheduling tools has only been tested with a scripted model, not yet with a real model on a real call. The hours reader covers the English, Hindi and Marathi phrases it knows and asks the owner to review. Tested on one machine (Apple M4, 16 GB). No real caller, business or government API is involved. Not legal advice.
+The report card is measured on synthetic calls, not recorded ones. Synthetic audio and simulated noise. Caller Theatre ran on a scripted model. The missed-call callback is built and tested with fakes, not yet tried on a live Vobiz number. Inbound calls on your own number and real Google Calendar sync are untested live. The Vobiz line has carried no real call yet; the call logic ran live on an earlier trial line. The agent's use of the scheduling tools has only been tested with a scripted model, not yet with a real model on a real call. The hours reader covers the English, Hindi and Marathi phrases it knows and asks the owner to review. Tested on one machine (Apple M4, 16 GB). No real caller, business or government API is involved. Not legal advice.
 
 ## Links
 
@@ -62,4 +62,4 @@ Gnani models not yet run live, so the report card is empty. Synthetic audio and 
 | Live demo | **TBC** (see `docs/DEPLOY_DEMO.md`) |
 | LinkedIn post (nominated) | **TBC** |
 | X post (nominated) | **TBC** |
-| Report card | `/report-card` on the site (run pending), and `docs/STRESS_REPORT.md` |
+| Report card | `/report-card` on the site (Gnani Prisma, 6 Nov 2026), and `docs/STRESS_REPORT.md` |

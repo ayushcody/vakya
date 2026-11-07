@@ -55,7 +55,7 @@ export const KEYS: KeyRow[] = [
 
 export const CHECKS: { cmd: string; what: string }[] = [
   { cmd: "backend/.venv/bin/python backend/bench/gnani_smoke.py", what: "First contact with Gnani's API with your key: lists voices, runs Prisma on a test clip, renders Timbre in two formats. Prints every reply shape and never prints the key." },
-  { cmd: "./vakya stress --conditions all --provider gnani --keyterms", what: "The acoustic-stress report card on Prisma: the same 24 invented booking calls, clean, 8 kHz, noisy and through a phone codec, with and without keyterms. The run is pending." },
+  { cmd: "./vakya stress --conditions all --provider gnani --keyterms", what: "The acoustic-stress report card on Prisma: the same 24 invented booking calls, clean, 8 kHz, noisy and through a phone codec, with and without keyterms. First run 6 Nov 2026, published on /report-card." },
   { cmd: "./vakya test", what: "The backend and frontend test suites." },
 ];
 

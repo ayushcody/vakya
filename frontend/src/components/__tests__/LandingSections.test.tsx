@@ -74,10 +74,10 @@ describe("landing sections", () => {
     expect(container.textContent).toMatch(/no second speech model/i);
   });
 
-  it("teases the report card as pending, with the method, an empty table and the caveats", () => {
+  it("teases the measured report card, with the method, the table and the caveats", () => {
     const { container } = render(<ReportTeaser />);
-    expect(container.textContent).toMatch(/Gnani Prisma run pending/);
-    expect(container.textContent).toMatch(/We publish no number until Gnani Prisma has heard them/);
+    expect(container.textContent).toMatch(/Measured on Gnani Prisma/);
+    expect(container.textContent).toMatch(/audio is synthetic speech/);
     const table = screen.getByRole("table", { name: /without and with keyterms/ });
     expect(within(table).getAllByRole("rowheader").map((e) => e.textContent)).toEqual([
       "Clean",
@@ -87,10 +87,11 @@ describe("landing sections", () => {
       "Street noise, 0 dB",
       "Phone line and noise",
     ]);
-    expect(within(table).getAllByText("pending")).toHaveLength(12);
-    expect(container.textContent).not.toMatch(/\d+%/);
+    expect(within(table).queryAllByText("pending")).toHaveLength(0);
+    expect(within(table).getAllByText("100%").length).toBeGreaterThan(6);
+    expect(container.textContent).toMatch(/Street noise, 0 dB96%100%/);
     expect(container.textContent).toMatch(/synthetic/);
-    expect(container.textContent).toMatch(/9 of 9 scenarios pass, on a scripted model/);
+    expect(container.textContent).toMatch(/Caller Theatre: 9 of 9 scenarios pass, on a scripted model/);
     expect(screen.getByRole("link", { name: /Read the method/ })).toHaveAttribute("href", "/report-card");
   });
 
@@ -105,7 +106,7 @@ describe("landing sections", () => {
   it("states every limitation up front", () => {
     const { container } = render(<Limitations />);
     expect(container.querySelectorAll("li")).toHaveLength(LIMITATIONS.length);
-    expect(container.textContent).toMatch(/Gnani models not yet run live/);
+    expect(container.textContent).toMatch(/Measured on synthetic calls, not yet on recorded ones/);
     expect(container.textContent).toMatch(/Missed-call callback not tried on a live number/);
     expect(container.textContent).toMatch(/Synthetic audio, simulated noise/);
   });

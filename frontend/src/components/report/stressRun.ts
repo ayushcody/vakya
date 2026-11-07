@@ -1,9 +1,9 @@
 /**
  * The acoustic-stress report card: types and the loader for its results file.
  *
- * Nothing is measured yet. `reportCardResults.json` holds `{ "run": null }` until Gnani Prisma has been run on the task
- * set, and the page then shows "Gnani Prisma run pending" with an empty table. When the run exists, replace the file's
- * contents with the run in the shape below and the pages fill themselves in; no component changes. The method, and the
+ * `reportCardResults.json` holds the Gnani Prisma run (first run 6 Nov 2026, written by `bench/stress_report.py
+ * --write-report-card`). With `{ "run": null }` the page shows "Gnani Prisma run pending" and an empty table. A new run
+ * replaces the file and the pages fill themselves in; no component changes. The method, and the
  * command that produces the numbers, are in docs/STRESS_REPORT.md.
  */
 import results from "./reportCardResults.json";

@@ -5,7 +5,7 @@ import { pageMetadata } from "@/components/site/pageMeta";
 export const metadata = pageMetadata({
   title: "Report card",
   description:
-    "The same booking calls played clean, over an 8 kHz phone line, through street noise and phone codecs, scored on whether the name, day and time came through. Run pending: no number is published yet.",
+    "The same booking calls played clean, over an 8 kHz phone line, through street noise and phone codecs, scored on whether the name, day and time came through. Measured on Gnani Prisma v3.0, 6 Nov 2026.",
   path: "/report-card",
 });
 
@@ -13,7 +13,7 @@ export default function ReportCardPage() {
   return (
     <>
       <PageIntro title="How it will hear a booking on a bad line.">
-        The same 24 invented booking calls, played clean, over a phone line and through noise, scored on what a booking needs. The Gnani Prisma run is pending, so the table is empty and says so.
+        The same 24 invented booking calls, played clean, over a phone line and through noise, scored on what a booking needs. Measured on Gnani Prisma v3.0 on 6 Nov 2026.
       </PageIntro>
       <section className="s-container mt-12 md:mt-16" aria-label="The report card">
         <ReportCard />

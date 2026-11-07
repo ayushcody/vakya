@@ -14,11 +14,24 @@ Nine synthetic callers phone a front desk (an elderly Marathi caller, a rushed H
 
 The backend and frontend test suites run against fakes of Gnani, Embeddings and Vobiz (`./vakya test`). They show the code paths work, not that the services behave as the fakes assume.
 
+## Acoustic-stress report card on Gnani Prisma (6 Nov 2026)
+
+Prisma v3.0 (codemix), 24 invented booking calls (8 Hindi, 8 Marathi, 8 Hinglish) spoken by Gnani Timbre, task completion =
+name, day and time all heard. Full tables and caveats: `docs/STRESS_REPORT.md`, `/report-card`.
+
+| Condition | Plain | With keyterms |
+| --- | ---: | ---: |
+| clean, 8 kHz band, G.711, noise 10 dB, noise 5 dB | 100% | 100% |
+| noise 0 dB | 96% | 100% |
+| 8 kHz + noise 5 dB | 95% (n=21) | 100% |
+
+Median recognition time 0.8 s per clip. Ten-digit phone numbers are the first field lost in noise (3 of 6 heard whole at 5 dB).
+Synthetic speech and simulated noise: it shows the shape, not what a real caller will score.
+
 ## Pending: nothing is published until it has run
 
 | What | Needs | Where it will land |
 | --- | --- | --- |
-| Gnani Prisma on the acoustic-stress task set: booking completion under an 8 kHz line, street noise and G.711, with and without keyterms; which field is lost | `GNANI_API_KEY` | `/report-card`, `docs/STRESS_REPORT.md` |
 | Prisma and Timbre latency on a phone turn, and credits per call and per booking | `GNANI_API_KEY` | the usage ledger (`GET /api/usage/summary`), `docs/GNANI.md` |
 | Caller Theatre audio run (Timbre callers, Prisma recognition, line noise) | `GNANI_API_KEY` | `docs/THEATRE.md` |
 | Caller Theatre with Embeddings Flash instead of the scripted stand-in | `EMBEDDINGS_API_KEY` | `docs/THEATRE.md` |

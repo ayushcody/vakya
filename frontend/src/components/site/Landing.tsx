@@ -193,13 +193,15 @@ export function ReportTeaser() {
           </p>
           <span className="vk-tag vk-tag--orange mt-4 self-start">{REPORT.measured ? "Measured on Gnani Prisma" : "Gnani Prisma run pending"}</span>
           <h2 id="measured-title" className="mt-4 font-[family-name:var(--s-font-display)] text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.1] text-black">
-            The report card will show where it breaks
+            {REPORT.measured ? "Where it breaks, measured" : "The report card will show where it breaks"}
           </h2>
           <p className="mt-4 max-w-[46ch] text-base leading-relaxed text-[var(--s-ink-2)]">
             {`The same ${REPORT.clips} invented booking calls are played clean, over an 8 kHz phone line, through street noise and a phone codec, with and without the business's own names as keyterms, and scored on whether the name, day and time all came through.`}
           </p>
           <p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-[var(--s-mute)]">
-            We publish no number until Gnani Prisma has heard them. The table fills in from the run&apos;s result file; until then every cell says pending.
+            {REPORT.measured
+              ? "Measured on Gnani Prisma v3.0. The audio is synthetic speech and the noise is added by software: it shows the shape, not what a real caller will score."
+              : "We publish no number until Gnani Prisma has heard them. The table fills in from the run's result file; until then every cell says pending."}
           </p>
           <div className="mt-auto flex flex-wrap gap-3 pt-8">
             <Link href="/report-card" className="s-btn s-btn--primary">
@@ -235,7 +237,7 @@ export function ReportTeaser() {
             </table>
           </div>
           <p className="border-t border-[var(--s-line)] px-4 py-3 text-xs leading-relaxed text-[var(--s-mute)]">
-            The audio is synthetic and the noise is added by software: repeat on real recordings before relying on a number. The only run so far is Caller Theatre: {THEATRE_RUN.passed} of {THEATRE_RUN.of} scenarios pass, on a scripted model.
+            The audio is synthetic and the noise is added by software: repeat on real recordings before relying on a number. Caller Theatre: {THEATRE_RUN.passed} of {THEATRE_RUN.of} scenarios pass, on a scripted model.
           </p>
         </div>
       </Reveal>
