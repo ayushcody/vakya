@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ACCENTS, deskKey, deskType } from "./deskTypes";
+import { deskKey, deskType } from "./deskTypes";
 
 interface Props {
   /** A front-desk id ("clinic", "hotel", ...). Anything unknown draws the custom front desk. */
   id?: string | null;
-  /** "scene" is a 320 x 220 panel with the trade's one object drawn large, "icon" the 32 x 32 glyph for selects. */
+  /** "scene" is the 320 x 220 counter scene, "icon" the 32 x 32 glyph for selects. */
   variant?: "scene" | "icon";
   /** Width in px (scene) or side in px (icon). A scene without a size fills its container's width. */
   size?: number;
@@ -16,15 +16,16 @@ interface Props {
   className?: string;
 }
 
-/** The picture for a kind of front desk, served from /illustrations. Decorative by default.
- *  Each trade is one distinct object (a stethoscope, a desk bell, scissors...) on its own tint. The scene is that object drawn
- *  large, not a shared counter layout, so no two trades look alike. */
+/** The hand-drawn illustration for a kind of front desk, served from /illustrations. Decorative by default. */
 export function DeskIllustration({ id, variant = "scene", size, label, className }: Props) {
   const wanted = deskKey(id);
   const [failed, setFailed] = useState<string | null>(null);
   const key = failed === wanted ? "custom" : wanted;
-  const src = `/illustrations/${key}-icon.svg`;
-  const glyph = (side: number | string, extra?: string) => (
+  const src = `/illustrations/${key}${variant === "icon" ? "-icon" : ""}.svg`;
+  const icon = variant === "icon";
+  const width = size ?? (icon ? 32 : undefined);
+  const height = icon ? width : size ? Math.round((size * 220) / 320) : undefined;
+  return (
     // eslint-disable-next-line @next/next/no-img-element -- small static SVGs; the optimiser would only rasterise them
     <img
       src={src}
@@ -32,23 +33,13 @@ export function DeskIllustration({ id, variant = "scene", size, label, className
       aria-hidden={label ? undefined : true}
       data-desk={key}
       data-variant={variant}
-      width={typeof side === "number" ? side : 32}
-      height={typeof side === "number" ? side : 32}
+      width={width ?? 320}
+      height={height ?? 220}
       draggable={false}
       onError={() => setFailed(wanted)}
-      className={cn("block shrink-0 select-none rounded-[28%]", extra)}
-      style={{ width: side, height: side }}
+      className={cn("block select-none", icon ? "shrink-0 rounded-[28%]" : "h-auto", !icon && !size && "w-full", className)}
+      style={width ? { width, height: height } : undefined}
     />
-  );
-  if (variant === "icon") return glyph(size ?? 32, className);
-  const height = size ? Math.round((size * 220) / 320) : undefined;
-  return (
-    <span
-      className={cn("grid select-none place-items-center", !size && "aspect-[320/220] w-full", className)}
-      style={{ background: ACCENTS[deskType(key).accent].tint, ...(size ? { width: size, height } : {}) }}
-    >
-      {glyph(size ? Math.round(size * 0.34) : "34%")}
-    </span>
   );
 }
 
