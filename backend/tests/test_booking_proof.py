@@ -219,7 +219,7 @@ def test_the_proof_cites_the_words_that_gave_each_value(desk, monkeypatch):
     assert by_field["name"]["turn_id"] == two and by_field["phone"]["turn_id"] == two
     [readback] = [i for i in ev["items"] if i["role"] == "readback"]
     assert readback["turn_id"] == two and "7 pm" in readback["transcript"] and "6 pm" not in readback["transcript"]
-    assert "Priya Sharma" in readback["transcript"] and "3 2 1 0" in readback["transcript"] and readback["transcript"].rstrip().endswith("?")
+    assert "Priya Sharma" in readback["transcript"] and "••••3210" in readback["transcript"] and readback["transcript"].rstrip().endswith("?")
     [confirm] = [i for i in ev["items"] if i["role"] == "confirm"]
     assert confirm["turn_id"] == three and ev["complete"] is True
 

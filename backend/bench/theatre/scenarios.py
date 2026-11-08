@@ -26,7 +26,7 @@ BACKEND = HERE.parent.parent
 SCENARIOS_PATH = HERE / "scenarios.json"
 TEMPLATES_DIR = BACKEND / "templates" / "agents"
 LANGUAGES = speech.LANGS
-EXPECT_KEYS = {"bookings", "cancelled", "no_new_bookings", "readback_catch", "offered_alternatives", "recognised_by_name",
+EXPECT_KEYS = {"bookings", "cancelled", "no_new_bookings", "readback_catch", "one_detail_fix", "offered_alternatives", "recognised_by_name",
                "aadhaar", "stop_after"}
 
 

@@ -266,15 +266,28 @@ def redact_ids(text: str) -> str:
 
 
 _LONG_NUMBER = re.compile(r"(?<!\d)\+?\d(?:[\s\-]?\d){6,}(?!\d)")
+# a number read back digit by digit in its groups ("9 8 7 6 5, 4 3 2 1 0", services/speech_numbers.spoken_phone): single
+# digits a space apart, groups a comma and a space apart. A list like "101, 102" is not one (its digits are not spaced).
+_SPOKEN_NUMBER = re.compile(r"(?<![\d,])\d(?: \d)+(?:, \d(?: \d)+)+(?!\d)")
 
 
 def mask_numbers(text: str) -> str:
-    """A spoken phone number in a transcript shown on the desk keeps only its last four digits: "98765 43210" -> "••••3210"."""
+    """A spoken phone number in a transcript shown on the desk keeps only its last four digits: "98765 43210" -> "••••3210",
+    and so does a number read back in its groups ("9 8 7 6 5, 4 3 2 1 0" -> "••••3210")."""
     def sub(m: "re.Match") -> str:
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", m.group(0)):    # a date is not a number to hide
             return m.group(0)
         return "••••" + re.sub(r"\D", "", m.group(0))[-4:]
-    return _LONG_NUMBER.sub(sub, redact_ids(str(text or "")))
+
+    return _LONG_NUMBER.sub(sub, mask_spoken_numbers(redact_ids(str(text or ""))))
+
+
+def mask_spoken_numbers(text: str) -> str:
+    """Only a number read back in its groups ("9 8 7 6 5, 4 3 2 1 0" -> "••••3210"); everything else is left as it is."""
+    def spoken(m: "re.Match") -> str:
+        digits = re.sub(r"\D", "", m.group(0))
+        return "••••" + digits[-4:] if len(digits) >= 7 else m.group(0)
+    return _SPOKEN_NUMBER.sub(spoken, str(text or ""))
 
 
 def mask_phone(value: Any) -> Optional[str]:

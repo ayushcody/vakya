@@ -503,12 +503,21 @@ def _bind_whatsapp_call(conversation_id: Any) -> Any:
 def tool_turn(run: TurnRun, messages: List[dict], timeout: float) -> "tools_mod.ToolTurn":
     """Blocking: the model answers with the agent's tools (see services/tools.py). The confirmation rule for
     destructive tools looks at the agent's previous reply of this conversation."""
-    previous = next((h["text_content"] for h in reversed(run.history) if h["role"] == "agent"), None) \
-        if run.history_known else None
+    previous, earlier = agent_turns(run)
     known = " ".join(h["text_content"] for h in run.history) + " " + run.user_text
     return tools_mod.run_tool_turn(messages, run.tool_specs, previous_agent_text=previous, known_text=known,
                                    timeout=timeout, calls=run.tool_objs,
-                                   known_slots=tools_mod.known_slots(run.history), caller_text=run.user_text)
+                                   known_slots=tools_mod.known_slots(run.history), caller_text=run.user_text,
+                                   earlier_agent_text=earlier)
+
+
+def agent_turns(run: TurnRun) -> Tuple[Optional[str], Optional[str]]:
+    """The agent's last reply of this conversation and the one before it (None when unknown): the read-back rule looks
+    at both, so a caller can change one detail after a read-back without hearing the whole booking again."""
+    if not run.history_known:
+        return None, None
+    said = [h["text_content"] for h in reversed(run.history) if h["role"] == "agent"]
+    return (said[0] if said else None), (said[1] if len(said) > 1 else None)
 
 
 def tool_records(run: TurnRun) -> List[dict]:
@@ -718,6 +727,9 @@ async def turn_spoken(language: str, text: str, fallback: bool, *, use_llm: bool
         # the Hindi voice splits "1,60,000" at its commas, skips "₹" and reads a phone number as an
         # amount: the digits are rewritten for speech only (services/speech_numbers.py)
         spoken_text = speech_numbers.hindi_numbers_for_speech(spoken_text)
+    else:
+        # a phone number in English or Marathi speech is said digit by digit in its groups, with a pause between them
+        spoken_text = speech_numbers.phone_numbers_for_speech(spoken_text)
     return spoken_text, tts_language
 
 

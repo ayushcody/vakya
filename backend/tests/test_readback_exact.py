@@ -121,7 +121,7 @@ def test_offer_then_pick_gets_a_proper_read_back_first(hub):
     offer = "Thursday 6 pm is busy, but I can do 5:45 pm or 7 pm. Which suits you?"
     c = tools.execute(BOOK, ARGS, previous_agent_text=offer, caller_text="7 pm then, I am Priya Sharma, 9876543210")
     assert c.ok is False and c.value.startswith("NOT DONE") and hub.calls == []
-    assert "Thursday 12 November at 7 pm, for Priya Sharma, phone number ending 3 2 1 0. Shall I book it?" in c.value
+    assert "Thursday 12 November at 7 pm, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?" in c.value
     assert "गुरुवार 12 नवंबर शाम 7 बजे" in c.value and "संध्याकाळी 7 वाजता" in c.value
 
 
@@ -158,3 +158,27 @@ def test_without_the_callers_words_only_the_read_back_is_checked(hub):
 def test_the_switch_still_turns_the_rule_off(hub, monkeypatch):
     monkeypatch.setenv("TOOLS_READBACK", "off")
     assert tools.execute(BOOK, ARGS, previous_agent_text=None, caller_text="no").ok is True
+
+
+
+def test_the_read_back_says_the_whole_number_in_groups_in_every_language():
+
+    args = {"date": "2026-11-12", "time": "19:00", "name": "Priya Sharma", "phone": "+91 98765 43210"}
+    said = rb.sentences(args)
+    assert said["en"] == "Thursday 12 November at 7 pm, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?"
+    assert said["hi"] == "गुरुवार 12 नवंबर शाम 7 बजे, Priya Sharma के नाम से, फ़ोन नंबर 9 8 7 6 5, 4 3 2 1 0. क्या मैं बुक कर दूँ?"
+    assert said["mr"] == ("गुरुवार 12 नोव्हेंबर संध्याकाळी 7 वाजता, Priya Sharma यांच्या नावाने, फोन नंबर 9 8 7 6 5, 4 3 2 1 0. "
+                          "मी बुक करू का?")
+    for text in said.values():   # each one still passes the read-back rule: one date, one time, the name, the digits, a question
+        assert rb.slot_readback_ok(text, date(2026, 11, 12), time(19, 0), "Priya Sharma", "9876543210")
+    move = rb.sentences(args, "move")
+    assert move["en"].startswith("Moving your booking to Thursday 12 November at 7 pm") and "9 8 7 6 5, 4 3 2 1 0" in move["en"]
+
+
+def test_a_number_read_back_in_groups_is_still_masked_on_the_desk():
+    from routers import conversations
+    from services import call_events
+    said = "Thursday 12 November at 7 pm, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?"
+    for masked in (call_events.mask_numbers(said), conversations.mask_text(said)):
+        assert "••••3210" in masked and "9 8 7 6 5" not in masked
+    assert call_events.mask_numbers("rooms 101, 102, 103 and 2,50,00,000") == "rooms 101, 102, 103 and 2,50,00,000"

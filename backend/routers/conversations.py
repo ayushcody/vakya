@@ -38,12 +38,12 @@ from fastapi import APIRouter, Depends, Query, Request
 
 try:
     from core.errors import AppError
-    from services import caller_memory
+    from services import call_events, caller_memory
     from services import knowledge_gaps as kg
     from services.auth import get_current_user_id
 except ImportError:  # pragma: no cover - imported as backend.routers.conversations
     from backend.core.errors import AppError
-    from backend.services import caller_memory
+    from backend.services import call_events, caller_memory
     from backend.services import knowledge_gaps as kg
     from backend.services.auth import get_current_user_id
 
@@ -88,7 +88,8 @@ def mask_text(text: Any) -> str:
     """The text with every phone number or long digit run reduced to its last four digits."""
     def one(m: "re.Match[str]") -> str:
         return mask_number(m.group(0)) or "••••"
-    return _DIGITS.sub(one, _PHONE.sub(one, str(text or "")))
+    # a number the agent read back in its groups ("9 8 7 6 5, 4 3 2 1 0") is masked the same way (services/call_events.py)
+    return _DIGITS.sub(one, _PHONE.sub(one, call_events.mask_spoken_numbers(str(text or ""))))
 
 
 def caller_details(B, request: Request, conversation_id: str, user_id: str) -> Dict[str, str]:

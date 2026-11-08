@@ -31,7 +31,7 @@ def test_the_first_call_is_refused_with_the_sentence_to_read_back(hub):
     c = tools.execute(BOOK, ARGS, previous_agent_text="Sure, one moment.")
     assert c.ok is False and hub.calls == []
     assert c.value.startswith("NOT DONE")
-    assert "Monday 26 October at 11 am, for Priya Sharma, phone number ending 3 2 1 0. Shall I book it?" in c.value
+    assert "Monday 26 October at 11 am, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?" in c.value
     assert "सोमवार 26 अक्टूबर सुबह 11 बजे" in c.value and "सोमवार 26 ऑक्टोबर सकाळी 11 वाजता" in c.value   # Hindi and Marathi too
     assert "only after the caller's next message is a yes" in c.value
 
@@ -112,3 +112,55 @@ def test_the_known_details_are_added_to_the_callers_message_once():
     assert again[-1]["content"].count(tools.SLOTS_MARKER) == 1       # never added twice
     assert messages[-1]["content"] == "Yes please"                     # the caller's own messages are untouched
     assert tools.slots_line({}) == "" and tools.slots_line(None) == ""
+
+
+# --------------------------------------------------------------------------------------------- one detail corrected
+
+FULL_AT_10 = "Monday 26 October at 10 am, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?"
+
+
+def test_one_changed_detail_gets_a_short_read_back_of_only_that_detail(hub):
+    # read back at 10 am; the caller: "nahi, 11 baje"; the model books 11 am: refused, with only the new time to say
+    c = tools.execute(BOOK, ARGS, previous_agent_text=FULL_AT_10, caller_text="nahi, 11 baje")
+    assert c.ok is False and hub.calls == []
+    assert "changed only the time" in c.value
+    assert 'EN "So 11 am instead. Shall I book it?"' in c.value
+    assert 'HI "तो सुबह 11 बजे। क्या मैं बुक कर दूँ?"' in c.value and 'MR "म्हणजे सकाळी 11 वाजता. मी बुक करू का?"' in c.value
+    assert "Priya Sharma" not in c.value.split("EN ")[1]          # the rest of the booking is not read again
+
+
+def test_a_yes_after_the_short_read_back_books_the_whole_corrected_booking(hub):
+    for short in ("So 11 am instead. Shall I book it?", "तो सुबह 11 बजे। क्या मैं बुक कर दूँ?",
+                  "म्हणजे सकाळी 11 वाजता. मी बुक करू का?"):
+        hub.calls.clear()
+        c = tools.execute(BOOK, ARGS, previous_agent_text=short, earlier_agent_text=FULL_AT_10, caller_text="haan")
+        assert c.ok is True and hub.calls == [("book_appointment", ARGS)], short
+
+
+def test_a_changed_date_is_read_back_alone_too(hub):
+    full_tue = "Tuesday 27 October at 11 am, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?"
+    c = tools.execute(BOOK, ARGS, previous_agent_text=full_tue, caller_text="date galat hai, 26 tarikh")
+    assert c.ok is False and 'EN "So Monday 26 October instead. Shall I book it?"' in c.value
+    c = tools.execute(BOOK, ARGS, previous_agent_text="So Monday 26 October instead. Shall I book it?",
+                      earlier_agent_text=full_tue, caller_text="yes")
+    assert c.ok is True
+
+
+def test_the_short_read_back_never_books_without_a_yes_or_with_other_details(hub):
+    short = "So 11 am instead. Shall I book it?"
+    assert tools.execute(BOOK, ARGS, previous_agent_text=short, earlier_agent_text=FULL_AT_10,
+                         caller_text="ek minute ruko").ok is False                       # not a yes
+    other = dict(ARGS, name="Anita Rao")                                                  # two details differ now
+    assert tools.execute(BOOK, other, previous_agent_text=short, earlier_agent_text=FULL_AT_10, caller_text="haan").ok is False
+    assert tools.execute(BOOK, ARGS, previous_agent_text="So 11 am or 12 pm?", earlier_agent_text=FULL_AT_10,
+                         caller_text="haan").ok is False                                  # an offer of two times
+    assert tools.execute(BOOK, ARGS, previous_agent_text=short, earlier_agent_text="Sure, one moment.",
+                         caller_text="haan").ok is False                                  # nothing was read back before
+    assert hub.calls == []
+
+
+def test_two_changed_details_get_the_whole_read_back_again(hub):
+    full_other = "Tuesday 27 October at 10 am, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?"
+    c = tools.execute(BOOK, ARGS, previous_agent_text=full_other, caller_text="nahi, 26 ko 11 baje")
+    assert c.ok is False and "changed only" not in c.value
+    assert "Monday 26 October at 11 am, for Priya Sharma, phone number 9 8 7 6 5, 4 3 2 1 0. Shall I book it?" in c.value

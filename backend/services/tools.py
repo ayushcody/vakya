@@ -134,7 +134,7 @@ def _slot_mentioned(text: str, d, t, name: Any = None, phone: Any = None, nights
 
 
 def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optional[str],
-                   caller_text: Optional[str] = None) -> Optional[str]:
+                   caller_text: Optional[str] = None, earlier_agent_text: Optional[str] = None) -> Optional[str]:
     """None when a committing tool may run, else what to tell the model. It may run when the previous agent turn read this
     booking back and asked (`_slot_mentioned`) and, when the caller's latest words are known (`caller_text`), they are a
     plain yes (not a no, not a change, not a new request). Otherwise: the exact sentence to say, in English, Hindi and
@@ -145,11 +145,23 @@ def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optio
     if spec.tool == "cancel":
         return _cancel_readback_error(spec, arguments, previous_agent_text, caller_text)
     d, t = _iso_date(arguments.get("date")), _hhmm(arguments.get("time"))
-    read_back = bool(previous_agent_text) and _slot_mentioned(
-        previous_agent_text, d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
+    slot = (d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
+    read_back = bool(previous_agent_text) and _slot_mentioned(previous_agent_text, *slot)
+    if not read_back and previous_agent_text and earlier_agent_text:
+        # one detail corrected after a full read-back ("nahi, 7 baje"): the agent read back only the new detail and asked
+        # again, and the turn before that read back everything else of THIS booking (services/readback.correction_ok)
+        read_back = readback.correction_ok(previous_agent_text, earlier_agent_text, *slot) is not None
     if read_back and (caller_text is None or readback.is_affirmative(caller_text, d, t)):
         return None
     spoken = readback.sentences(arguments, "move" if spec.tool == "reschedule" else "book")
+    changed = None if read_back else readback.changed_detail(previous_agent_text, *slot)
+    if changed:
+        fix = readback.correction_sentences(changed, arguments)
+        word = readback.DETAIL_WORDS[changed]
+        return (f"NOT DONE: the caller changed only the {word} of the booking you just read back. Read back only the new "
+                f"{word} and ask again, in the caller's language, saying nothing else with it: EN \"{fix['en']}\" "
+                f"HI \"{fix['hi']}\" MR \"{fix['mr']}\". Call the tool again with the same details only after the "
+                "caller's next message is a yes.")
     if read_back:
         return ("NOT DONE: first read this back to the caller again: they have not said yes to this exact booking. If they "
                 "changed something, read the new details back; if they only asked a question, answer it and read the "
@@ -704,7 +716,7 @@ def _check_arguments(spec: ToolSpec, arguments: Any) -> Optional[str]:
 
 def execute(spec: ToolSpec, arguments: Any, *, previous_agent_text: Optional[str],
             timeout: float = CALL_TIMEOUT_S, tool_hub: Optional["ToolHub"] = None,
-            caller_text: Optional[str] = None) -> ToolCall:
+            caller_text: Optional[str] = None, earlier_agent_text: Optional[str] = None) -> ToolCall:
     """Run one call safely: check the arguments, the confirmation rule, then the tool (on `tool_hub`, default the
     shared hub). Never raises."""
     started = time.time()
@@ -718,7 +730,7 @@ def execute(spec: ToolSpec, arguments: Any, *, previous_agent_text: Optional[str
             log.info("tool %s: %s", spec.name, "; ".join(notes))
         arguments = args
     problem = (_check_arguments(spec, arguments) or confirmation_error(spec, args, previous_agent_text)
-               or readback_error(spec, args, previous_agent_text, caller_text))
+               or readback_error(spec, args, previous_agent_text, caller_text, earlier_agent_text))
     if problem:
         ok, value = False, problem
     elif spec.server in ("call", "schedules"):
@@ -862,7 +874,7 @@ def run_tool_turn(messages: List[dict], specs: List[ToolSpec], *, previous_agent
                   known_text: str = "", max_tokens: int = 300, timeout: float = 20.0,
                   max_calls: int = MAX_TOOL_CALLS, calls: Optional[List[ToolCall]] = None,
                   tool_hub: Optional[ToolHub] = None, known_slots: Optional[Dict[str, str]] = None,
-                  caller_text: Optional[str] = None) -> ToolTurn:
+                  caller_text: Optional[str] = None, earlier_agent_text: Optional[str] = None) -> ToolTurn:
     """Let the model answer `messages` with the tools in `specs` (blocking; run it in a thread).
 
     `messages[0]` is the agent's system prompt; the tools section is added to it here. `previous_agent_text` is the
@@ -914,7 +926,7 @@ def run_tool_turn(messages: List[dict], specs: List[ToolSpec], *, previous_agent
                                     "too many tool calls in this turn; answer the caller now")
                 else:
                     call = execute(spec, tc["arguments"], previous_agent_text=previous_agent_text, tool_hub=tool_hub,
-                                   caller_text=caller_text)
+                                   caller_text=caller_text, earlier_agent_text=earlier_agent_text)
                 calls.append(call)
                 msgs.append({"role": "tool", "tool_call_id": tc["id"],
                              "content": wrap_result(tc["name"], call.ok, call.value)})
@@ -951,7 +963,7 @@ def run_tool_turn(messages: List[dict], specs: List[ToolSpec], *, previous_agent
                                                     "now in plain spoken text."})
             continue
         call = execute(by_name[name], arguments, previous_agent_text=previous_agent_text, tool_hub=tool_hub,
-                       caller_text=caller_text)
+                       caller_text=caller_text, earlier_agent_text=earlier_agent_text)
         calls.append(call)
         msgs.append({"role": "user", "content": wrap_result(name, call.ok, call.value)
                      + "\nNow answer the caller in plain spoken text, or call another tool if you still need one."})
@@ -994,9 +1006,11 @@ class ToolStream:
                  known_text: str = "", max_tokens: int = 300, timeout: float = 20.0,
                  total_timeout: Optional[float] = None, max_calls: int = MAX_TOOL_CALLS,
                  calls: Optional[List[ToolCall]] = None, tool_hub: Optional[ToolHub] = None,
-                 known_slots: Optional[Dict[str, str]] = None, caller_text: Optional[str] = None):
+                 known_slots: Optional[Dict[str, str]] = None, caller_text: Optional[str] = None,
+                 earlier_agent_text: Optional[str] = None):
         self.messages, self.specs = messages, specs
         self.caller_text = caller_text
+        self.earlier_agent_text = earlier_agent_text
         self.previous_agent_text, self.known_text = previous_agent_text, known_text
         self.known_slots = known_slots
         self.max_tokens, self.timeout, self.total_timeout = max_tokens, timeout, total_timeout
@@ -1043,7 +1057,8 @@ class ToolStream:
             tt = run_tool_turn(self.messages, self.specs, previous_agent_text=self.previous_agent_text,
                                known_text=self.known_text, max_tokens=self.max_tokens, timeout=self.timeout,
                                max_calls=self.max_calls, calls=self.calls, tool_hub=self.tool_hub,
-                               known_slots=self.known_slots, caller_text=self.caller_text)
+                               known_slots=self.known_slots, caller_text=self.caller_text,
+                               earlier_agent_text=self.earlier_agent_text)
             self.first_token_ms = int((time.time() - started) * 1000)
             self.text = tt.text
             self.turn, self.provider, self.model = tt, tt.provider, tt.model
@@ -1137,7 +1152,8 @@ class ToolStream:
                                                         "caller now in plain spoken text."})
                 continue
             call = execute(by_name[name], arguments, previous_agent_text=self.previous_agent_text,
-                           tool_hub=self.tool_hub, caller_text=self.caller_text)
+                           tool_hub=self.tool_hub, caller_text=self.caller_text,
+                           earlier_agent_text=self.earlier_agent_text)
             self.calls.append(call)
             msgs.append({"role": "user", "content": wrap_result(name, call.ok, call.value)
                          + "\nNow answer the caller in plain spoken text, or call another tool if you still need one."})

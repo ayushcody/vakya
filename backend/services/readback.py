@@ -10,11 +10,20 @@
   * the last four digits of the phone number, when one was given (as numerals, Devanagari digits or digit words);
   * after all of that, a question (the confirmation).
 
+One detail changed after a read-back ("nahi, 7 baje", "date galat hai, 13 tarikh") is not a new booking: `changed_detail`
+says the agent's last turn read back this booking except one detail, `correction_sentences` is what to say instead (only
+the new detail and the question: "So 7 pm instead. Shall I book it?"), and `correction_ok(previous, earlier, ...)` accepts
+that short read-back as the read-back of THIS booking because the turn before it read back everything else. The caller's
+yes after it covers the whole booking; anything else (two details changed, a second correction) gets the full read-back.
+
 `is_affirmative(text, date, time)` says whether the caller's latest turn is a yes: haan, ha, ho, yes, theek hai, chalega,
 kar do, बुक करो, हो, होय... and nothing else: not a no, not a change (a different time or date) and not a new request.
 
 `sentences(args)` is the read-back to say, in English, Hindi and Marathi; the book tool's NOT DONE answer carries it, and
-the sentences pass the check above (tests/test_readback_exact.py)."""
+the sentences pass the check above (tests/test_readback_exact.py). The phone number in it is the whole number, digit by
+digit, in the groups people say a mobile number in (`spoken_phone`: "9 8 7 6 5, 4 3 2 1 0"): the comma between the groups
+is a short pause in the voice, and every digit is read back, not only the last four, so a misheard digit anywhere in the
+number can be caught before the booking."""
 from __future__ import annotations
 
 import re
@@ -24,8 +33,10 @@ from typing import Any, Dict, List, Optional
 
 try:
     from services import spoken_digits, when
+    from services.speech_numbers import phone_groups, spoken_phone   # noqa: F401 - the read-back's grouping, re-exported
 except ImportError:  # pragma: no cover
     from backend.services import spoken_digits, when
+    from backend.services.speech_numbers import phone_groups, spoken_phone   # noqa: F401
 
 _QUESTION_END = ("?", "？", "؟")
 _WORD = re.compile(r"[\w\u0900-\u097F]+")
@@ -146,6 +157,76 @@ def slot_readback_ok(text: Optional[str], d: Optional[Date], t: Optional[Time], 
     return not missing(text, d, t, name, phone, nights)
 
 
+# ------------------------------------------------------------------------------------------------ one detail corrected
+
+DETAILS = ("date", "time", "name", "phone", "nights")
+DETAIL_WORDS = {"date": "date", "time": "time", "name": "name", "phone": "phone number", "nights": "number of nights"}
+
+
+def changed_detail(text: Optional[str], d: Optional[Date], t: Optional[Time], name: Any = None, phone: Any = None,
+                   nights: Any = None) -> Optional[str]:
+    """The one detail ("date", "time", "name", "phone", "nights") in which the agent's read-back `text` differs from this
+    booking, when everything else matches and it asked: the caller corrected that detail. None otherwise."""
+    gaps = missing(text, d, t, name, phone, nights)
+    return gaps[0] if len(gaps) == 1 and gaps[0] in DETAILS else None
+
+
+def _names_only(text: str, detail: str, d: Optional[Date], t: Optional[Time], name: Any, phone: Any, nights: Any) -> bool:
+    """`text` names `detail` with this booking's value, asks, and names no other date or time."""
+    low = _norm(text)
+    sents = _sentences(text)
+    if not sents or not sents[-1].rstrip().endswith(_QUESTION_END):
+        return False
+    times = when.time_mentions(text)
+    if times and (t is None or not _time_ok(text, t)):
+        return False                                     # names another time: an offer, not this booking
+    if detail == "time":
+        return t is not None and bool(times)
+    if detail == "date":
+        return d is not None and _date_ok(low, d) and bool(re.search(rf"(?<!\d){d.day}(?!\d)", low))
+    if detail == "name":
+        return bool(name) and _name_ok(low, name)
+    if detail == "phone":
+        return bool(phone) and _tail_ok(low, phone)
+    return bool(nights) and _nights_ok(low, nights)
+
+
+def correction_ok(previous: Optional[str], earlier: Optional[str], d: Optional[Date], t: Optional[Time], name: Any = None,
+                  phone: Any = None, nights: Any = None) -> Optional[str]:
+    """The detail that was corrected, when `previous` (the agent's last turn) read back only that detail of THIS booking
+    and asked, and `earlier` (the agent's turn before it) read back all of this booking except that detail. None otherwise:
+    then the whole booking has to be read back again."""
+    detail = changed_detail(earlier, d, t, name, phone, nights)
+    if detail is None or not previous:
+        return None
+    return detail if _names_only(previous, detail, d, t, name, phone, nights) else None
+
+
+def correction_sentences(detail: str, args: Dict[str, Any]) -> Dict[str, str]:
+    """The short read-back after one detail changed, in English, Hindi and Marathi: only the new detail, then the same
+    question as the full read-back ("So 7 pm instead. Shall I book it?")."""
+    d, t = _date(args.get("date")), _time(args.get("time"))
+    name = str(args.get("name") or "").strip()
+    phone = re.sub(r"\D", "", str(args.get("phone") or ""))[-10:]
+    out: Dict[str, str] = {}
+    for lang in ("en", "hi", "mr"):
+        if detail == "date" and d:
+            value = f"{_WEEKDAYS[lang][d.weekday()]} {d.day} {_MONTHS[lang][d.month - 1]}"
+        elif detail == "time" and t:
+            value = _time_words(t, lang)
+        elif detail == "name":
+            value = {"en": f"the name {name}", "hi": f"नाम {name}", "mr": f"नाव {name}"}[lang]
+        elif detail == "phone":
+            value = {"en": "phone number ", "hi": "फ़ोन नंबर ", "mr": "फोन नंबर "}[lang] + spoken_phone(phone)
+        else:
+            n = int(args.get("nights") or 0)
+            value = {"en": f"{n} night{'s' if n != 1 else ''}", "hi": f"{n} रात", "mr": f"{n} रात्री"}[lang]
+        out[lang] = {"en": f"So {value} instead. Shall I book it?",
+                     "hi": f"तो {value}। क्या मैं बुक कर दूँ?",
+                     "mr": f"म्हणजे {value}. मी बुक करू का?"}[lang]
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ the caller's yes
 
 _YES = re.compile(
@@ -215,14 +296,16 @@ def _time_words(t: Time, lang: str) -> str:
 
 def sentences(args: Dict[str, Any], action: str = "book") -> Dict[str, str]:
     """The read-back of a booking in English, Hindi and Marathi, ending in the confirmation question. Dates, times, the name
-    and the last four digits of the phone are written as they must be spoken (digits, never words). `action` "move" reads
+    and the phone number are written as they must be spoken (digits, never words; the phone in its groups). `action` "move" reads
     back the NEW day and time of an existing booking ("Moving your booking to Thursday 6 November at 4 pm. Shall I go
     ahead?")."""
     d = _date(args.get("date"))
     t = _time(args.get("time"))
     name = str(args.get("name") or "").strip()
     phone = re.sub(r"\D", "", str(args.get("phone") or ""))
-    tail = " ".join(phone[-4:]) if len(phone) >= 4 else ""
+    if (len(phone) == 12 and phone.startswith("91")) or (len(phone) == 11 and phone.startswith("0")):
+        phone = phone[-10:]                      # the country code or trunk 0 is not read back: the ten digits are
+    grouped = spoken_phone(phone) if len(phone) >= 4 else ""
     nights = args.get("nights")
     out: Dict[str, str] = {}
     for lang in ("en", "hi", "mr"):
@@ -237,8 +320,8 @@ def sentences(args: Dict[str, Any], action: str = "book") -> Dict[str, str]:
                           "mr": f"{n} रात्रींसाठी"}[lang])
         head = " ".join(parts)
         who = {"en": f"for {name}", "hi": f"{name} के नाम से", "mr": f"{name} यांच्या नावाने"}[lang] if name else ""
-        number = {"en": f"phone number ending {tail}", "hi": f"फ़ोन नंबर के आख़िरी अंक {tail}",
-                  "mr": f"फोन नंबरचे शेवटचे अंक {tail}"}[lang] if tail else ""
+        number = {"en": f"phone number {grouped}", "hi": f"फ़ोन नंबर {grouped}",
+                  "mr": f"फोन नंबर {grouped}"}[lang] if grouped else ""
         if action == "move":
             lead = {"en": "Moving your booking to", "hi": "आपकी बुकिंग इस समय पर होगी:", "mr": "तुमची बुकिंग या वेळेवर असेल:"}[lang]
             ask = {"en": "Shall I go ahead?", "hi": "क्या मैं बदल दूँ?", "mr": "मी बदलू का?"}[lang]
