@@ -526,6 +526,8 @@ class CallSession:
         self._conv_ready = asyncio.Event()
         self._conv_ready.set()                        # set again once `start` has opened the conversation
         self.party: Optional[str] = None              # the other party's number, E.164 (None: unknown); see on_start
+        self.own_number: Optional[str] = None         # the caller ID (inbound) or the number dialled: offered for bookings
+        self.response_ms: List[int] = []              # per answered turn: the caller's last word to the reply's first audio
         self.profile: Optional[Dict[str, Any]] = None   # services/caller_profiles.py profile of a known caller
         self.follow_ups: List[str] = []               # "ask again next time" notes the agent set on this call
         self._profile_task: Optional[asyncio.Task] = None
@@ -693,12 +695,16 @@ class CallSession:
 
     async def _greet_known_caller(self) -> None:
         """The conversation exists: the caller details form starts with the known caller's name and number (the agent does
-        not ask again) and every turn's prompt gets "what we know about this caller"."""
+        not ask again) and every turn's prompt gets "what we know about this caller". A caller we do not know is offered
+        the number they are calling from (services/digit_repair.offer_own_number)."""
         profile = await self._known_caller()
-        if not profile or not self.conversation_id:
+        if not self.conversation_id:
             return
-        caller_profiles.set_context(self.conversation_id, profile)
+        if profile:
+            caller_profiles.set_context(self.conversation_id, profile)
         form = caller_profiles.prefill_form(profile)
+        # a caller we do not know yet is asked "Shall I book it on this number?" instead of dictating ten digits
+        form = digit_repair.offer_own_number(form, getattr(self, "own_number", None))
         if form and caller_memory.enabled():
             db = self.b.local_db if self.claims["m"] == "local" else None
             await asyncio.to_thread(caller_memory.save, self.conversation_id, form, db, self.claims["u"])
@@ -1272,7 +1278,8 @@ class CallSession:
         self.turn_speculative = False
         self.tm = {}
         self._conv_ready.clear()
-        self.party = self._party_number(ev) if caller_profiles.enabled() else None
+        self.own_number = self._party_number(ev)    # the caller ID: offered as the booking's number (digit_repair)
+        self.party = self.own_number if caller_profiles.enabled() else None
         if self.party:
             self._profile_task = asyncio.ensure_future(self._lookup_profile())
         self._greeting_task = self.turn_task = asyncio.create_task(self._greet())

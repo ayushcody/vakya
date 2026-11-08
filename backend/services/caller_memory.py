@@ -112,7 +112,7 @@ _BRACKETS = re.compile(r"[()\[\]{}<>\"`]")
 
 # services/digit_repair.py keeps a phone number heard in pieces next to the form's fields: the digits so far and the
 # number of tries. They are not details the caller gave (never in the model's list of known details, masked on the desk).
-REPAIR_KEYS = ("phone_partial", "phone_tries")
+REPAIR_KEYS = ("phone_partial", "phone_tries", "phone_offer", "phone_offer_no")   # services/digit_repair.KEYS
 
 
 def is_known_key(key: str) -> bool:
