@@ -229,6 +229,27 @@ caller's next turn as text, with no speech recognition, so it is read back and b
 call log notes that a number was typed, never the number. Tested against a fake Vobiz stream only: a real call has not
 typed a number yet.
 
+**"Book it on this number?"** A caller we do not know yet is not asked to dictate ten digits first. The number they call
+from (the caller ID of an inbound call, the number dialled on an outbound one) is put in the call's form as an offer
+(`digit_repair.offer_own_number`), and the model is told to ask "Shall I book it on this number, ending 3 2 1 0?". The answer
+is read in code, not by the model: a yes ("haan", "ho", "same number", "isi pe") makes it the booking's number; a no asks
+the caller to say the number or type it on the keypad, ending with `#`. A returning caller's number is already known from
+their profile. The read-back and the spoken yes before booking do not change.
+
+**Response time, measured on the call.** For every answered turn the router measures from the end of the caller's speech
+to the first audio of the reply: the end silence the detector waited (`end_wait`) plus the time from the end-of-speech event
+to the first reply audio (a filler counts: it is what the caller hears first). It is in the turn's `latency` log line as
+`response_ms`, on the live call card (`GET /api/phone/live`: `response_ms`, the call's turns, oldest first), as a `latency`
+event for Watch it think, and on the call record as `response_ms_median`, `response_ms_max` and `response_turns`. These are
+the call's own numbers; nothing is estimated. The research the target comes from (a median of about 1.1 s, at most 1.4 s,
+from end of speech to first audio) is a vendor's starting benchmark, not a Vakya result.
+
+**Comparing end-of-speech waits.** `bench/end_silence.py` replays recordings of callers speaking through the phone
+router's own utterance detector at two values of `PHONE_END_SILENCE_MS` (default 400 and 500) and counts the recordings the
+shorter wait would have cut off (a pause longer than it inside one sentence). The time saved is the difference, on every
+turn that uses the normal wait; the longer waits for names, numbers and details are not changed. With no recordings it
+measures nothing and says so. The default stays 500 ms until it has been measured on real callers.
+
 **Ending and handing over** (tools the agent can call during a phone call). Turn on the tool server **call** for the agent through the API (the
 Tools switches in the agent screen do not list it yet): `PUT /api/agents/{id}` with `{"tools": ["appointments", "call"]}`, keeping the
 ones it already has. `end_call` hangs up after the agent's goodbye. `transfer_call` exists only when you set a transfer

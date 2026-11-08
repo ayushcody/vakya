@@ -690,3 +690,28 @@ def test_the_look_at_the_answer_can_be_switched_off(rig, env, sessions, asr, mon
         read_until(ws, lambda m: is_mark(m) and m["mark"]["name"] == "turn-3-end")
         stop(ws)
     assert not any(e["event"] in ("precheck_start", "end_extended") for e in s.log)
+
+
+def test_each_turns_response_time_reaches_the_record_the_live_card_and_watch_it_think(rig, env, sessions, asr):
+    """Response time, measured on the call: the end silence the detector waited plus the time to the reply's first audio.
+    The call record keeps the median and the slowest turn, the live card lists them, Watch it think gets an event."""
+    from services import call_events, call_records
+    a = make_agent(rig.client)
+    with rig.client.websocket_connect(f"{px.STREAM_PATH}/{token_for(a)}") as ws:
+        ws.send_text(start_msg())
+        read_until(ws, is_mark)
+        s = sessions[-1]
+        for n in (2, 3):
+            feed(ws, pcm_silence(300) + tone_piece(1200, 220) + pcm_silence(900))
+            read_until(ws, lambda m, n=n: is_mark(m) and m["mark"]["name"] == f"turn-{n}-end")
+        live = px._live_view(s)
+        stop(ws)
+    rows = [e for e in s.log if e["event"] == "latency"]
+    assert len(rows) == 2 and all(r["response_ms"] == r["audio_ms"] + 400 for r in rows)   # 400 ms: this rig's end silence
+    assert live["response_ms"] == [r["response_ms"] for r in rows]
+    rec = call_records.get(s.call_sid)
+    ms = sorted(r["response_ms"] for r in rows)
+    assert rec["response_turns"] == 2 and rec["response_ms_max"] == ms[-1] and rec["response_ms_median"] == (ms[0] + ms[1]) // 2
+    events = [e for e in call_events.since(a["id"]) if e["type"] == "latency"]
+    assert [e["response_ms"] for e in events][-2:] == [r["response_ms"] for r in rows]
+    assert all(e["end_wait"] == "400(normal)" for e in events[-2:])
