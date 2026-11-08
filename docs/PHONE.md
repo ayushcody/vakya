@@ -2,10 +2,7 @@
 
 How Vakya's voice receptionist takes and places calls over Vobiz (Vakya's only phone provider; decided 4 November 2026): setup,
 inbound and outbound, the missed-call callback, the instant greeting, barge-in and turn-taking, caller memory, transfer and
-takeover. Status in one line: **everything here is tested against fakes only.** The Vobiz adapter is written from Vobiz's
-documentation (links in `backend/services/telephony/vobiz.py`) and has not yet carried a real call; earlier live calls (22 and 23
-October 2026) ran through another carrier, which has since been removed, so the call logic is live-proven and the Vobiz wire
-format is not. Check each item with your own whitelisted phone first. No real caller has used this.
+takeover. Status in one line: outbound calls through Vobiz to an Indian mobile were verified live on 8 Nov 2026 (booking created and moved, another cancelled, in Hindi). Inbound calls to our own number and the missed-call callback are built and tested with fakes, not yet live. Reply start time on calls is about 3.7 to 6 s, with the first filler audio at about 1.1 s. Check each item with your own whitelisted phone first. No real caller has used this.
 
 ## Vobiz
 
@@ -69,7 +66,7 @@ meets an answering machine, hits `PHONE_MAX_CALL_S` or promises a callback, it a
 `DELETE /Account/{id}/Call/{uuid}/`. A caller who hangs up simply closes the stream (Vobiz sends no `stop` event).
 
 Limits and notes: calls end after `PHONE_MAX_CALL_S` (default 600 s); at most 10 calls an hour; cloned voices pause a few seconds
-between sentences, replies speak as soon as Timbre returns the first sentence (not yet measured on a live line); the code is `backend/routers/phone.py`,
+between sentences, replies speak as soon as Timbre returns the first sentence (on live calls on 8 Nov, reply start was about 3.7 to 6 s); the code is `backend/routers/phone.py`,
 `backend/services/telephony/vobiz.py`, `backend/services/phone_audio.py` and `backend/services/phone_greeting.py`. Call only people
 who agreed.
 
@@ -110,7 +107,7 @@ Each run is stored as a phone conversation of that agent.
 
 "Call once, it's booked": a person rings the clinic's number and hangs up (or the line is busy), and the receptionist rings them
 back a few seconds later, so nobody waits on hold or has to call twice. **Built and tested with fakes (a fake Vobiz and fake
-Answer-URL requests); not yet tried on a live Vobiz number.** The callback itself reuses the outbound call path.
+Answer-URL requests); not yet tried live.** The callback itself reuses the outbound call path.
 
 **How it works on Vobiz.** A Vobiz number is attached to an XML Application whose **Answer URL** is the missed-call link. When someone
 rings that number, Vobiz POSTs `CallUUID`, `From`, `To`, `Direction` and `CallStatus` to the link and we answer with
@@ -170,7 +167,7 @@ a person who rang a clinic and hung up has asked to be called, but nobody else s
 
 On a test call the agent asked "What are the patient details?"; the caller said a name and a number, paused, then said the day
 and the time. The agent cut in during the pause, asked "Can you tell me the patient's name?" and kept asking for what it had
-been told. Three causes, three fixes. All of it is tested against fakes only (no real call yet): try it on your own phone first.
+been told. Three causes, three fixes. Tested against fakes, and the outbound path was checked on a live call on 8 Nov: try it on your own phone first.
 
 1. **The caller's words were thrown away.** A turn is stored (caller's words, reply, receipt) only at the end, once the end of the
    caller's speech is confirmed. When the caller spoke again while a turn was still thinking or speaking, that turn was cancelled
@@ -191,8 +188,8 @@ been told. Three causes, three fixes. All of it is tested against fakes only (no
 | `PHONE_DETAILS_END_SILENCE_MS` | 1500 | the wait after several were |
 | `PHONE_INCOMPLETE_EXTRA_MS` | 1200 | at the end silence, when the speculative turn's transcript ends in "and", "or", "aur", "toh", "phir", "uske baad", "matlab", "um", "uh", "haan wo" or a comma, or the agent asked for a phone number and the transcript holds 1 to 9 digits (digits said as words, in Devanagari, "double five" included), the reply is not confirmed yet: wait this long once more. If the caller goes on, the speculative reply is dropped and the whole of what they said is answered. 0 turns it off. An agent that does not reply early (it has tools, or `PHONE_SPECULATIVE=off`) gets the same check only after it asked for details (the wait above is 1100 or 1500 ms): its recording goes to speech recognition at the caller's pause (or at the end silence when there is no pause) with nothing said or stored; when the caller has finished, that result is the turn's, so there is no second recognition; when the answer looks unfinished the turn starts only after the extra wait, and the caller going on in that time gets one answer to everything. A speculative turn whose speech recognition has not finished at the end silence is confirmed as before. "The patient details" counts as a request that may include a number: 3 or more digits and fewer than 10 are an unfinished number |
 | `CALLER_MEMORY` | on | keep the caller details form and tell the model on every turn: `(Details the caller already gave in this conversation: name ..., phone ..., date 2026-10-25, time 17:00. Do not ask for these again. If you still need other details, ask for all the missing ones together in one short question.)`, after the caller's words (the system prompt does not change, so the model's prompt cache keeps working). The arguments of earlier tool calls are merged in and win for the keys they share. Rules read the phone (ten digits, +91 or 0 prefix, numerals or words), the date and time (the resolver of `services/when.py`, relative to the call's local day), an e-mail, an age, and a name only with a clear cue ("my name is", "mera naam ... hai", "मेरा नाम ... है") or as the whole answer to a question about the name |
-| `CALLER_MEMORY_LLM` | on | one small Embeddings call per caller turn, in the background once the reply is stored, for what the rules cannot read (a name with no cue, a doctor, a reason). Never when `EMBEDDINGS_API_KEY` is missing or in offline mode; any error or rate limit skips it. It only fills what is still empty, and its phone, date and time are checked like the rules' |
-| `CALLER_MEMORY_MODEL` | the reply model | the Embeddings model used for that call (it has its own quota, apart from the reply turn). If the call fails, is cut off or is rate limited it is skipped silently, so the form is then filled by the rules alone |
+| `CALLER_MEMORY_LLM` | on | one small language-model call per caller turn, in the background once the reply is stored, for what the rules cannot read (a name with no cue, a doctor, a reason). Never when `LLM_API_KEY` is missing or in offline mode; any error or rate limit skips it. It only fills what is still empty, and its phone, date and time are checked like the rules' |
+| `CALLER_MEMORY_MODEL` | the reply model | the language model used for that call (it has its own quota, apart from the reply turn). If the call fails, is cut off or is rate limited it is skipped silently, so the form is then filled by the rules alone |
 
 The form is stored on the conversation (`caller_details`, local store) or, in cloud storage mode, in `backend/data/caller_details.json`
 (mode 0600; `VAKYA_CALLER_DETAILS_FILE` moves it). Only a turn that was stored changes it, so a speculative turn that is

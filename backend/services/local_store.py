@@ -194,7 +194,7 @@ class LocalStore:
         Dense: cosine over the rows whose embedding has the same dimension as the query (a row from another embedding
         model is never compared, whatever its length). With `query_text` and HYBRID_SEARCH on, BM25 over header + text
         is fused in (RETRIEVAL_FUSION, weighted by default); rows without a usable embedding can still be found through
-        BM25, and an empty `query_embedding` (no Embeddings key, or it failed) makes BM25 rank alone. Question rows (kind "question",
+        BM25, and an empty `query_embedding` (no embeddings key, or it failed) makes BM25 rank alone. Question rows (kind "question",
         the question index) are scored too but stand for their parent passage; they are never returned.
         `similarity` is the dense cosine (the best of the passage and its questions; None when not comparable).
         `info`, when given, receives what the fusion did (for retrieval.assess_confidence)."""

@@ -50,7 +50,7 @@ def rechunk_documents(store, encode: Callable[[List[str]], Sequence], embed_mode
                 raise ValueError("no text could be rebuilt from the stored passages")
             if not dry_run:
                 made = encode(new)
-                # None: no embedder (no Embeddings key). The passages are stored without a vector, marked for later.
+                # None: no embedder (no embeddings key). The passages are stored without a vector, marked for later.
                 vectors = None if made is None else [np.asarray(v, dtype=np.float32).tolist() for v in made]
                 if vectors is not None and len(vectors) != len(new):
                     raise ValueError("the embedder returned the wrong number of vectors")

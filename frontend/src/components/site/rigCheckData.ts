@@ -8,7 +8,7 @@ export const REPO_CLONE = "https://github.com/ayushcody/vakya.git";
 export const COMMANDS: { cmd: string; note: string }[] = [
   { cmd: `git clone ${REPO_CLONE} && cd vakya`, note: "Get the code." },
   { cmd: "./vakya setup", note: "Checks Python 3.10+ and Node 20+, builds backend/.venv, installs the web packages and creates backend/.env." },
-  { cmd: "nano backend/.env", note: "Add GNANI_API_KEY and EMBEDDINGS_API_KEY, and the Vobiz keys for phone calls (see the table below)." },
+  { cmd: "nano backend/.env", note: "Add GNANI_API_KEY and the LLM_ and EMBEDDINGS_ settings, and the Vobiz keys for phone calls (see the table below)." },
   { cmd: "./vakya start", note: "Starts the API on port 8020 and the web app on port 3010 in the background." },
   { cmd: "./vakya doctor", note: "Checks the machine and the running app and prints a fix for every problem." },
 ];
@@ -21,7 +21,7 @@ export const PORTS: { port: string; what: string }[] = [
 
 export interface KeyRow {
   name: string;
-  needed: "Required" | "For phone calls" | "For the calendar";
+  needed: "Required" | "Recommended" | "For phone calls" | "For the calendar";
   gives: string;
   without: string;
 }
@@ -34,10 +34,16 @@ export const KEYS: KeyRow[] = [
     without: "Vakya cannot hear or speak. There is no second speech model: the desk, schedules and bookings still open, but no call works.",
   },
   {
-    name: "EMBEDDINGS_API_KEY",
+    name: "LLM_API_KEY, LLM_BASE_URL, LLM_MODEL",
     needed: "Required",
-    gives: "Embeddings Flash writes the front desk's replies and chooses its tools; Embeddings embeddings search the business's documents.",
-    without: "No replies. If only the embeddings are unavailable, document search falls back to keyword search.",
+    gives: "A hosted language model, set in .env, writes the front desk's replies and chooses its tools.",
+    without: "No replies: the agent answers every message with a fixed line.",
+  },
+  {
+    name: "EMBEDDINGS_API_KEY, EMBEDDINGS_BASE_URL, EMBEDDINGS_MODEL",
+    needed: "Recommended",
+    gives: "Hosted embeddings search the business's documents.",
+    without: "Document search falls back to keyword search.",
   },
   {
     name: "VOBIZ_AUTH_ID, VOBIZ_AUTH_TOKEN, VOBIZ_CALLER_ID",
@@ -62,6 +68,6 @@ export const CHECKS: { cmd: string; what: string }[] = [
 export const HARDWARE = {
   tested: "Apple M4 with 16 GB, macOS.",
   notTested: "Linux, Windows (a vakya.ps1 script exists) and Macs with 8 GB are untested.",
-  withKeys: "Every model is reached over the network (Gnani for speech, Embeddings for replies), so nothing is downloaded and the laptop only has to run Python and Node.",
+  withKeys: "Every model is reached over the network (Gnani for speech, a hosted language model for replies), so nothing is downloaded and the laptop only has to run Python and Node.",
   without: "A call needs the internet the whole time, and a laptop that stays awake if the phone line is served from it.",
 };

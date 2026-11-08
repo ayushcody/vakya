@@ -1,34 +1,30 @@
 """The language model: one chat-completion client for every model call in Vakya (replies, tool turns, side tasks).
 
-It speaks to one of two hosted models, chosen by LLM_PROVIDER (primary or embeddings; unset means primary when LLM_PRIMARY_KEY is
-set, else embeddings). The primary model goes through its provider's SDK in services/primary_llm.py, which
-turns the OpenAI-shaped messages and tools below into its request shape and back; LLM_PRIMARY_KEY, LLM_PRIMARY_MODEL and LLM_EFFORT
-are described there. Embeddings is the OpenAI-compatible chat API of Google's Embeddings Flash. Everything else in this module (the
-no-key line, the usage meter, the fallbacks) is the same for both. The Embeddings settings (backend/.env):
-  LLM_BASE_URL  default https://generativelanguage.googleapis.com/v1beta/openai/
-  LLM_MODEL     default the stable Embeddings Flash (services/embeddings.py)
-  LLM_API_KEY   the key (never rotated); EMBEDDINGS_API_KEY / EMBEDDINGS_API_KEYS are accepted too (several keys take turns when
-                one hits its quota)
+It speaks to one hosted language model through an OpenAI-compatible Chat Completions endpoint. Settings (backend/.env, read in
+services/model_config.py; none has a default in code and a missing one is reported by name):
+  LLM_BASE_URL   the endpoint's base URL
+  LLM_MODEL      the model id
+  LLM_API_KEY    the key (secret)
+  LLM_EFFORT     how hard the model thinks before it speaks: minimal | low | medium | high, or off (default low: phone replies
+                 must be fast). LLM_REASONING_EFFORT is the same setting under its older name.
+  LLM_RETRIES, LLM_RETRY_MAX_WAIT_S   how often and how long a 429 or 5xx is retried (defaults 2 and 3 s)
 Without a key nothing is sent and nothing raises on the spoken path: `chat(..., no_key_line=True)` and
-`chat_stream(..., no_key_line=True)` return the fixed line `no_key_reply(language)` ("Needs a Embeddings key" is what
+`chat_stream(..., no_key_line=True)` return the fixed line `no_key_reply(language)` ("Needs a language model" is what
 `status()` reports), so a typed web-call turn works end to end. Side-task callers leave `no_key_line` off and get
 LLMUnavailable, which they already treat as "skip this helper".
 
-Embeddings's OpenAI-compatible endpoint (read 4 Nov 2026; the same notes are in services/embeddings.py):
-  * https://ai.google.dev/embeddings-api/docs/openai  base URL, chat, streaming (stream_options include_usage), tools in
-    the OpenAI format with tool_choice "auto" (the only value documented; nothing is said about parallel tool calls, so a
-    reply may carry one or several tool_calls and the caller loops over them), system message first,
-    reasoning_effort (minimal, low, medium, high). Streamed tool-call deltas are not described: they are merged here by
-    `index`, tolerating a chunk with no index or an empty id (an id like call_<n> is made up and used on both sides).
-  * https://ai.google.dev/embeddings-api/docs/models  stable and preview Flash model ids.
-So a request carries only model, messages, temperature, max_tokens, stream, stream_options, tools, tool_choice and,
-for Embeddings, reasoning_effort (LLM_REASONING_EFFORT, default "low": reasoning tokens are counted in max_tokens, so a
-small reply budget would otherwise be spent thinking). JSON replies are asked for in the prompt and read with
-`extract_json` (json_object response_format is not documented for this endpoint).
+A request carries only model, messages, temperature, max_tokens, stream, stream_options, tools, tool_choice and, when set,
+reasoning_effort: reasoning tokens are counted in max_tokens, so a small reply budget would otherwise be spent thinking. A server
+that rejects temperature, reasoning_effort or stream_options is asked again without it (and the rejection is remembered).
+Streamed tool-call deltas are merged by `index`, tolerating a chunk with no index or an empty id (an id like call_<n> is made up
+and used on both sides). JSON replies are asked for in the prompt and read with `extract_json`.
 
 Requests go through one pooled keep-alive HTTP client (`_urlopen`, httpx), so the TCP and TLS handshake is paid once, not
 on every reply; `prewarm()` opens that connection ahead of time (a phone starts ringing). A 429 or 5xx is retried a
-couple of times with a short backoff (Retry-After or retryDelay when given; LLM_RETRIES, LLM_RETRY_MAX_WAIT_S).
+couple of times with a short backoff (Retry-After or retryDelay when given).
+
+Prompt caching is not requested: the request has no cache markers, so a server that caches prefixes on its own does it, and the
+usage line shows cached tokens when the server reports them (prompt_tokens_details.cached_tokens).
 
 Callers use `chat()` (blocking; run it with asyncio.to_thread) and get the text, the model and any tool calls.
 `chat_stream()` is the same over the streaming API (SSE): it yields text deltas as they are generated so a caller can
@@ -57,27 +53,24 @@ except ImportError:  # the pooled client needs httpx (in requirements.txt); with
 
 try:
     from core import offline
-    from services import primary_llm, embeddings
+    from services import model_config
 except ImportError:  # pragma: no cover - running from a different cwd
     from backend.core import offline
-    from backend.services import primary_llm, embeddings
+    from backend.services import model_config
 
 log = logging.getLogger("vakya.llm")
 
-PROVIDER = "openai-compatible"      # the Embeddings (OpenAI-compatible) path
-PRIMARY = primary_llm.PROVIDER        # the primary model's path ("primary")
+PROVIDER = "openai-compatible"      # the provider name the usage meter and results carry
 NO_KEY_PROVIDER = "no-key"          # the provider name of a fixed no-key line
-NEEDS_KEY_MESSAGE = "Needs a Embeddings key"
-NEEDS_PRIMARY_KEY_MESSAGE = primary_llm.NEEDS_KEY_MESSAGE
+NEEDS_KEY_MESSAGE = "Needs a language model"
 
 
 def active_provider() -> str:
-    """The provider name of the reply model in use right now: "primary" or "openai-compatible" (Embeddings)."""
-    return PRIMARY if primary_llm.provider() == "primary" else PROVIDER
+    return PROVIDER
 
 
 def active_model() -> str:
-    return primary_llm.model() if active_provider() == PRIMARY else embeddings.chat_model()
+    return model_config.chat_model()
 
 
 class LLMUnavailable(RuntimeError):
@@ -119,19 +112,9 @@ class LLMStreamInterrupted(RuntimeError):
 # ---------------------------------------------------------------------------------------------- configuration
 
 def _unavailable_reason() -> Optional[str]:
-    if active_provider() == PRIMARY:
-        if offline.enabled() and not offline.is_local_url(primary_llm.base_url()):
-            return offline.reason("the hosted language model")
-        if primary_llm.sdk_missing():
-            return "The language model SDK is not installed (pip install -r requirements.txt)"
-        if not primary_llm.api_key():
-            return NEEDS_PRIMARY_KEY_MESSAGE
-        return None if primary_llm.model() else "Set LLM_PRIMARY_MODEL in backend/.env"
-    if offline.enabled() and not offline.is_local_url(embeddings.base_url()):
+    if offline.enabled() and not offline.is_local_url(model_config.base_url()):
         return offline.reason("the hosted language model")
-    if not embeddings.llm_configured():
-        return NEEDS_KEY_MESSAGE
-    return None
+    return model_config.llm_missing()
 
 
 def is_unconfigured(e: BaseException) -> bool:
@@ -139,8 +122,7 @@ def is_unconfigured(e: BaseException) -> bool:
     that failed: the turn then says `no_key_reply` instead of its generic fallback line."""
     if not isinstance(e, LLMUnavailable):
         return False
-    return any(r in (NEEDS_KEY_MESSAGE, NEEDS_PRIMARY_KEY_MESSAGE) or str(r).startswith("Offline mode")
-               for r in e.reasons.values())
+    return any(str(r).startswith((NEEDS_KEY_MESSAGE, "Offline mode")) for r in e.reasons.values())
 
 
 def configured() -> bool:
@@ -155,23 +137,12 @@ last_failures: Dict[str, str] = {}
 
 def status() -> dict:
     """The model this backend talks to and whether it can: {"provider", "label", "base_url", "model", "configured", "reason",
-    "keys"}. `provider` is "primary" or "openai-compatible" (Embeddings); `label` is the name for people ("Hosted language model",
-    "Embeddings Flash")."""
+    "keys"}. `label` is the name for people ("Hosted language model"); `keys` counts the key (1 or 0), never the key."""
     reason = _unavailable_reason()
-    if active_provider() == PRIMARY:
-        n = 1 if primary_llm.api_key() else 0
-        return {"provider": PRIMARY, "label": primary_llm.label(), "base_url": primary_llm.base_url(), "model": primary_llm.model(),
-                "configured": reason is None, "reason": reason, "keys": {"keys": n, "available": n}}
-    return {"provider": PROVIDER, "label": "Embeddings Flash" if embeddings.uses_embeddings() else embeddings.chat_model(),
-            "base_url": embeddings.base_url(), "model": embeddings.chat_model(),
-            "configured": reason is None, "reason": reason, "keys": _key_counts()}
-
-
-def _key_counts() -> dict:
-    """How many Embeddings keys there are and how many are not cooling down (counts only). LLM_API_KEY is one key, never rotated."""
-    if os.getenv("LLM_API_KEY", "").strip():
-        return {"keys": 1, "available": 1}
-    return embeddings.pool_status()
+    n = 1 if model_config.api_key() else 0
+    return {"provider": PROVIDER, "label": "Hosted language model", "base_url": model_config.base_url(),
+            "model": model_config.chat_model(), "configured": reason is None, "reason": reason,
+            "keys": {"keys": n, "available": n}}
 
 
 _NO_KEY_LINES = {
@@ -204,14 +175,19 @@ def answer_temperature() -> float:
         return 0.2
 
 
-_effort_rejected = False  # the server answered 400 to reasoning_effort once: stop sending it
+_rejected: set = set()  # request fields the server answered 400 to once: they are not sent again
+
+
+def _reject(field_name: str) -> None:
+    _rejected.add(field_name)
+    log.warning("The language model server rejects %s; not sending it from now on", field_name)
 
 
 def reasoning_effort() -> str:
-    """LLM_REASONING_EFFORT (minimal | low | medium | high | off), default "low" on Google's endpoint and off elsewhere."""
-    if _effort_rejected:
+    """LLM_EFFORT (minimal | low | medium | high | off), default "low"; LLM_REASONING_EFFORT is read when LLM_EFFORT is unset."""
+    if "reasoning_effort" in _rejected:
         return ""
-    raw = (os.getenv("LLM_REASONING_EFFORT") or ("low" if embeddings.uses_embeddings() else "")).strip().lower()
+    raw = (os.getenv("LLM_EFFORT") or os.getenv("LLM_REASONING_EFFORT") or "low").strip().lower()
     return "" if raw in ("", "off", "none", "0", "false", "no") else raw
 
 
@@ -243,6 +219,13 @@ def _record_usage(provider: str, usage: Dict[str, int]) -> None:
         row = _usage.setdefault(provider, {"requests": 0, "tokens": 0})
         row["requests"] += 1
         row["tokens"] += int(usage.get("total_tokens") or 0)
+
+
+def log_usage(usage: Dict[str, Any], where: str, finish_reason: Optional[str] = None) -> None:
+    """One line per request: input, cached input (when the server reports it), output tokens and the finish reason."""
+    details = usage.get("prompt_tokens_details") if isinstance(usage.get("prompt_tokens_details"), dict) else {}
+    log.info("llm usage (%s): input=%d cached=%d output=%d finish=%s", where, int(usage.get("prompt_tokens") or 0),
+             int(details.get("cached_tokens") or 0), int(usage.get("completion_tokens") or 0), finish_reason or "-")
 
 
 def usage_today() -> Dict[str, Dict[str, int]]:
@@ -384,8 +367,7 @@ class ProviderHTTPError(RuntimeError):
         super().__init__(f"HTTP {self.code}: {self.body[:300]}")
 
 
-# ---- retry: a 429 or 5xx is tried again a couple of times, as soon as the server says it may be (Retry-After, Embeddings's
-# retryDelay, "try again in 1.6s"), else after 0.5 s, 1 s. A wait longer than LLM_RETRY_MAX_WAIT_S is not taken (a spoken
+# ---- retry: a 429 or 5xx is tried again a couple of times, as soon as the server says it may be (Retry-After, retryDelay, "try again in 1.6s"), else after 0.5 s, 1 s. A wait longer than LLM_RETRY_MAX_WAIT_S is not taken (a spoken
 # turn cannot hold the line that long): the error goes to the caller, which says its fallback line.
 RETRY_STATUS = (429, 500, 502, 503, 504)
 _sleep = time.sleep
@@ -417,28 +399,27 @@ def _retry_wait(e: ProviderHTTPError, attempt: int) -> Optional[float]:
     return wait if wait <= _env_number("LLM_RETRY_MAX_WAIT_S", 3.0) else None
 
 
-def _bearer(headers: dict) -> str:
-    auth = headers.get("Authorization") or ""
-    return auth[7:] if auth.startswith("Bearer ") else ""
+_REJECTABLE = (("stream_options", "stream_options"), ("reasoning_effort", "reasoning"), ("temperature", "temperature"))
 
 
-def _rotate(headers: dict, err: "ProviderHTTPError", switches: int) -> Optional[dict]:
-    """After a key failure: the headers with the next pool key (to retry at once, no sleep, no retry used), else None. At most
-    one switch per key in the pool. The failing key is reported (cooled down) either way."""
-    key = _bearer(headers)
-    if switches >= len(embeddings.keys()) or _env_is_llm_key():
-        return None
-    nxt = embeddings.next_key_after_failure(key, err.code, err.body)
-    return {**headers, "Authorization": f"Bearer {nxt}"} if nxt else None
-
-
-def _env_is_llm_key() -> bool:
-    return bool(os.getenv("LLM_API_KEY", "").strip())
+def _strip_rejected(body: dict, code: int, text: str) -> bool:
+    """After a 400 or 422: drop from `body` (in place) the optional request field the server says it does not take, and
+    remember that for the next request. True when something was dropped (the caller asks again at once)."""
+    if code not in (400, 422):
+        return False
+    low = (text or "").lower()
+    for field_name, needle in _REJECTABLE:
+        if field_name in body and needle in low:
+            body.pop(field_name)
+            if field_name != "stream_options":
+                _reject(field_name)
+            return True
+    return False
 
 
 def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict:
     """POST a (non-streaming) JSON request, retrying a 429 or 5xx; any other HTTP error status raises ProviderHTTPError."""
-    attempt = switches = 0
+    attempt = 0
     while True:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         try:
@@ -446,9 +427,7 @@ def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict
                 return json.load(r)
         except urllib.error.HTTPError as e:
             err = ProviderHTTPError(e.code, e.read().decode(errors="replace"), e.headers)
-            rotated = _rotate(headers, err, switches)
-            if rotated:
-                headers, switches = rotated, switches + 1
+            if _strip_rejected(body, err.code, err.body):
                 continue
             wait = _retry_wait(err, attempt)
             if wait is None:
@@ -459,9 +438,9 @@ def _send(url: str, body: dict, headers: dict, timeout: Optional[float]) -> dict
 
 
 def _post_stream(url: str, body: dict, headers: dict, timeout: float):
-    """Open a streaming POST; a 429 or 5xx is retried, and a server that rejects `stream_options` (or `reasoning_effort`)
-    gets one retry without it. Any other HTTP error status raises ProviderHTTPError."""
-    attempt = switches = 0
+    """Open a streaming POST; a 429 or 5xx is retried, and a server that rejects `stream_options`, `reasoning_effort` or
+    `temperature` gets a retry without it. Any other HTTP error status raises ProviderHTTPError."""
+    attempt = 0
     while True:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         try:
@@ -469,16 +448,7 @@ def _post_stream(url: str, body: dict, headers: dict, timeout: float):
         except urllib.error.HTTPError as e:
             full = e.read().decode(errors="replace")
             err = ProviderHTTPError(e.code, full, e.headers)
-            rotated = _rotate(headers, err, switches)
-            if rotated:
-                headers, switches = rotated, switches + 1
-                continue
-            if e.code in (400, 422) and "stream_options" in body and "stream_options" in full:
-                body = {k: v for k, v in body.items() if k != "stream_options"}
-                continue
-            if e.code in (400, 422) and "reasoning_effort" in body and "reasoning" in full.lower():
-                _reject_effort()
-                body = {k: v for k, v in body.items() if k != "reasoning_effort"}
+            if _strip_rejected(body, err.code, full):
                 continue
             wait = _retry_wait(err, attempt)
             if wait is None:
@@ -486,12 +456,6 @@ def _post_stream(url: str, body: dict, headers: dict, timeout: float):
             log.warning("language model answered HTTP %s; trying again in %.1f s", e.code, wait)
             _sleep(wait)
             attempt += 1
-
-
-def _reject_effort() -> None:
-    global _effort_rejected
-    _effort_rejected = True
-    log.warning("the language model does not take reasoning_effort; sending requests without it from now on")
 
 
 # ---------------------------------------------------------------------------------------------- messages and tools
@@ -573,7 +537,7 @@ def _tool_calls(message: dict) -> List[dict]:
 
 def tool_call_message(text: Optional[str], tool_calls: List[dict]) -> dict:
     """The assistant message to put back in the conversation for `tool_calls` (a ChatResult's list), carrying every
-    id, name and the arguments as JSON, and an `extra_content` the server attached to a call (Embeddings's reasoning
+    id, name and the arguments as JSON, and an `extra_content` the server attached to a call (a reasoning
     signature), so the next request repeats what the model said. Answer each call with
     {"role": "tool", "tool_call_id": <the same id>, "content": ...}."""
     calls = []
@@ -588,7 +552,7 @@ def tool_call_message(text: Optional[str], tool_calls: List[dict]) -> dict:
 
 class _ToolDeltas:
     """Merges the `tool_calls` deltas of a streamed reply into whole calls. OpenAI-style chunks carry an `index` (and the
-    id and name on the first one, argument fragments on the rest); Embeddings may send a whole call in one chunk, with no
+    id and name on the first one, argument fragments on the rest); a server may send a whole call in one chunk, with no
     index or an empty id. A delta with an index belongs to that slot; one without belongs to a new call when it names a
     function or carries an id, else to the call before it."""
 
@@ -643,8 +607,10 @@ class _ToolDeltas:
 def _request(model: str, messages: List[dict], *, temperature: float, max_tokens: int, stream: bool,
              tools: Optional[List[dict]] = None, stop: Optional[List[str]] = None) -> dict:
     effort = reasoning_effort()
-    body: Dict[str, Any] = {"model": model, "messages": prepare_messages(messages), "temperature": temperature,
+    body: Dict[str, Any] = {"model": model, "messages": prepare_messages(messages),
                             "max_tokens": _with_reasoning_room(max_tokens, effort), "stream": stream}
+    if "temperature" not in _rejected:
+        body["temperature"] = temperature
     if stream:
         body["stream_options"] = {"include_usage": True}
     if effort:
@@ -653,7 +619,7 @@ def _request(model: str, messages: List[dict], *, temperature: float, max_tokens
         body["stop"] = stop
     if tools:
         body["tools"] = tools
-        body["tool_choice"] = "auto"  # the only tool_choice the endpoint documents
+        body["tool_choice"] = "auto"  # the one value every compatible endpoint takes
     return body
 
 
@@ -661,28 +627,21 @@ def _headers(stream: bool) -> dict:
     headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     if stream:
         headers["Accept"] = "text/event-stream"
-    key = embeddings.api_key()
+    key = model_config.api_key()
     if key:
         headers["Authorization"] = f"Bearer {key}"
     return headers
 
 
 def _url() -> str:
-    return embeddings.base_url().rstrip("/") + "/chat/completions"
+    return model_config.base_url().rstrip("/") + "/chat/completions"
 
 
 def _openai_chat(model: str, messages: List[dict], *, temperature: float, max_tokens: int, timeout: float,
                  tools: Optional[List[dict]] = None) -> dict:
-    """One chat completion (the parsed response). A server that rejects `reasoning_effort` is asked again without it."""
+    """One chat completion (the parsed response)."""
     body = _request(model, messages, temperature=temperature, max_tokens=max_tokens, stream=False, tools=tools)
-    try:
-        return _send(_url(), body, _headers(False), timeout)
-    except ProviderHTTPError as e:
-        if e.code in (400, 422) and "reasoning_effort" in body and "reasoning" in e.body.lower():
-            _reject_effort()
-            body.pop("reasoning_effort")
-            return _send(_url(), body, _headers(False), timeout)
-        raise
+    return _send(_url(), body, _headers(False), timeout)
 
 
 def _chat_result(data: dict, model: str, started: float) -> ChatResult:
@@ -690,6 +649,7 @@ def _chat_result(data: dict, model: str, started: float) -> ChatResult:
     if not choices:
         raise RuntimeError("the model returned no choices")
     message = choices[0].get("message") or {}
+    log_usage(data.get("usage") or {}, "complete", choices[0].get("finish_reason"))
     return ChatResult(message.get("content") or "", PROVIDER, model, int((time.time() - started) * 1000),
                       data.get("usage") or {}, tool_calls=_tool_calls(message))
 
@@ -751,18 +711,9 @@ def _no_key_result(language: Optional[str]) -> ChatResult:
 
 
 def _fail(e: BaseException, provider: str = PROVIDER) -> LLMUnavailable:
-    detail = primary_llm.error_text(e) if provider == PRIMARY else f"{type(e).__name__}: {str(e)[:200]}"
+    detail = f"{type(e).__name__}: {str(e)[:200]}"
     last_failures[provider] = f"failed: {detail}"
     return LLMUnavailable({provider: last_failures[provider]})
-
-
-def _primary_chat(messages: List[dict], *, max_tokens: int, timeout: float, tools: Optional[List[dict]],
-                 started: float) -> ChatResult:
-    """One blocking primary-model request as a ChatResult. The temperature is not sent (the model rejects it)."""
-    out = primary_llm.complete(messages, max_tokens=_with_reasoning_room(max_tokens, primary_llm.effort()), timeout=timeout,
-                              tools=tools)
-    return ChatResult(out["text"], PRIMARY, primary_llm.model(), int((time.time() - started) * 1000), out["usage"],
-                      tool_calls=out["tool_calls"])
 
 
 def chat(messages: List[dict], *, json_mode: bool = False, temperature: float = 0.3, max_tokens: int = 400,
@@ -792,11 +743,8 @@ def chat(messages: List[dict], *, json_mode: bool = False, temperature: float = 
     model = active_model()
     t = time.time()
     try:
-        if provider == PRIMARY:
-            res = _primary_chat(messages, max_tokens=max_tokens, timeout=timeout, tools=tools, started=t)
-        else:
-            res = _chat_result(_openai_chat(model, messages, temperature=temperature, max_tokens=max_tokens,
-                                            timeout=timeout, tools=tools), model, t)
+        res = _chat_result(_openai_chat(model, messages, temperature=temperature, max_tokens=max_tokens,
+                                        timeout=timeout, tools=tools), model, t)
         if json_mode:
             res.text = json.dumps(extract_json(res.text))
     except Exception as e:  # noqa: BLE001
@@ -858,12 +806,8 @@ class ChatStream:
         t0 = time.time()
         deadline = t0 + self.total_timeout if self.total_timeout else None
         produced = ""
-        if provider == PRIMARY:
-            stream = primary_llm.stream(self.messages, max_tokens=_with_reasoning_room(self.max_tokens, primary_llm.effort()),
-                                       timeout=self.timeout, info=info, tools=self.tools)
-        else:
-            stream = _openai_stream(model, self.messages, temperature=self.temperature, max_tokens=self.max_tokens,
-                                    timeout=self.timeout, info=info, tools=self.tools)
+        stream = _openai_stream(model, self.messages, temperature=self.temperature, max_tokens=self.max_tokens,
+                                timeout=self.timeout, info=info, tools=self.tools)
         try:
             for piece in stream:
                 if not produced:
@@ -885,6 +829,7 @@ class ChatStream:
             log.warning("language model failed to stream: %s", e)
             raise _fail(e, provider) from e
         usage = info.get("usage") or {}
+        log_usage(usage, "stream", info.get("finish_reason"))
         self.tool_calls = info.get("tool_calls") or []
         if produced or self.tool_calls:
             self.provider, self.model = provider, model
@@ -946,25 +891,19 @@ def _prewarm_targets() -> List[str]:
     """The origins a reply will connect to right now: the model's, when it is configured."""
     if not configured():
         return []
-    url = primary_llm.endpoint() if active_provider() == PRIMARY else embeddings.base_url()
+    url = model_config.base_url()
     return [_origin(url)] if url else []
 
 
 def _prewarm_now() -> None:
     client = _client()
-    use_primary = active_provider() == PRIMARY
-    if client is None and not use_primary:
+    if client is None:
         return
     for url in _prewarm_targets():
         started = time.time()
         try:
             # A HEAD to the origin: no key is sent and no token is spent, the answer (usually a 404) does not matter. It
-            # leaves a TCP + TLS connection in the pool, which the first real request of a reply then reuses (the primary
-            # model's connection is warmed on its SDK's own pool).
-            if use_primary:
-                primary_llm.prewarm_connection(url)
-                log.info("LLM connection to %s warm (%d ms)", url, int((time.time() - started) * 1000))
-                continue
+            # leaves a TCP + TLS connection in the pool, which the first real request of a reply then reuses.
             client.head(url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
                         timeout=httpx.Timeout(5.0))
             log.info("LLM connection to %s warm (%d ms)", url, int((time.time() - started) * 1000))

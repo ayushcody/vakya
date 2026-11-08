@@ -3,7 +3,7 @@
 
 Runs the existing measurement scripts with fixed settings against the running API (start it first; warm it too), and
 samples memory the whole time: system RAM and the app's own view (GET /api/system/resources). The speech and the language
-model are hosted (Gnani and Embeddings), so what differs between machines is the network, the CPU and the app itself. Steps:
+model are hosted (Gnani and the hosted models), so what differs between machines is the network, the CPU and the app itself. Steps:
 
   talk        latency.py --stream -n 20         spoken question in, time to first audio / first answer / full reply
   phone       phone_latency.py --runs 5         the phone WebSocket with a preset voice (no real call is placed)

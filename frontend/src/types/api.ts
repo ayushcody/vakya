@@ -20,7 +20,7 @@ export interface HealthStatus {
   [key: string]: unknown;
 }
 
-export type LlmProviderName = "embeddings";
+export type LlmProviderName = "hosted";
 
 /** Language-model status inside GET /api/health. */
 export interface LlmStatus {

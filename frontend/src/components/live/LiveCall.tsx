@@ -12,6 +12,7 @@ import { shortName, useSchedules } from "@/lib/schedules";
 import { cn } from "@/lib/utils";
 import { CallLink } from "./CallLink";
 import { Composer } from "./Composer";
+import { useDelivery } from "./Delivery";
 import { LiveCalendar } from "./LiveCalendar";
 import { Legend, LiveTranscript } from "./LiveTranscript";
 import { useLiveEvents } from "./useLiveEvents";
@@ -25,6 +26,7 @@ import { useLiveEvents } from "./useLiveEvents";
 export function LiveCall({ agentId }: { agentId: string }) {
   const { state, hearing, dismissToast } = useLiveEvents(agentId);
   const schedules = useSchedules(agentId);
+  const delivery = useDelivery(state.lines.length > 0, agentId);
   const bookings = useScheduleBookings(null);
   const reduce = useReducedMotion();
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -76,7 +78,7 @@ export function LiveCall({ agentId }: { agentId: string }) {
             </div>
           </div>
         ) : (
-          <LiveTranscript lines={state.lines} now={now} maxHeight={wide ? "min(60vh, 38rem)" : "56vh"} agentId={agentId} hearing={hearing} />
+          <LiveTranscript lines={state.lines} now={now} maxHeight={wide ? "min(60vh, 38rem)" : "56vh"} agentId={agentId} hearing={hearing} delivery={delivery} />
         )}
       </div>
       <div className="mt-4 space-y-3 border-t border-border pt-4">

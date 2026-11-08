@@ -89,17 +89,17 @@ def test_offline_skips_the_build(sheet, monkeypatch):
     assert not (sheet.dir / "agent1.json").exists()
 
 
-def test_hosted_llm_available_follows_the_embeddings_key(monkeypatch):
+def test_hosted_llm_available_follows_the_key(monkeypatch):
     monkeypatch.delenv("LLM_API_KEY", raising=False)
-    monkeypatch.delenv("EMBEDDINGS_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     assert fs.hosted_llm_available() is False
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")
+    monkeypatch.setenv("LLM_API_KEY", "k"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     assert fs.hosted_llm_available() is True
 
 
 def test_a_failed_build_is_not_retried_at_once(sheet):
     def broken(messages):
-        raise llm.LLMUnavailable({"embeddings": "down"})
+        raise llm.LLMUnavailable({"openai-compatible": "down"})
     calls = []
 
     def counting(messages):

@@ -50,16 +50,16 @@ def test_reasoning_effort_and_room_for_it(server, monkeypatch):
     assert s.requests[1]["body"]["reasoning_effort"] == "low" and s.requests[1]["body"]["max_tokens"] == 600
 
 
-def test_the_default_effort_is_low_on_embeddingss_endpoint_only(monkeypatch):
-    monkeypatch.setattr(llm, "_effort_rejected", False)
+def test_the_default_effort_is_low_and_llm_effort_wins(monkeypatch):
+    llm._rejected.clear()
     monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_EFFORT", raising=False)
     assert llm.reasoning_effort() == "low"
-    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
-    assert llm.reasoning_effort() == ""
     monkeypatch.setenv("LLM_REASONING_EFFORT", "minimal")
     assert llm.reasoning_effort() == "minimal"
-    monkeypatch.setenv("LLM_REASONING_EFFORT", "off")
+    monkeypatch.setenv("LLM_EFFORT", "high")
+    assert llm.reasoning_effort() == "high"
+    monkeypatch.setenv("LLM_EFFORT", "off")
     assert llm.reasoning_effort() == ""
 
 

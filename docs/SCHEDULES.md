@@ -161,7 +161,7 @@ The built-in tool server `schedules` (in-process, bound to the front desk on the
 
 ## 5. Opening hours from words
 
-`hours_parser.parse(text)` reads what an owner types or says. A deterministic parser goes first (microseconds, no model); Embeddings Flash is asked **only when the parser understood no hours, no slot length and no closed date**, and its answer goes through `normalise_week` like any week (an invalid answer is thrown away). `source` is `"parser"`, `"model"` or `null`; a model answer always has `confident: false` and a note.
+`hours_parser.parse(text)` reads what an owner types or says. A deterministic parser goes first (microseconds, no model); the hosted language model is asked **only when the parser understood no hours, no slot length and no closed date**, and its answer goes through `normalise_week` like any week (an invalid answer is thrown away). `source` is `"parser"`, `"model"` or `null`; a model answer always has `confident: false` and a note.
 
 Reads: day names in English, romanised Hindi and Marathi and Devanagari; ranges ("Mon to Sat", "Mon-Fri", "सोमवार से शनिवार", "सोमवार ते शुक्रवार", wrapping "Fri to Mon"); lists ("Mon, Wed and Fri"); "all days / daily / roz / रोज़", "weekdays", "weekends", "except Sunday"; times ("10 to 1", "10am-6pm", "10:30 to 14:00", "9 se 5", "10 बजे से 2 बजे तक", "सुबह 10 से 2", "सकाळी 10 ते 2", "das se do", "open 24 hours", "24x7"); "closed", "off", "बंद", "छुट्टी", "सुट्टी" with the day before or after; breaks ("lunch 1 to 2", "with a 13:30 to 14:30 break", "लंच") that cut the group they follow, or every open day when they come after a closed day; a slot length ("every 15 minutes", "30 min slots", "hourly", "हर 20 मिनट"); closed dates ("closed on 25 December").
 

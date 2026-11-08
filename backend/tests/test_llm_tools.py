@@ -32,7 +32,7 @@ def call(id, name, args, **extra):
 
 def test_a_tool_round_trip(server):
     s = server((200, reply({"content": None, "tool_calls": [{"type": "function", "function": {
-                    "name": "book", "arguments": '{"day": "mon"}'}}]})),       # no id, as Embeddings may send it
+                    "name": "book", "arguments": '{"day": "mon"}'}}]})),       # no id, as a server may send it
                (200, reply({"content": "Booked for Monday."})))
     msgs = [{"role": "system", "content": "You are a receptionist."}, {"role": "user", "content": "book monday"}]
     first = llm.chat(msgs, tools=TOOLS, tool_choice="auto", max_tokens=100)

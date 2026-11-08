@@ -17,12 +17,12 @@ try:
     from core import engines, state
     from core.deps import get_current_user
     from core.retry import retry_async
-    from services import embeddings, gnani, licences, llm
+    from services import gnani, licences, llm
 except ImportError:  # pragma: no cover
     from backend.core import engines, state
     from backend.core.deps import get_current_user
     from backend.core.retry import retry_async
-    from backend.services import embeddings, gnani, licences, llm
+    from backend.services import gnani, licences, llm
 
 log = logging.getLogger("vakya")
 
@@ -72,15 +72,15 @@ def _disk_free_gb() -> float:
 
 
 def llm_health() -> dict:
-    """The language model's part of /api/health: `active` is "primary" or "embeddings" when a key is set (null otherwise), with the
-    model, its name for people (`label`: "Hosted language model", "Embeddings Flash"), a provider row (available, and why not: "Needs a
-    language model key" or "Needs a Embeddings key") and today's request and token counts."""
+    """The language model's part of /api/health: `active` is "hosted" when the model is configured (null otherwise), with the
+    model name hidden ("hosted"), its name for people (`label`: "Hosted language model"), a provider row (available, and why not:
+    "Needs a language model: set ...") and today's request and token counts."""
     st = llm.status()
     ok = bool(st["configured"])
-    name = "primary" if st["provider"] == llm.PRIMARY else "embeddings"
-    return {"active": name if ok else None, "model": (st["model"] if name == "embeddings" else "hosted") if ok else None, "label": st["label"] if ok else None,
+    name = "hosted"
+    return {"active": name if ok else None, "model": "hosted" if ok else None, "label": st["label"] if ok else None,
             "providers": [{"name": name, "label": st["label"], "available": ok,
-                           "reason": None if ok else (st["reason"] or "Needs a language model key")}],
+                           "reason": None if ok else (st["reason"] or llm.NEEDS_KEY_MESSAGE)}],
             "usage_today": llm.usage_today()}
 
 
@@ -88,7 +88,7 @@ def llm_health() -> dict:
 async def api_ready():
     """Is the Gnani side ready, without spending a credit: key present, the gateway (slot, queue, breakers, cache), the usage
     ledger writable, the budget and which provider each lane uses. Also which reply model is in use (`llm_provider`,
-    `llm_label`, `llm_configured`) and whether a Embeddings key (embeddings, or the reply model when it is Embeddings) is set. Safe to
+    `llm_label`, `llm_configured`). Safe to
     poll (it never calls Gnani or the language model)."""
     try:
         from services import gnani_gateway
@@ -99,10 +99,8 @@ async def api_ready():
     out["llm_provider"] = st["provider"]
     out["llm_label"] = st["label"]
     out["llm_configured"] = bool(st["configured"])
-    out["embeddings_configured"] = bool(embeddings.llm_configured())
     if not st["configured"]:
-        out["problems"] = [*out.get("problems", []), f"Needs a language model key ({st['label']} is selected): set LLM_PRIMARY_KEY "
-                                                      "(or EMBEDDINGS_API_KEY); the agent answers with a fixed line until then."]
+        out["problems"] = [*out.get("problems", []), f"{st['reason'] or llm.NEEDS_KEY_MESSAGE}; the agent answers with a fixed line until then."]
         out["ok"] = False
     return out
 

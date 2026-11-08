@@ -100,7 +100,7 @@ beforeEach(() => {
   jest.useFakeTimers({ now: FROZEN, doNotFake: [...FAKE_DATE_ONLY] });
   mockParams = new URLSearchParams();
   (hooks.useAgents as jest.Mock).mockReturnValue({ data: [agent], isLoading: false, mutate: jest.fn() });
-  (hooks.useHealth as jest.Mock).mockReturnValue({ data: { llm: { active: "embeddings", model: "embeddings-flash" }, supabase: { configured: false } }, isLoading: false });
+  (hooks.useHealth as jest.Mock).mockReturnValue({ data: { llm: { active: "hosted", model: "hosted" }, supabase: { configured: false } }, isLoading: false });
   (hooks.useEngines as jest.Mock).mockReturnValue({ data: [{ id: "timbre", name: "Timbre (Gnani)", available: true }], isLoading: false });
   (hooks.useConsentMode as jest.Mock).mockReturnValue({ data: { consent_mode: "tick", statement: "I agree.", retention_days: 180, contact: "owner@example.com" }, isLoading: false });
   serve();

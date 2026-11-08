@@ -2,8 +2,14 @@
 no key: nothing is sent, nothing raises on the spoken path."""
 import pytest
 
-from services import embeddings, llm
+from services import llm, model_config
 from llm_env import MSGS, use_endpoint
+
+
+def set_all(monkeypatch, url="https://llm.example.test/v1"):
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_BASE_URL", url)
+    monkeypatch.setenv("LLM_MODEL", "m")
 
 
 @pytest.fixture()
@@ -12,10 +18,11 @@ def clean(monkeypatch):
     monkeypatch.setattr(llm, "_client", lambda: pytest.fail("no request may be made without a key"))
 
 
-def test_defaults_are_embeddingss_openai_compatible_endpoint_and_stable_flash(clean):
-    assert embeddings.base_url() == "https://generativelanguage.googleapis.com/v1beta/openai/"
-    assert embeddings.chat_model() == "embeddings-3.6-flash"
-    assert llm.status()["base_url"] == embeddings.base_url() and llm.status()["model"] == embeddings.chat_model()
+def test_nothing_is_built_in_so_unset_settings_are_empty_and_named(clean):
+    assert model_config.base_url() == "" and model_config.chat_model() == "" and model_config.api_key() == ""
+    reason = model_config.llm_missing()
+    assert all(n in reason for n in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"))
+    assert llm.status()["base_url"] == "" and llm.status()["model"] == ""
 
 
 def test_settings_come_from_the_llm_variables(clean, monkeypatch):
@@ -25,24 +32,33 @@ def test_settings_come_from_the_llm_variables(clean, monkeypatch):
     assert st["base_url"] == "https://example.test/v1" and st["model"] == "some-model"
 
 
-def test_the_key_is_llm_api_key_else_embeddings_api_key(clean, monkeypatch):
-    assert embeddings.api_key() == "" and llm.configured() is False
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "g-key")
-    assert embeddings.api_key() == "g-key" and llm.configured() is True
+def test_all_three_settings_are_needed(clean, monkeypatch):
+    assert model_config.api_key() == "" and llm.configured() is False
     monkeypatch.setenv("LLM_API_KEY", "l-key")
-    assert embeddings.api_key() == "l-key"
-    monkeypatch.delenv("EMBEDDINGS_API_KEY")
-    assert embeddings.api_key() == "l-key"
+    assert model_config.api_key() == "l-key" and llm.configured() is False
+    assert "LLM_BASE_URL" in llm.status()["reason"] and "LLM_MODEL" in llm.status()["reason"] and "LLM_API_KEY" not in llm.status()["reason"]
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_MODEL", "m")
+    assert llm.configured() is True
 
 
-def test_status_without_and_with_a_key(clean, monkeypatch):
+def test_the_older_setting_names_are_still_read(clean, monkeypatch):
+    monkeypatch.setenv("LLM_PRIMARY_KEY", "old-key")
+    monkeypatch.setenv("LLM_PRIMARY_MODEL", "old-model")
+    monkeypatch.setenv("LLM_PRIMARY_BASE_URL", "https://old.example.test/v1")
+    assert (model_config.api_key(), model_config.chat_model(), model_config.base_url()) == ("old-key", "old-model", "https://old.example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "new-key")
+    assert model_config.api_key() == "new-key"
+
+
+def test_status_without_and_with_the_settings(clean, monkeypatch):
     st = llm.status()
-    assert st == {"provider": "openai-compatible", "label": "Embeddings Flash", "base_url": embeddings.DEFAULT_BASE_URL, "model": embeddings.DEFAULT_CHAT_MODEL,
-                  "configured": False, "reason": "Needs a Embeddings key", "keys": {"keys": 0, "available": 0}}
-    assert llm.NEEDS_KEY_MESSAGE == "Needs a Embeddings key"
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")
+    assert st["provider"] == "openai-compatible" and st["label"] == "Hosted language model"
+    assert st["configured"] is False and st["reason"].startswith(llm.NEEDS_KEY_MESSAGE) and st["keys"] == {"keys": 0, "available": 0}
+    assert llm.NEEDS_KEY_MESSAGE == "Needs a language model"
+    set_all(monkeypatch)
     st = llm.status()
-    assert st["configured"] is True and st["reason"] is None
+    assert st["configured"] is True and st["reason"] is None and st["keys"] == {"keys": 1, "available": 1}
 
 
 LANGS = ["hi", "en", "mr", "bn", "ta", "te", "kn", "ml", "gu", "pa", "hinglish"]
@@ -71,7 +87,7 @@ def test_chat_without_a_key_returns_the_line_instead_of_raising(clean):
 def test_a_side_task_without_a_key_gets_llm_unavailable(clean):
     with pytest.raises(llm.LLMUnavailable) as e:
         llm.chat(MSGS, json_mode=True)
-    assert e.value.reasons == {"openai-compatible": "Needs a Embeddings key"}
+    assert list(e.value.reasons) == ["openai-compatible"] and e.value.reasons["openai-compatible"].startswith(llm.NEEDS_KEY_MESSAGE)
 
 
 def test_stream_without_a_key_is_one_chunk(clean):
@@ -83,7 +99,7 @@ def test_stream_without_a_key_is_one_chunk(clean):
 
 
 def test_offline_mode_blocks_a_hosted_endpoint(clean, monkeypatch):
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")
+    set_all(monkeypatch)
     monkeypatch.setenv("VAKYA_OFFLINE", "1")
     st = llm.status()
     assert st["configured"] is False and "Offline mode" in st["reason"]
@@ -92,5 +108,5 @@ def test_offline_mode_blocks_a_hosted_endpoint(clean, monkeypatch):
 
 def test_prewarm_targets_only_a_configured_model(clean, monkeypatch):
     assert llm._prewarm_targets() == []
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")
-    assert llm._prewarm_targets() == ["https://generativelanguage.googleapis.com/"]
+    set_all(monkeypatch)
+    assert llm._prewarm_targets() == ["https://llm.example.test/"]

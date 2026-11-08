@@ -3,7 +3,7 @@
 # Copies of backend/data made by ./vakya demo before it writes
 backend/data-backups/
 # Local editor/agent run configuration
-.llm/launch.json
+.c*/launch.json
 # Playwright output
 frontend/test-results/
 frontend/playwright-report/

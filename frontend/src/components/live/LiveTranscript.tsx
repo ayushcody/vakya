@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { ListeningChip } from "@/components/hearing/ListeningChip";
 import { Misheard } from "@/components/hearing/Misheard";
 import type { HearingState } from "@/components/hearing/liveHearing";
+import { DeliveryChips, type Delivery } from "./Delivery";
+import { clockWithSeconds, ms } from "./time";
 import { languageNote, type Line, type ToolEvent, type WordLang } from "@/lib/liveCall";
 
 /** A soft underline per language, in the page's own colours; a word whose language we cannot tell gets a dotted grey one. */
@@ -87,6 +89,8 @@ export function Legend({ className }: { className?: string }) {
 const TOOL_TONE: Record<string, string> = {
   free: "border-[color-mix(in_srgb,var(--color-accent-success)_45%,transparent)] bg-success-tint text-accent-success",
   booked: "border-[color-mix(in_srgb,var(--color-accent-success)_45%,transparent)] bg-success-tint text-accent-success",
+  moved: "border-[color-mix(in_srgb,var(--color-accent-success)_45%,transparent)] bg-success-tint text-accent-success",
+  cancelled: "border-[color-mix(in_srgb,var(--color-orange-700)_50%,transparent)] bg-orange-200 text-[#8a3b08] [[data-theme=dark]_&]:bg-accent-warning/15 [[data-theme=dark]_&]:text-warning-text",
   taken: "border-[color-mix(in_srgb,var(--color-orange-700)_50%,transparent)] bg-orange-200 text-[#8a3b08] [[data-theme=dark]_&]:bg-accent-warning/15 [[data-theme=dark]_&]:text-warning-text",
   refused: "border-[color-mix(in_srgb,var(--color-orange-700)_50%,transparent)] bg-orange-200 text-[#8a3b08] [[data-theme=dark]_&]:bg-accent-warning/15 [[data-theme=dark]_&]:text-warning-text",
   readback: "border-[color-mix(in_srgb,var(--color-violet-700)_45%,transparent)] bg-violet-200 text-violet-700 [[data-theme=dark]_&]:bg-accent-primary/15 [[data-theme=dark]_&]:text-accent-secondary",
@@ -99,11 +103,13 @@ function ToolIcon({ e, pending }: { e: ToolEvent; pending: boolean }) {
   if (pending) return <Loader2 aria-hidden className={cn(cls, "animate-spin motion-reduce:animate-none")} />;
   switch (e.status) {
     case "booked":
+    case "moved":
       return <CalendarCheck aria-hidden className={cls} />;
     case "free":
       return <Check aria-hidden className={cls} />;
     case "taken":
     case "refused":
+    case "cancelled":
       return <CalendarX aria-hidden className={cls} />;
     case "readback":
     case "confirm":
@@ -118,27 +124,47 @@ function ToolIcon({ e, pending }: { e: ToolEvent; pending: boolean }) {
   }
 }
 
-/** One tool call as a chip: "Checking Thu 5 Nov 6 pm" while it runs, then "Checked Thu 5 Nov 6 pm: taken, offered 5:30 pm or 6:30 pm". */
-export function ToolChip({ start, end }: { start: ToolEvent | null; end: ToolEvent | null }) {
+const TITLE: Record<string, string> = {
+  check_availability: "Checked availability", list_free_slots: "Looked at free times", book: "Booking", cancel: "Cancellation",
+  reschedule: "Move", move: "Move", find_booking: "Looked up bookings",
+};
+const DONE = ["booked", "moved", "cancelled"];
+
+/** One thing the agent did, as a card, with the time it happened: "Checked availability · Thu 5 Nov, 6 pm: taken, offered ..." while it runs a
+ *  spinner, then the result. A booking, move or cancellation also shows its WhatsApp and calendar chips. */
+export function ToolChip({ start, end, delivery }: { start: ToolEvent | null; end: ToolEvent | null; delivery?: Delivery }) {
   const e = end ?? start;
   if (!e) return null;
   const pending = !end;
+  const time = clockWithSeconds(e.at);
+  const title = e.status === "readback" ? "Read back" : (TITLE[e.tool] ?? "Action");
   return (
     <div
       role="status"
       data-status={e.status}
       className={cn(
-        "inline-flex max-w-full items-center gap-2.5 rounded-full border px-4 py-2 text-[15px] font-medium leading-snug",
+        "max-w-[46rem] rounded-2xl border px-4 py-2.5 leading-snug",
         pending ? "border-border bg-bg-base text-text-secondary" : (TOOL_TONE[e.status] ?? "border-border bg-bg-base text-text-primary")
       )}
     >
-      <ToolIcon e={e} pending={pending} />
-      <span className="min-w-0">{e.label}</span>
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5"><ToolIcon e={e} pending={pending} /></span>
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] font-semibold uppercase tracking-[1px] opacity-80">
+            {title}
+            {time && <span className="font-normal normal-case tracking-normal">{time}</span>}
+          </p>
+          <p className="text-[15px] font-medium">{e.label}</p>
+        </div>
+      </div>
+      {delivery && end && DONE.includes(end.status) && end.booking_id && (
+        <DeliveryChips bookingId={end.booking_id} status={end.status} at={end.at} delivery={delivery} />
+      )}
     </div>
   );
 }
 
-function AgentBlock({ lines, now }: { lines: Extract<Line, { kind: "agent" }>[]; now: number }) {
+function AgentBlock({ lines, now, replyMs }: { lines: Extract<Line, { kind: "agent" }>[]; now: number; replyMs?: number | null }) {
   const first = lines[0].event;
   const readback = lines.some((l) => l.event.readback);
   const speaking = lines.some((l) => now >= l.playFrom && now < l.playUntil);
@@ -148,6 +174,15 @@ function AgentBlock({ lines, now }: { lines: Extract<Line, { kind: "agent" }>[];
         Front desk
         <span className="font-normal normal-case tracking-normal">{languageNote(first.language, first.script ?? "latin", false)}</span>
         {readback && <span className="rounded-full bg-violet-200 px-2 py-0.5 text-[11px] normal-case tracking-normal text-violet-700 [[data-theme=dark]_&]:bg-accent-primary/15 [[data-theme=dark]_&]:text-accent-secondary">Read back</span>}
+        {replyMs != null && (
+          <span
+            data-testid="reply-latency"
+            title="From the caller's words arriving to the first sentence of the reply being ready. The sound itself starts a little after."
+            className="text-[11px] font-normal normal-case tracking-normal tabular-nums"
+          >
+            first reply {ms(replyMs)}
+          </span>
+        )}
         {speaking && (
           <span className="inline-flex items-center gap-1 text-[11px] normal-case tracking-normal text-text-secondary">
             <span aria-hidden className="size-1.5 rounded-full bg-accent-primary motion-safe:animate-pulse" />
@@ -178,7 +213,7 @@ function AgentBlock({ lines, now }: { lines: Extract<Line, { kind: "agent" }>[];
 }
 
 /** The transcript of the call: the caller's and the front desk's words in large type, tool-call chips between them. */
-export function LiveTranscript({ lines, now, className, maxHeight, agentId, hearing }: {
+export function LiveTranscript({ lines, now, className, maxHeight, agentId, hearing, delivery }: {
   lines: Line[];
   now: number;
   className?: string;
@@ -187,6 +222,8 @@ export function LiveTranscript({ lines, now, className, maxHeight, agentId, hear
   agentId?: string;
   /** The `hearing` events by turn: what the desk was listening for, shown with the caller's line of that turn. */
   hearing?: HearingState;
+  /** WhatsApp and calendar state of the bookings the agent made (see Delivery.tsx). */
+  delivery?: Delivery;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -205,6 +242,22 @@ export function LiveTranscript({ lines, now, className, maxHeight, agentId, hear
     else blocks.push(l);
   }
 
+  // How long the reply took: the caller's line to the first sentence after it, when the two are far enough apart to be a measurement
+  // (a replayed call stores both at one instant, and then nothing is shown).
+  const replyMs = (b: { lines: Extract<Line, { kind: "agent" }>[] }) => {
+    const first = b.lines[0];
+    const i = lines.indexOf(first);
+    for (let k = i - 1; k >= 0; k--) {
+      const l = lines[k];
+      if (l.kind === "agent") return null;
+      if (l.kind === "caller") {
+        const d = Date.parse(first.event.at) - Date.parse(l.event.at);
+        return Number.isFinite(d) && d >= 100 && d < 60000 ? d : null;
+      }
+    }
+    return null;
+  };
+
   // A turn the desk is listening to whose line has not arrived yet: its "Listening for" chip stands at the end.
   const spoken = new Set(lines.flatMap((l) => (l.kind === "caller" && l.event.turn_id ? [l.event.turn_id] : [])));
   const waiting = hearing ? hearing.order.filter((t) => !spoken.has(t)).slice(-1).flatMap((t) => hearing.byTurn[t] ?? []) : [];
@@ -212,8 +265,8 @@ export function LiveTranscript({ lines, now, className, maxHeight, agentId, hear
   return (
     <div ref={box} role="log" aria-live="polite" aria-label="Call transcript" style={{ maxHeight }} className={cn("space-y-5", maxHeight && "overflow-y-auto pr-1 [scrollbar-width:thin]", className)}>
       {blocks.map((b) => {
-        if (b.kind === "agent") return <AgentBlock key={b.lines[0].id} lines={b.lines} now={now} />;
-        if (b.kind === "tool") return <div key={b.id}><ToolChip start={b.start} end={b.end} /></div>;
+        if (b.kind === "agent") return <AgentBlock key={b.lines[0].id} lines={b.lines} now={now} replyMs={replyMs(b)} />;
+        if (b.kind === "tool") return <div key={b.id}><ToolChip start={b.start} end={b.end} delivery={delivery} /></div>;
         const e = b.event;
         return (
           <div key={b.id} className="ml-auto max-w-[46rem] text-left sm:pl-12">

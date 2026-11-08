@@ -62,7 +62,7 @@ const FAQ_ITEMS: Item[] = [
   },
   {
     q: "What does it cost?",
-    text: `Nothing from Vakya: there is no subscription and no per-minute fee. ${REPO_PUBLIC ? "The source is on GitHub and you run it on your own computer." : "The code is MIT-licensed and shared on request, and you run it on your own computer."} Speech from Gnani (Prisma and Timbre) is billed by Gnani against your own API key. A Embeddings key writes the receptionist's replies (Google sets its own limits and prices). Phone minutes are billed by your telephony provider, Vobiz.`,
+    text: `Nothing from Vakya: there is no subscription and no per-minute fee. ${REPO_PUBLIC ? "The source is on GitHub and you run it on your own computer." : "The code is MIT-licensed and shared on request, and you run it on your own computer."} Speech from Gnani (Prisma and Timbre) is billed by Gnani against your own API key. A language model key writes the receptionist's replies (the model provider sets its own limits and prices). Phone minutes are billed by your telephony provider, Vobiz.`,
     a: (
       <>
         <p>
@@ -82,7 +82,7 @@ const FAQ_ITEMS: Item[] = [
         <p>Costs that can appear, and who charges them:</p>
         <ul>
           <li>Speech from Gnani (Prisma to listen, Timbre to speak) is billed by Gnani against your own API key.</li>
-          <li>A Embeddings key writes the front desk&apos;s replies and searches its documents. Google sets its own limits and prices.</li>
+          <li>A language model key writes the front desk&apos;s replies, and an embeddings key searches its documents. The model provider sets its own limits and prices.</li>
           <li>Phone minutes are billed by your telephony provider (Vobiz), not by Vakya.</li>
         </ul>
       </>
@@ -90,12 +90,12 @@ const FAQ_ITEMS: Item[] = [
   },
   {
     q: "Which services does it use?",
-    text: "Gnani Prisma recognises what the caller says and Gnani Timbre speaks, both through Gnani's API with your key. Embeddings Flash (Google, hosted) decides what to say, and Embeddings embeddings search the business's documents, with keyword search as the backup. Vobiz carries the phone call. There is no second speech model: when Gnani is busy or down, the caller hears a short pre-rendered line and is offered a callback. The Gnani code has been tested against fakes only until a live key proves it.",
+    text: "Gnani Prisma recognises what the caller says and Gnani Timbre speaks, both through Gnani's API with your key. A hosted language model decides what to say, and hosted embeddings search the business's documents, with keyword search as the backup. Vobiz carries the phone call. There is no second speech model: when Gnani is busy or down, the caller hears a short pre-rendered line and is offered a callback. The Gnani code has been tested against fakes only until a live key proves it.",
     a: (
       <>
         <ul>
           <li>Gnani Prisma recognises what the caller says, and Gnani Timbre speaks, both through Gnani&apos;s API with your key.</li>
-          <li>Embeddings Flash (Google, hosted) decides what to say, and Embeddings embeddings search the business&apos;s documents, with keyword search as the backup. Gnani does the speech, not the reasoning.</li>
+          <li>A hosted language model decides what to say, and hosted embeddings search the business&apos;s documents, with keyword search as the backup. Gnani does the speech, not the reasoning.</li>
           <li>Vobiz carries the phone call.</li>
           <li>There is no second speech model. When Gnani is busy or down, the caller hears a short pre-rendered line and is offered a callback.</li>
         </ul>
@@ -230,14 +230,14 @@ const FAQ_ITEMS: Item[] = [
   },
   {
     q: "Is my data shared with anyone?",
-    text: "Only the services you give a key to. Your documents, callers and conversations are stored in a folder on your own computer. Data leaves it only through those services: Gnani receives the audio of a call it listens to and the text it speaks, Google (Embeddings) receives the text of a turn it answers and the passages of your documents it needs, Vobiz carries phone calls. This site has no trackers or analytics.",
+    text: "Only the services you give a key to. Your documents, callers and conversations are stored in a folder on your own computer. Data leaves it only through those services: Gnani receives the audio of a call it listens to and the text it speaks, the language model provider receives the text of a turn it answers and the passages of your documents it needs, Vobiz carries phone calls. This site has no trackers or analytics.",
     a: (
       <>
         <p>
           Only the services you give a key to. Your documents, callers and conversations are stored in a folder on your own computer. This site has no trackers or analytics.
         </p>
         <p>
-          Data leaves your machine only through those services: Gnani receives the audio of a call it listens to and the text it speaks, Google (Embeddings) receives the text of
+          Data leaves your machine only through those services: Gnani receives the audio of a call it listens to and the text it speaks, the language model provider receives the text of
           the turns it handles and the passages of your documents it needs, and Vobiz carries phone calls.
         </p>
       </>
@@ -483,7 +483,7 @@ export function Footer() {
           <p className="vk-foot-h">Services</p>
           <ul className="mt-3 space-y-1.5 s-body text-[var(--s-mute)]">
             <li>Gnani Prisma, Timbre and voice cloning (speech)</li>
-            <li>Embeddings Flash and embeddings (reasoning, search)</li>
+            <li>Hosted language model and embeddings (reasoning, search)</li>
             <li>Vobiz (telephony)</li>
           </ul>
         </div>

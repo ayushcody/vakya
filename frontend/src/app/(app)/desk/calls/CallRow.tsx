@@ -303,7 +303,10 @@ export function CallDetails({ id, summary, ctx, onClose, onListen, onForgotten, 
         {known && <CallerCard profile={known.profile} onForgotten={onForgotten ?? (() => {})} />}
       </div>
       <div className="border-t border-border-2 bg-bg-base/50 px-5 py-4">
-        <h3 className="mb-3 text-sm font-semibold text-text-primary">Transcript</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-text-primary">Transcript</h3>
+          <Link href={`/desk/calls/${encodeURIComponent(id)}`} className="text-sm font-medium text-accent-primary underline-offset-2 hover:underline">Open call view</Link>
+        </div>
         {isLoading ? <Skeleton className="h-24 w-full" /> : error || !data ? <p role="alert" className="text-sm text-accent-error">Could not load this transcript. Try again in a moment.</p> : <Transcript data={data} />}
       </div>
     </div>

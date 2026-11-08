@@ -750,7 +750,7 @@ def prompt_slots(form: Optional[Dict[str, str]], tool_slots: Optional[Dict[str, 
     merged = _tool_slots_first(form or {}, tool_slots or {})
     out: Dict[str, str] = {}
     for k, v in merged.items():
-        if k == "relation":
+        if k == "relation" or k.startswith("_"):    # "_..." keys are internal (services/tools.py READBACKS_KEY)
             continue
         if k == "phone_confirmed":
             if str(v).lower() == "yes" and merged.get("phone"):
@@ -960,6 +960,25 @@ def llm_messages(agent_text: Optional[str], caller_text: str, schema: Optional[D
     return [{"role": "system", "content": llm_system(schema)},
             {"role": "user", "content": f"The assistant had just said: {asked or '(nothing)'}\n"
                                         f"The caller said: {re.sub(chr(10), ' ', str(caller_text or ''))[:600]}\nJSON:"}]
+
+
+def llm_worth_reading(caller_text: str, found: Optional[Dict[str, str]] = None) -> bool:
+    """False for a turn the rules read completely and the model cannot add to: a bare yes ("Yes, sir.", "Yes ma'am, yes please.")
+    or a short answer the rules already took a detail from. Each skipped turn saves one non-streamed request (about 570 input
+    and 150 output tokens) that the live call of 8 Nov 2026 made on every turn."""
+    text = str(caller_text or "").strip()
+    if not text:
+        return False
+    try:
+        from services import readback  # noqa: PLC0415
+    except ImportError:  # pragma: no cover
+        from backend.services import readback  # noqa: PLC0415
+    words = re.findall(r"\w+", text)
+    if any(len(re.sub(r"\D", "", w)) >= 4 for w in words):
+        return True                                   # digits (a number) are worth a look
+    if len(words) <= 6 and readback.is_affirmative(text):
+        return False
+    return not (len(words) <= 3 and found)
 
 
 def llm_read(agent_text: Optional[str], caller_text: str, schema: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:

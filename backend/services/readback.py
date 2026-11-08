@@ -17,9 +17,10 @@ kar do, बुक करो, हो, होय... and nothing else: not a no, no
 the sentences pass the check above (tests/test_readback_exact.py)."""
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
-from datetime import date as Date, time as Time
+from datetime import date as Date, datetime, time as Time, timezone
 from typing import Any, Dict, List, Optional
 
 try:
@@ -35,6 +36,43 @@ _LONG_WEEKDAYS = {w: i for w, i in when.WEEKDAY_WORDS.items() if len(w) >= 5 or 
 
 def _norm(text: Any) -> str:
     return unicodedata.normalize("NFC", str(text or "")).lower().translate(when._DEVANAGARI_DIGITS)   # noqa: SLF001
+
+
+# ------------------------------------------------------------------------------------------------ expiry
+
+PENDING_TTL_S = 180            # a read-back older than 3 minutes no longer counts
+PENDING_MAX_CALLER_TURNS = 6   # nor one that the caller has talked past for 6 caller turns
+
+
+def _limit(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, "") or default))
+    except ValueError:
+        return default
+
+
+def parse_time(value: Any) -> Optional[datetime]:
+    """An ISO timestamp (naive means UTC, as the local store writes them) as an aware datetime; None when unreadable."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        out = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return out if out.tzinfo else out.replace(tzinfo=timezone.utc)
+
+
+def pending_expired(said_at: Any, caller_turns_since: Optional[int] = None, now: Optional[datetime] = None) -> bool:
+    """A read-back said at `said_at`, since when the caller has spoken `caller_turns_since` times, has gone stale: older than
+    3 minutes (READBACK_TTL_S) or 6 caller turns (READBACK_MAX_TURNS). A later "yes" then needs a fresh read-back. An unknown
+    time or turn count never expires it by itself."""
+    if caller_turns_since is not None and caller_turns_since >= _limit("READBACK_MAX_TURNS", PENDING_MAX_CALLER_TURNS):
+        return True
+    said = parse_time(said_at)
+    if said is None:
+        return False
+    current = parse_time(now) if now is not None else datetime.now(timezone.utc)
+    return (current - said).total_seconds() > _limit("READBACK_TTL_S", PENDING_TTL_S)
 
 
 # ------------------------------------------------------------------------------------------------ the pieces
@@ -144,6 +182,41 @@ def _first_word(name: Any, low: str) -> bool:
 def slot_readback_ok(text: Optional[str], d: Optional[Date], t: Optional[Time], name: Any = None, phone: Any = None,
                      nights: Any = None) -> bool:
     return not missing(text, d, t, name, phone, nights)
+
+
+_PHONE_SENTENCE = re.compile(r"\b(?:number|phone|mobile|digits)\b|नंबर|नम्बर|फ़ोन|फोन|मोबाइल|\d{4}")
+_FROM_TO = re.compile(r"\bfrom\b(.*?)\bto\b", re.S)
+
+
+def _strip_from_times(sentence: str) -> str:
+    """"Move A28 from Tue 10 Nov 5 PM to 6 PM?": the time of the booking as it stands is not an offer, drop it so only the new
+    time is read."""
+    m = _FROM_TO.search(sentence)
+    if not m:
+        return sentence
+    inner = m.group(1)
+    cleaned = re.sub(r"\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)", "", inner, flags=re.I)
+    return sentence[:m.start(1)] + cleaned + sentence[m.end(1):]
+
+
+def change_readback_ok(text: Optional[str], d: Optional[Date], t: Optional[Time]) -> bool:
+    """`text` read back a CHANGE of an existing booking (a move to day `d` at `t`, or a cancellation of the booking at `d`, `t`):
+    the caller is already identified and the number is on the booking, so a question about the phone number is not part of
+    it, and statements about the booking as it stands now ("Got it, the Tuesday booking at 5 PM.") are not offers. What is
+    left must be a normal read-back of the new details ending in the confirmation question."""
+    text = str(text or "")
+    if not text.strip():
+        return False
+    kept: List[str] = []
+    for sent in _sentences(text):
+        question = sent.rstrip().endswith(_QUESTION_END)
+        if _PHONE_SENTENCE.search(_norm(sent)) and not (t is not None and when.time_mentions(sent)):
+            continue                                                 # "Also, is the number ending 6295 correct?"
+        sent = _strip_from_times(sent)
+        if not question and (not _time_ok(sent, t) or not _date_ok(_norm(sent), d)):
+            continue                                                 # the booking as it stands
+        kept.append(sent)
+    return slot_readback_ok(" ".join(kept), d, t)
 
 
 # ------------------------------------------------------------------------------------------------ the caller's yes

@@ -352,8 +352,8 @@ async def turn_context(run: TurnRun, conversation_id: Optional[str], t: float) -
             turns = await asyncio.to_thread(
                 state.local_db.select_last, "conversation_turns", lambda r: r.get("conversation_id") == conversation_id,
                 _history_limit(run))
-            history = [{"role": r["role"], "text_content": r["text_content"], "tool_calls": r.get("tool_calls")}
-                       for r in turns]
+            history = [{"role": r["role"], "text_content": r["text_content"], "tool_calls": r.get("tool_calls"),
+                        "created_at": r.get("created_at")} for r in turns]
         else:
             if not conversation_id:
                 conv_row = {"agent_id": agent_id, "user_id": user_id}
@@ -383,7 +383,7 @@ async def turn_context(run: TurnRun, conversation_id: Optional[str], t: float) -
                         .order("created_at", desc=True)
                         .limit(_history_limit(run))
                         .execute())
-            history_res = await asyncio.to_thread(read_history, "role, text_content")
+            history_res = await asyncio.to_thread(read_history, "role, text_content, created_at")
             history = list(reversed(history_res.data or []))
     except AppError:
         raise
@@ -438,6 +438,8 @@ _INFO_QUESTION = re.compile(
 _BOOK_INTENT = re.compile(r"\b(?:book|booking|appointment|appointments|slot|schedule|reschedule|cancel|postpone)\b|बुक|अपॉइंटमेंट|अपॉइन्टमेंट|एपॉइंटमेंट",
                          re.IGNORECASE)
 MAX_STEP_WORDS = 8
+_BOOKING_STATUS = re.compile(r"\b(?:did you (?:do|book|make|confirm|finish)|is it (?:done|booked|confirmed)|have you (?:done|booked|confirmed)|"
+                             r"(?:it|that|booking) (?:is|got) (?:done|booked|confirmed))\b", re.IGNORECASE)
 
 
 def booking_step(user_text: str, previous_reply: Optional[str]) -> bool:
@@ -452,8 +454,10 @@ def booking_step(user_text: str, previous_reply: Optional[str]) -> bool:
         return True
     if len(words) > MAX_STEP_WORDS:
         return False
-    if len(words) <= 3 and (readback.leading_yes(text) or readback.is_affirmative(text)):
-        return True
+    if (len(words) <= 6 and readback.is_affirmative(text)) or (len(words) <= 3 and readback.leading_yes(text)):
+        return True              # "Yes, I already said yes" is a yes to the read-back, not a question for the documents
+    if _BOOKING_STATUS.search(text):
+        return True              # "Did you do it?", "is it booked?": about the booking just talked of
     if re.search(r"\b(?:no|nope|nahi|nahin|nai)\b|नहीं|नही|नाही", text, re.IGNORECASE) and len(words) <= 3:
         return True
     if when.time_mentions(text) or when.resolve_date(text, None).date is not None or spoken_digits.find_mobile(text):
@@ -539,13 +543,24 @@ def _observed(spec: Any, run: TurnRun) -> Any:
         except Exception as e:  # noqa: BLE001
             log.debug("tool start event skipped: %r", e)
         token = _bind_whatsapp_call(getattr(run, "conversation_id", None))
+        audit_token = _bind_audit_call(getattr(run, "conversation_id", None))
         try:
             return inner(tool, args)
         finally:
-            if token is not None:
-                token.var.reset(token)
+            for t in (token, audit_token):
+                if t is not None:
+                    t.var.reset(t)
     spec.runner = runner
     return spec
+
+
+def _bind_audit_call(conversation_id: Any) -> Any:
+    """Tie the audit lines of a booking, move or cancel made by this tool to this call (services/booking_audit.py)."""
+    try:
+        from services import booking_audit  # noqa: PLC0415
+        return booking_audit.bind_call(conversation_id)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _bind_whatsapp_call(conversation_id: Any) -> Any:
@@ -680,7 +695,7 @@ def turn_memory_commit(run: TurnRun) -> None:
         if form:
             caller_memory.remember(cid, form)
             loop.run_in_executor(None, caller_memory.save, cid, form, db, run.user_id)
-        if run.user_text and caller_memory.llm_enabled():
+        if run.user_text and caller_memory.llm_enabled() and caller_memory.llm_worth_reading(run.user_text, getattr(run, "caller_found", None)):
             loop.create_task(_turn_memory_llm(cid, db, run.user_id, run.caller_previous_agent, run.user_text,
                                               caller_memory.schema_for(getattr(run, "agent", None))))
     except Exception as e:  # noqa: BLE001

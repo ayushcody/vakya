@@ -28,4 +28,4 @@ def test_the_llm_timeout_is_the_callers_budget():
 def test_no_key_error_is_a_503_naming_the_key():
     from services import llm
     err = llm_limits.llm_unavailable(llm.LLMUnavailable({"openai-compatible": llm.NEEDS_KEY_MESSAGE}))
-    assert err.status == 503 and "EMBEDDINGS_API_KEY" in err.message
+    assert err.status == 503 and "LLM_API_KEY" in err.message

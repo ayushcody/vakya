@@ -2,7 +2,7 @@
 
     GET   /api/system/resources              the snapshot the dashboard's resource indicator shows
 
-No model runs here: speech is Gnani's and the language model and embeddings are Embeddings's, all hosted. So the snapshot is the
+No model runs here: speech is Gnani's and the language model and embeddings are hosted. So the snapshot is the
 machine's memory, this API process's memory, and the hosted services the app uses with whether each has its key. Reading
 never calls a hosted service. The whole response is cached for 1 s so that polling is cheap; the macOS compressed-memory
 figure (vm_stat) for 2 s.
@@ -125,9 +125,9 @@ def system_block() -> dict:
 def services_block() -> List[dict]:
     """The hosted services the app uses and whether each has its key. Nothing is requested."""
     try:
-        from services import embeddings, gnani, llm, retrieval
+        from services import gnani, llm, model_config, retrieval
     except ImportError:  # pragma: no cover
-        from backend.services import embeddings, gnani, llm, retrieval
+        from backend.services import gnani, llm, model_config, retrieval
     st = llm.status()
     emb = _safe(retrieval.embedder_status, {}) or {}
     return [
@@ -135,7 +135,7 @@ def services_block() -> List[dict]:
          "reason": None if gnani.configured() else "Needs a Gnani key"},
         {"id": "llm", "label": f"Language model ({st['label']})", "where": "hosted", "configured": bool(st["configured"]),
          "reason": st["reason"]},
-        {"id": "embeddings", "label": f"Knowledge search ({emb.get('model', embeddings.embed_model())})", "where": "hosted",
+        {"id": "embeddings", "label": f"Knowledge search ({emb.get('model', model_config.embed_model())})", "where": "hosted",
          "configured": bool(emb.get("configured")), "reason": emb.get("reason"), "mode": emb.get("mode")},
     ]
 

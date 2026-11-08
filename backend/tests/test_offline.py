@@ -33,7 +33,8 @@ def test_block_is_a_noop_online_and_a_503_offline(monkeypatch):
 
 def test_the_hosted_language_model_is_unavailable_offline(offline_on, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "x")
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("LLM_MODEL", "m")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1")
     st = llm.status()
     assert st["configured"] is False and "Offline mode" in st["reason"]
     monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8080/v1")
@@ -64,7 +65,7 @@ def test_attestation_claims_local_only_when_every_remote_path_is_off(app_client,
     b = __import__("core.runtime", fromlist=["runtime"]).runtime
     monkeypatch.setenv("VAKYA_OFFLINE", "1")
     monkeypatch.setattr(b, "supabase", None, raising=False)
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "x")         # set, but offline mode makes the hosted model unavailable
+    monkeypatch.setenv("LLM_API_KEY", "x"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")         # set, but offline mode makes the hosted model unavailable
     st = app_client.get("/api/privacy/attestation").json()["statement"]
     assert st["settings"]["offline_mode"] is True
     assert st["settings"]["language_model_remote_possible"] is False

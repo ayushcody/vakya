@@ -17,7 +17,7 @@ describe("Run it page content", () => {
     render(<RigCheck />);
     expect(PORTS.map((p) => p.port)).toEqual(["3010", "8020", "8021"]);
     const table = screen.getByRole("table", { name: /Environment settings in backend\/\.env/ });
-    for (const k of ["GNANI_API_KEY", "EMBEDDINGS_API_KEY", "VOBIZ_AUTH_ID", "GOOGLE_CALENDAR_ID"]) expect(within(table).getByText(new RegExp(k))).toBeInTheDocument();
+    for (const k of ["GNANI_API_KEY", "LLM_API_KEY", "EMBEDDINGS_API_KEY", "VOBIZ_AUTH_ID", "GOOGLE_CALENDAR_ID"]) expect(within(table).getByText(new RegExp(k))).toBeInTheDocument();
     expect(within(table).getAllByRole("row")).toHaveLength(KEYS.length + 1);
     expect(table).toHaveTextContent(/no second speech model/i);
     expect(table).toHaveTextContent(/keyword search/);

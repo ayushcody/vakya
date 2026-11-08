@@ -137,10 +137,10 @@ def test_no_key_skips_the_job_without_a_request():
 
 
 def test_available_follows_the_key(monkeypatch):
-    for name in ("LLM_API_KEY", "EMBEDDINGS_API_KEY"):
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
         monkeypatch.delenv(name, raising=False)
     assert qi.available() is False
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "k")
+    monkeypatch.setenv("LLM_API_KEY", "k"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     assert qi.available() is True
 
 
@@ -163,7 +163,7 @@ def test_fact_sheet_repairs_the_reply_and_still_validates():
 
 
 def test_fact_sheet_without_a_key_raises_llm_unavailable(monkeypatch):
-    for name in ("LLM_API_KEY", "EMBEDDINGS_API_KEY"):
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(llm.LLMUnavailable):
         fs.build_facts([DOC])

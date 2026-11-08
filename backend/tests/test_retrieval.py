@@ -1,6 +1,6 @@
 """Knowledge retrieval: the Hindi/English/Hinglish tokenizer, BM25, Reciprocal Rank Fusion, dimension safety, automatic
 re-embedding of stale local chunks, the hosted path with a fake Supabase client (the model-neutral vector column) and the
-migration SQL. Nothing is sent to Embeddings: embeddings are faked (see tests/test_offline_agents.py; the embedder itself is
+migration SQL. Nothing is sent to a hosted model: embeddings are faked (see tests/test_offline_agents.py; the embedder itself is
 tested in tests/test_retrieval_embedder.py)."""
 import asyncio
 from pathlib import Path
@@ -336,7 +336,7 @@ class _Table:
 
 
 def _cloud_env(env, monkeypatch, dim, chunks):
-    monkeypatch.setenv("EMBEDDINGS_EMBED_DIM", str(dim))
+    monkeypatch.setenv("EMBEDDINGS_DIM", str(dim))
     monkeypatch.setattr(env, "embedding_model", Dim(dim))
     fake = FakeSupabase(chunks)
     monkeypatch.setattr(env, "supabase", fake)
@@ -347,13 +347,13 @@ def _cloud_env(env, monkeypatch, dim, chunks):
 
 
 def test_cloud_target_is_the_configured_dimension_only(env, monkeypatch):
-    monkeypatch.setenv("EMBEDDINGS_EMBED_DIM", "768")
+    monkeypatch.setenv("EMBEDDINGS_DIM", "768")
     assert env.cloud_vector_target(768) == ("embedding_vec", "match_document_chunks_vec")
     for wrong in (384, 1024):
         with pytest.raises(env.AppError) as e:
             env.cloud_vector_target(wrong)
         assert e.value.code == "EMBEDDING_DIM_UNSUPPORTED"
-    monkeypatch.setenv("EMBEDDINGS_EMBED_DIM", "1536")
+    monkeypatch.setenv("EMBEDDINGS_DIM", "1536")
     assert env.cloud_vector_target(1536)[0] == "embedding_vec"
 
 
@@ -422,7 +422,7 @@ def test_ingest_cloud_writes_the_neutral_column(env, monkeypatch):
                     return _Res([{"id": "doc1", "filename": "f", "created_at": "now"}])
             return T()
 
-    monkeypatch.setenv("EMBEDDINGS_EMBED_DIM", "256")
+    monkeypatch.setenv("EMBEDDINGS_DIM", "256")
     monkeypatch.setattr(env, "supabase", Sb())
     monkeypatch.setattr(env, "embedding_model", Dim(256))
     run(env.ingest_document("a1", "u1", "cloud", "f.txt", "hello world"))
@@ -447,7 +447,7 @@ def test_ingest_cloud_with_no_embedder_stores_chunks_without_vectors(env, monkey
 
     class Broken:
         def encode(self, texts, *a, **k):
-            raise retrieval.EmbeddingUnavailable("Needs a Embeddings key")
+            raise retrieval.EmbeddingUnavailable("Needs embeddings")
 
     monkeypatch.setattr(env, "supabase", Sb())
     monkeypatch.setattr(env, "embedding_model", Broken())
@@ -479,4 +479,4 @@ def test_migrations_are_numbered_in_order_and_documented():
     readme = (BACKEND / "supabase" / "README.md").read_text()
     for name in ("011_embeddings_1024.sql", "023_embeddings_model_neutral.sql"):
         assert name in readme
-    assert "match_document_chunks_vec" in readme and "embedding_vec" in readme and "EMBEDDINGS_EMBED_DIM" in readme
+    assert "match_document_chunks_vec" in readme and "embedding_vec" in readme and "EMBEDDINGS_DIM" in readme

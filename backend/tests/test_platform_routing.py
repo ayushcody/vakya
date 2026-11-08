@@ -79,17 +79,18 @@ def test_health_has_no_gpu_or_platform_and_reports_the_language_model(app_client
     body = app_client.get("/api/health", headers=LOCAL).json()
     assert body["status"] == "ok" and "gpu" not in body and "platform" not in body and "models_loaded" not in body
     assert body["llm"]["active"] is None and body["llm"]["providers"] == [
-        {"name": "embeddings", "label": "Embeddings Flash", "available": False, "reason": "Needs a Embeddings key"}]
+        {"name": "hosted", "label": "Hosted language model", "available": False,
+         "reason": "Needs a language model: set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL in backend/.env"}]
     assert body["gnani"]["configured"] is False
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     llm = app_client.get("/api/health", headers=LOCAL).json()["llm"]
-    assert llm["active"] == "embeddings" and llm["model"] and llm["providers"][0]["available"] is True
+    assert llm["active"] == "hosted" and llm["model"] and llm["providers"][0]["available"] is True
 
 
 def test_ready_lists_the_missing_keys(app_client, monkeypatch):
     body = app_client.get("/api/ready").json()
-    assert body["embeddings_configured"] is False and body["gnani_configured"] is False and body["ok"] is False
-    assert any("set LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY)" in p for p in body["problems"]) and any("GNANI_API_KEY" in p for p in body["problems"])
+    assert body["llm_configured"] is False and body["gnani_configured"] is False and body["ok"] is False
+    assert any("set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL" in p for p in body["problems"]) and any("GNANI_API_KEY" in p for p in body["problems"])
 
 
 def test_the_resource_snapshot_reports_only_what_exists(app_client):

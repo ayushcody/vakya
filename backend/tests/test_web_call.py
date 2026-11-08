@@ -204,7 +204,7 @@ def test_the_page_is_self_contained_branded_and_safe(rig, env):
 
 
 def test_the_page_leaks_no_secret_id_or_number(rig, env, monkeypatch):
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "gsk_SECRETSECRETSECRET")
+    monkeypatch.setenv("LLM_API_KEY", "gsk_SECRETSECRETSECRET"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     a = make_agent(rig.client, system_instructions="Call the owner on +919876543210 with key sk-abcdef")
     link = make_link(rig, a["id"], label="private label")
     page = rig.public.get(f"/call/{link['id']}").text
@@ -618,7 +618,7 @@ def test_a_link_does_not_unlock_the_rest_of_the_api_even_with_its_token(rig):
 
 def test_a_turn_works_end_to_end_with_no_model_key(rig, monkeypatch):
     """The real model client, no key: nothing is requested and the visitor hears the fixed line."""
-    for name in ("LLM_API_KEY", "EMBEDDINGS_API_KEY"):
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(llm, "chat_stream", _REAL_CHAT_STREAM)
     monkeypatch.setattr(llm, "_client", lambda: pytest.fail("a request was made without a key"))

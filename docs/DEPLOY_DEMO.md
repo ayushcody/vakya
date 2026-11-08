@@ -33,4 +33,4 @@ Without either, the API refuses requests that do not arrive directly on the mach
 - **Gnani limits.** One active request at a time and a credit budget. When Gnani is busy the caller hears a short held line and is offered a callback; this is deliberate and is logged.
 - **Model limits.** The language model's provider sets rate limits per key; a long demo day can hit them. Use a paid key for a live demo.
 - **No persistence without a volume.** Mount a volume on the API's data directory, or agents and files are lost when the container is replaced.
-- **Not yet proven.** This path has not been run with a live Gnani key or a live Vobiz number.
+- **Partly proven.** Phone calls through Vobiz with a live Gnani key ran on 8 Nov 2026 from a laptop. This hosted-container path itself has not been run.

@@ -22,7 +22,7 @@ Three jobs, each switched on by its flag (the first runs when no flag is given):
 model calls). The default job (old 500-word passages) writes unless --dry-run. A real run backs the two tables up first.
 
 Safe to run again: a document whose passages are already the new size / have headers / have questions is skipped. Stop the app first (or at least do not
-upload while it runs): the app and this script write the same JSON files. Documents are re-embedded with Embeddings
+upload while it runs): the app and this script write the same JSON files. Documents are re-embedded by the hosted embedder
 (EMBEDDINGS_API_KEY, read from backend/.env). Without a key the new passages are stored without vectors and found by keyword
 search until a later search embeds them. Hosted (Supabase) documents are not touched.
 Exit code 0 when nothing failed, 1 when a document failed (it keeps its old passages), 2 on a bad data dir.
@@ -66,7 +66,7 @@ def backup_tables(data_dir: str) -> str:
 def run(data_dir: str, *, agent_id=None, dry_run=False, backup=True, model_name=None, encode=None, out=print,
         with_structure=False, questions=False, source_dir=None, force=False, redo_questions=False, chat=None,
         pacer=None, sleep=None) -> dict:
-    """The whole job; `encode` is injectable for tests (default: Embeddings embeddings, or None per call when they are
+    """The whole job; `encode` is injectable for tests (default: hosted embeddings, or None per call when they are
     unavailable, which stores the passages without vectors).
     `chat`, `pacer` and `sleep` are test hooks for the question index (default: the language model, real pacing)."""
     if not os.path.isdir(os.path.join(data_dir, "local_db")):

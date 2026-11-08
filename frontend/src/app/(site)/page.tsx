@@ -4,6 +4,8 @@ import { DemoVideo } from "@/components/site/DemoVideo";
 import { BuiltOnGnani, CallFlow, Limitations, ReportTeaser, StackStrip, Team, TrustGrid } from "@/components/site/Landing";
 import { FinalCta } from "@/components/site/Ending";
 import { ForEveryDesk } from "@/components/site/ForEveryDesk";
+import { WhatVakyaDoes } from "@/components/site/WhatVakyaDoes";
+import { ScheduleVisualiser } from "@/components/site/ScheduleVisualiser";
 import { LegacyHashRedirect } from "@/components/site/LegacyHashRedirect";
 
 const TITLE = "Vakya: call once, it's booked";
@@ -45,6 +47,8 @@ export default function HomePage() {
       <StackStrip />
       <DemoVideo />
       <CallFlow />
+      <WhatVakyaDoes />
+      <ScheduleVisualiser />
       <ForEveryDesk />
       <BuiltOnGnani />
       <ReportTeaser />

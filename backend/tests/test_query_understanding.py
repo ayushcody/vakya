@@ -353,7 +353,7 @@ def test_llm_timeout_and_failure_fall_back_to_the_raw_text(lex):
 def test_real_llm_call_is_tiny(monkeypatch):
     from services import llm
     calls = []
-    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_API_KEY", "k"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "m")
 
     def fake_chat(messages, **kw):
         calls.append((messages, kw))
