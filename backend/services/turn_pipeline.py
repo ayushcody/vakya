@@ -20,7 +20,7 @@ try:
         hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
         speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
     )
-    from services import booking_evidence, call_events, call_notes
+    from services import booking_evidence, call_events, call_notes, digit_repair
     from services.speaking import TtsPlan
 except ImportError:  # pragma: no cover
     from backend.core import activity, deps, engines, state
@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover
         hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, sentences as sentences_mod, speaking,
         speech_numbers, storage, synthesis, tools as tools_mod, turn_taking, voice_store,
     )
-    from backend.services import booking_evidence, call_events, call_notes
+    from backend.services import booking_evidence, call_events, call_notes, digit_repair
     from backend.services.speaking import TtsPlan
 
 log = logging.getLogger("vakya")
@@ -551,7 +551,11 @@ async def turn_caller_memory(run: TurnRun) -> None:
         run.caller_previous_agent = previous
         found = caller_memory.extract(run.user_text, previous, schema=caller_memory.schema_for(getattr(run, "agent", None)))
         run.caller_found = dict(found)   # which details this very utterance supplied (booking evidence)
-        run.caller_form = caller_memory.merge(stored, found)
+        merged = caller_memory.merge(stored, found)
+        # a phone number heard in pieces, or corrected after the read-back (services/digit_repair.py)
+        run.caller_form = digit_repair.repair(merged, run.user_text, previous)
+        if run.caller_form.get("phone") and run.caller_form.get("phone") != merged.get("phone"):
+            run.caller_found["phone"] = run.caller_form["phone"]
         if found:
             log.info("caller details: read %s from the caller's words (conversation %s)", ", ".join(sorted(found)),
                      run.conversation_id)
@@ -664,7 +668,9 @@ def turn_messages(run: TurnRun) -> List[dict]:
     known = caller_profiles.prompt_block(getattr(run, "conversation_id", None))   # a returning phone caller (services/caller_profiles.py)
     from services import delays  # noqa: PLC0415
     late = delays.prompt_block(run.agent.get("id"), getattr(run, "conversation_id", None))   # running late today, and a call the desk placed to say so (services/delays.py)
-    extra = "\n".join(x for x in (notes, known, late) if x)
+    # a phone number heard only in part: ask for the rest, and on a phone call offer the keypad (services/digit_repair.py)
+    digits = digit_repair.prompt_note(getattr(run, "caller_form", None), keypad=getattr(run, "source", None) == "phone")
+    extra = "\n".join(x for x in (notes, known, late, digits) if x)
     messages.append({"role": "user", "content": content + ("\n" + extra if extra else "")})
     return messages
 
