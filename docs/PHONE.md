@@ -221,6 +221,14 @@ and Hinglish equivalents) end the call without the agent answering and the outco
 is not detected. Key presses are counted, never stored (they may be a card number or a code); pressing 0 flags the conversation as
 needing a person. Vobiz does not document its `dtmf` event: the shape is assumed (`dtmf.digit`).
 
+**A phone number on the keypad.** When a spoken number has failed twice (`services/digit_repair.py`, see
+[CALLER_MEMORY.md](CALLER_MEMORY.md#a-phone-number-in-pieces)), the agent is told to offer the keypad. Once its reply asks for
+the keypad ("keypad", "कीपैड", "कीपॅड", "#"), the keys type a number instead: 0 is a digit, `*` asks for a person, and `#` (or ten
+digits of a mobile number; a number starting 91 or 0 waits for `#` or its full length) ends it. The number becomes the
+caller's next turn as text, with no speech recognition, so it is read back and booked only on a yes like a spoken one. The
+call log notes that a number was typed, never the number. Tested against a fake Vobiz stream only: a real call has not
+typed a number yet.
+
 **Ending and handing over** (tools the agent can call during a phone call). Turn on the tool server **call** for the agent through the API (the
 Tools switches in the agent screen do not list it yet): `PUT /api/agents/{id}` with `{"tools": ["appointments", "call"]}`, keeping the
 ones it already has. `end_call` hangs up after the agent's goodbye. `transfer_call` exists only when you set a transfer
