@@ -580,6 +580,17 @@ def decide(messages: List[dict], system: str = "") -> str:
         if isinstance(v, str) and "Please give a name" in v:
             # the booking store takes letters without vowel signs only: write the name in Roman letters, as a careful model would
             return tool("book", **booking_args(f), name=roman(f.name), phone=f.phone)
+        if isinstance(v, str) and v.startswith("NOT DONE") and "changed only the" in v:
+            # one detail changed after the read-back: say only the new detail, as the tool wrote it (services/readback.py)
+            key = {"hi": "HI", "mr": "MR"}.get(lang, "EN")
+            m = re.search(key + r' "([^"]+)"', v)
+            if m:
+                return prefix + m.group(1)
+        if isinstance(v, str) and v.startswith("NOT DONE") and lang in ("en", "hi", "mr"):
+            # the tool says what to read back ("Say exactly this"): a careful model says the sentence it was given
+            m = re.search({"en": "EN", "hi": "HI", "mr": "MR"}[lang] + r' "([^"]+)"', v)
+            if m:
+                return prefix + m.group(1)
         if isinstance(v, str) and v.startswith("NOT DONE"):
             return prefix + say("readback", lang, summary=summary(f, when, lang))
         if isinstance(v, dict) and v.get("alternatives"):

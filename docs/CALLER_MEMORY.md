@@ -40,7 +40,16 @@ A change is kept only when the result is a valid Indian mobile number. While the
 line ("Phone number not complete yet: heard 98765 4321, 9 of 10 digits. Ask only for the missing digits...") instead of
 the number in the known details; after two tries on a phone call the line also says to offer the keypad
 ([PHONE.md](PHONE.md)). The read-back and the caller's yes are still needed to book. `phone_partial` and `phone_tries`
-are working state, not details the caller gave: they are never in the desk's view of the call. A booking whose number was completed this way names the utterance
+are working state, not details the caller gave: they are never in the desk's view of the call. So are `phone_offer` and
+`phone_offer_no`: on a phone call a new caller is first asked whether to book on the number they are calling from ("ending 3
+2 1 0"), and a yes or no to that question is read in code ([PHONE.md](PHONE.md)).
+
+The read-back says the whole number, digit by digit in the groups people say a mobile number in, with a comma between
+them that the voice reads as a short pause: "phone number 9 8 7 6 5, 4 3 2 1 0" (`services/speech_numbers.spoken_phone`), in
+English, Hindi and Marathi, so a wrong digit anywhere can be caught. The desk's transcripts still show only the last four
+digits ("••••3210"). When the caller changes one detail after the read-back ("nahi, 7 baje"), only that detail is read back
+("So 7 pm instead. Shall I book it?", `services/readback.correction_sentences`) and the caller's yes then books the whole
+booking, because the turn before read back everything else; two changed details get the whole read-back again. A booking whose number was completed this way names the utterance
 that completed it in its proof of booking.
 
 ## 2. Across calls: one profile per number
