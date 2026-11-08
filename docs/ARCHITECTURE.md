@@ -73,6 +73,7 @@ Every turn of a call (browser web call, the owner's own turns, the phone call) a
 | `booking` | A booking was made and its evidence sealed: `booking_id`, `name` (owner only), `schedule_id`, `schedule`, `date`, `time`, `start`, `evidence_id`, `receipt_id`, `evidence_complete`. |
 | `hearing` | What Prisma was told to listen for and what it probably corrected (`services/hearing.py`, `docs/HEARING.md`): `kind` (`listening`: `expecting`, `kinds`, `names`; or a correction: `heard`, `meant`, `rule_id`, `probable`), `label` (one line to show as it is, e.g. "Listening for: a name (Sunita, Rahul)"). |
 | `turn_end` | `language`, `tool_calls`, `fallback`, `interrupted`, or `error` (a code). |
+| `latency` | A phone turn's response time, measured on the call: `turn`, `response_ms` (end of the caller's speech to the first audio of the reply), `end_wait` (the end silence used, e.g. `500(normal)`). Sent after the reply starts, so it follows that turn's `agent` sentences. |
 
 Order inside a turn: `caller`, then for each tool `tool` start and end, then the `agent` sentences, then `booking` (when one was made), then `turn_end`.
 

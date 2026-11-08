@@ -560,12 +560,34 @@ class CallSession:
         for key in ("start", "heard", "sentence", "audio"):
             if key in t:
                 row[key + "_ms"] = int((t[key] - base) * 1000)
+        if "audio_ms" in row:
+            # what the caller waited: the end silence the detector needed to call the turn over, then up to the first
+            # audio of the reply (a filler counts: it is what the caller hears first)
+            row["response_ms"] = max(0, row["audio_ms"] + (self._wait_ms or self.end_silence_ms))
+            self._note_response(n, row["response_ms"], row.get("end_wait"))
         self.log.append(row)
         log.info("phone turn %d latency (ms after the end-of-speech event): %s | speculative start: %s | end_wait=%s | "
                  "first audio %s ms after the caller's last word", n,
                  ", ".join(f"{k[:-3]}={v}" for k, v in row.items() if k.endswith("_ms")),
                  "yes" if self.turn_speculative else "no", self._wait_label or "?",
                  row["audio_ms"] + (self._wait_ms or self.end_silence_ms) if "audio_ms" in row else "?")
+
+    def _note_response(self, n: int, ms: int, end_wait: Optional[str]) -> None:
+        """Keep one turn's response time: on the call record (median and slowest), on the live call card
+        (GET /api/phone/live) and as a Watch it think event. Measured on this call, from the end of the caller's speech
+        to the first audio of the reply."""
+        self.response_ms.append(int(ms))
+        ordered = sorted(self.response_ms)
+        mid = len(ordered) // 2
+        median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) // 2
+        call_records.upsert(self.call_sid, response_ms_median=median, response_ms_max=ordered[-1],
+                            response_turns=len(ordered))
+        try:
+            from services import call_events  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import call_events  # noqa: PLC0415
+        call_events.emit(self.agent.get("id"), self.conversation_id, None, "latency", turn=n, response_ms=int(ms),
+                         end_wait=end_wait or "")
 
     def tap(self, msg: dict) -> None:
         for m in list(self.monitors):
@@ -2128,7 +2150,9 @@ def _live_view(s: "CallSession") -> Dict[str, Any]:
     return {"conversation_id": s.conversation_id, "call_sid": s.call_sid, "agent_id": s.agent.get("id"),
             "agent_name": s.agent.get("name") or "Agent", "direction": rec.get("direction") or ("outbound" if s.outbound else "inbound"),
             "started_at": int(s.started_at), "seconds": int(time.time() - s.started_at), "human_active": s.human_active,
-            "listeners": len(s.monitors)}
+            "listeners": len(s.monitors),
+            # measured on this call: the caller's last word to the first audio of each reply, oldest first (last 20)
+            "response_ms": list(getattr(s, "response_ms", []) or [])[-20:]}
 
 
 @router.get("/api/phone/live")

@@ -28,7 +28,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 RING = 600                    # events kept per front desk
 MAX_AGENTS = 64               # front desks kept (the least recently used one goes)
-EVENT_TYPES = ("caller", "tool", "agent", "booking", "turn_end", "hearing")
+EVENT_TYPES = ("caller", "tool", "agent", "booking", "turn_end", "hearing", "latency")
 
 _lock = threading.RLock()
 _cond = threading.Condition(_lock)

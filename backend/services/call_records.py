@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 _lock = threading.RLock()
 FIELDS = ("call_sid", "owner", "agent_id", "direction", "status", "to_masked", "created_at", "updated_at", "started_at",
           "ended_at", "duration_s", "hangup_reason", "conversation_id", "message", "outcome", "dtmf_presses", "transfer_to",
-          "provider", "account")
+          "provider", "account", "response_ms_median", "response_ms_max", "response_turns")
 TERMINAL = ("completed", "failed", "busy", "no-answer", "canceled")
 
 

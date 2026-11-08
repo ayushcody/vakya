@@ -12,6 +12,7 @@ import { ScheduleGlance } from "@/components/desk/ScheduleGlance";
 import { TodayQueue } from "@/components/queue/TodayQueue";
 import { SetupChecklist } from "@/components/agents/AgentHeader";
 import { UsageTiles } from "@/components/usage/UsageTiles";
+import { LiveCalls } from "@/app/(app)/desk/calls/LiveCalls";
 import { isSameDay, isToday, madeToday, useBookings } from "@/components/desk/calls";
 import { useAgents } from "@/hooks/useApi";
 import { useNow } from "@/hooks/useNow";
@@ -77,6 +78,8 @@ export default function DeskToday() {
             <Phone className="size-4" aria-hidden /> Try a call
           </Link>
         </header>
+
+        <LiveCalls />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile label="Booked today" value={bookedToday.length} hint="appointments happening today" href="/desk/bookings" />

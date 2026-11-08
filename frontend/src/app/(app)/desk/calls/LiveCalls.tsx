@@ -6,6 +6,7 @@ import { Headphones } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { api } from "@/lib/api";
 import { PcmPlayer } from "@/lib/livePcm";
+import { ResponseTime } from "@/components/live/ResponseTime";
 import { LiveMonitor } from "./LiveMonitor";
 import type { LiveCall } from "./types";
 
@@ -54,6 +55,9 @@ export function LiveCalls({ listenTo = null }: { listenTo?: { id: string; n: num
       <h2 className="flex items-center gap-2 text-base font-semibold text-text-primary">
         <span className="size-2 rounded-full bg-accent-success motion-safe:animate-pulse" aria-hidden />Live now
       </h2>
+      {calls.some((c) => (c.response_ms ?? []).length > 0) && (
+        <p className="text-xs text-text-secondary">Response times are measured on each call, from the end of the caller&rsquo;s speech to the first audio of the reply.</p>
+      )}
       {calls.map((c) => (
         <Card key={c.conversation_id} className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="min-w-0">
@@ -63,6 +67,7 @@ export function LiveCalls({ listenTo = null }: { listenTo?: { id: string; n: num
               {c.listeners > 0 && ` · ${c.listeners} listening`}
             </p>
           </div>
+          <ResponseTime ms={c.response_ms ?? []} />
           <div className="flex items-center gap-2">
             {c.human_active && <Badge tone="warning" dot>A person has the call</Badge>}
             <Button size="sm" variant="outline" onClick={() => listen(c)} disabled={listening === c.conversation_id}>

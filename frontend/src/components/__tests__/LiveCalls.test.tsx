@@ -119,3 +119,22 @@ test("when the call ends the panel says so", async () => {
   MockWS.instances[0].emit({ type: "ended" });
   expect(await screen.findByText("Call ended")).toBeInTheDocument();
 });
+
+test("the live card shows the call's response time per turn, measured on the call", async () => {
+  get.mockResolvedValue({ calls: [{ ...call, response_ms: [1240, 880, 930] }] });
+  view();
+  const box = await screen.findByTestId("response-time");
+  expect(box).toHaveTextContent("Response");
+  expect(box).toHaveTextContent("0.9 s");                           // the latest turn
+  expect(box).toHaveTextContent("median 0.9 s");
+  expect(box).toHaveTextContent("slowest 1.2 s");
+  expect(screen.getByRole("img", { name: "Response time per turn on this call: 1.2 s, 0.9 s, 0.9 s" })).toBeInTheDocument();
+  expect(screen.getByText(/measured on each call, from the end of the caller.s speech to the first audio of the reply/)).toBeInTheDocument();
+});
+
+test("no response time is shown before the first answered turn", async () => {
+  get.mockResolvedValue({ calls: [{ ...call, response_ms: [] }] });
+  view();
+  await screen.findByText("Clinic desk");
+  expect(screen.queryByTestId("response-time")).toBeNull();
+});
