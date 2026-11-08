@@ -191,3 +191,86 @@ def test_half_a_number_reaches_the_next_turn_as_a_note_for_the_agent(rig):
     parse(rig.post(a["id"], conversation_id=conv))
     said = rig.asked[-1]["messages"][-1]["content"]
     assert "Phone number not complete yet" in said and "98765" in said and "5 of 10" in said
+
+
+# --------------------------------------------------------------------------------------------- the caller's own number
+
+OWN = "+91 98765 00012"
+OFFER_ASK = "Shall I book it on this number, ending 0 0 1 2?"
+OFFER_ASK_HI = "क्या मैं इसी नंबर पर बुक कर दूँ, आख़िरी अंक 0 0 1 2?"
+OFFER_ASK_MR = "याच नंबरवर बुक करू का, शेवटचे अंक 0 0 1 2?"
+
+
+def test_a_new_caller_is_offered_the_number_they_are_calling_from():
+    form = dr.offer_own_number({}, OWN)
+    assert form == {dr.OFFER: "9876500012"}
+    note = dr.prompt_note(form, keypad=True)
+    assert "ending 0 0 1 2" in note and "this number" in note and "keypad" not in note
+
+
+def test_a_known_number_or_an_invalid_caller_id_is_never_offered():
+    assert dr.offer_own_number({"phone": "9876500034"}, OWN) == {"phone": "9876500034"}
+    assert dr.offer_own_number({}, "+1 202 555 0100") == {}
+    assert dr.offer_own_number({}, None) == {}
+    assert dr.offer_own_number({dr.OFFER_NO: "1"}, OWN) == {dr.OFFER_NO: "1"}
+
+
+def test_yes_to_the_offer_makes_it_the_booking_number_without_dictating_digits():
+    offered = dr.offer_own_number({}, OWN)
+    for answer, ask in (("yes, same number", OFFER_ASK), ("haan ji, isi pe kar do", OFFER_ASK),
+                        ("हाँ, इसी नंबर पर", OFFER_ASK_HI), ("हो, बरोबर", OFFER_ASK_MR)):
+        form = dr.repair(offered, answer, ask)
+        assert form == {"phone": "9876500012"}, answer
+
+
+def test_the_offer_is_recognised_by_its_last_four_digits_too():
+    offered = dr.offer_own_number({}, OWN)
+    assert dr.repair(offered, "yes", "Should I use your mobile number ending 0012?")["phone"] == "9876500012"
+
+
+def test_no_to_the_offer_asks_for_the_number_and_offers_the_keypad_at_once():
+    offered = dr.offer_own_number({}, OWN)
+    for answer, ask in (("no, use another number", OFFER_ASK), ("nahi, dusra number", OFFER_ASK),
+                        ("नहीं", OFFER_ASK_HI), ("नाही, वेगळा नंबर", OFFER_ASK_MR)):
+        form = dr.repair(offered, answer, ask)
+        assert "phone" not in form and dr.OFFER not in form and form[dr.OFFER_NO] == "1", answer
+        note = dr.prompt_note(form, keypad=True)
+        assert "say their phone number" in note and "#" in note
+    assert "keypad" not in dr.prompt_note({dr.OFFER_NO: "1"}, keypad=False)   # a web call has no keypad
+
+
+def test_another_number_said_instead_of_yes_wins_over_the_offer():
+    offered = dr.offer_own_number({}, OWN)
+    assert dr.repair(offered, "no, write 98765 00034", OFFER_ASK) == {"phone": "9876500034"}
+
+
+def test_a_yes_to_some_other_question_never_takes_the_offer():
+    offered = dr.offer_own_number({}, OWN)
+    assert dr.repair(offered, "yes", "Would you like the 5 pm slot?") == offered
+
+
+def test_the_offer_never_reaches_the_known_details_or_the_desk():
+    from services import caller_memory
+    form = {"name": "Asha Patil", dr.OFFER: "9876500012"}
+    assert "9876500012" not in str(caller_memory.prompt_slots(form, {}))
+
+
+# --------------------------------------------------------------------------------------------- keypad and speech mixed
+
+def test_digits_typed_on_the_keypad_complete_a_number_begun_by_voice():
+    form = dr.repair({}, "98765", ASK_PHONE)                     # heard by voice: the first five
+    pad = dr.KeypadEntry()
+    for key in "00012#":
+        action, typed = pad.press(key)
+    assert action == "submit" and typed == "00012"
+    form = dr.repair(form, typed, "Please type the remaining digits on the keypad and press hash.")
+    assert form["phone"] == "9876500012" and dr.PARTIAL not in form
+
+
+def test_a_whole_number_typed_on_the_keypad_replaces_a_misheard_one():
+    form = dr.repair({}, "98765 4", ASK_PHONE)
+    pad = dr.KeypadEntry()
+    for key in "9876500012":
+        action, typed = pad.press(key)
+    assert action == "submit"
+    assert dr.repair(form, typed, "Please type it on the keypad and press hash.")["phone"] == "9876500012"

@@ -16,6 +16,16 @@ so the caller details form (services/caller_memory.py) keeps two extra keys next
     Indian mobile number;
   * a time ("6 30 baje"), a short answer ("2") or digits nobody asked for ("room 40512") change nothing.
 
+On a phone call the caller's own number (the caller ID) is offered first, so a caller who wants it never dictates ten
+digits: the phone router puts it in the form as `phone_offer` (`offer_own_number`), `prompt_note` tells the model to ask
+"Shall I book it on this number, ending 3 2 1 0?", and `repair` reads the answer in code:
+
+  phone_offer     the number the caller is calling from, kept until it is accepted, declined or another number is given
+  phone_offer_no  "1" once the caller said no: the model then asks them to say the number or type it, ending with #
+
+A yes (haan, ho, yes, same number, isi number pe) to that question makes it the booking's phone; the read-back and the
+spoken yes before booking are unchanged.
+
 `prompt_note(form, keypad)` is the line the language model gets while the number is incomplete: what was heard, how many
 digits, ask only for the rest. After KEYPAD_AFTER tries on a phone call it also says to offer the keypad.
 
@@ -36,7 +46,9 @@ except ImportError:  # pragma: no cover
 
 PARTIAL = "phone_partial"
 TRIES = "phone_tries"
-KEYS = (PARTIAL, TRIES)
+OFFER = "phone_offer"
+OFFER_NO = "phone_offer_no"
+KEYS = (PARTIAL, TRIES, OFFER, OFFER_NO)
 KEYPAD_AFTER = 2
 MIN_DIGITS = 3          # fewer is a party size, an age or a slot number, never a piece of a phone number
 MOBILE = 10
@@ -54,6 +66,19 @@ _HEAD = re.compile(
 _TIME_WORDS = re.compile(
     r"\b(?:baje|bajey|bajkar|vajta|vajata|am|pm|a\.m|p\.m|o'?clock|subah|sakali|shaam|sham|dopahar|dupari|raat|ratri|"
     r"morning|afternoon|evening|night)\b|बजे|बजकर|वाजता|वाजून|सुबह|सकाळी|शाम|संध्याकाळी|दोपहर|दुपारी|रात",
+    re.IGNORECASE)
+# The agent's question about the caller's own number: "this number", "same number", "isi number", "इसी नंबर", "याच नंबर".
+_THIS_NUMBER = re.compile(
+    r"\b(?:this|same|current)\s+(?:phone\s+|mobile\s+)?number\b|\b(?:isi|issi|yahi)\s+(?:number|nambar)\b|"
+    r"\byach\s+(?:number|nambar)\b|इसी\s*(?:नंबर|नम्बर)|यही\s*(?:नंबर|नम्बर)|याच\s*(?:नंबर|क्रमांक)|हाच\s*(?:नंबर|क्रमांक)",
+    re.IGNORECASE)
+_OFFER_YES = re.compile(
+    r"\b(?:yes|yeah|yep|yup|ok|okay|sure|correct|right|haan|haa|han|ha|hanji|haanji|ji|ho|hoy|theek|thik|chalega|"
+    r"same|wahi|wohi|yahi|isi|issi|yach|barobar)\b|हाँ|हां|\bहा\b|जी|ठीक|चलेगा|वही|यही|इसी|\bहो\b|होय|बरोबर|हाच|याच",
+    re.IGNORECASE)
+_OFFER_NO = re.compile(
+    r"\b(?:no|nope|nahi|nahin|nai|na|nako|nahi|different|another|other|dusra|dusre|doosra|dusri|vegla)\b|"
+    r"नहीं|नही|\bना\b|दूसरा|दूसरे|दूसरी|नको|नाही|वेगळा|दुसरा|दुसरे",
     re.IGNORECASE)
 _KEYPAD = re.compile(r"key\s?pad|dial\s?pad|\bhash\b|कीपैड|की-पैड|कीपॅड|डायल\s?पैड|डायलपॅड|#", re.IGNORECASE)
 
@@ -89,6 +114,39 @@ def _missed(form: Dict[str, str], partial: Optional[str]) -> Dict[str, str]:
     return form
 
 
+def offers_own_number(agent_text: Optional[str], offer: Optional[str] = None) -> bool:
+    """The agent's last reply asks whether to use the number the caller is calling from: "this number" (in any of the
+    three languages), or the last four digits of `offer` said as a phone number ("ending 3 2 1 0")."""
+    text = str(agent_text or "")
+    if _THIS_NUMBER.search(text):
+        return True
+    if offer and len(offer) >= 4 and _PHONE_WORDS.search(text):
+        runs = ["".join(d for d, _ in run) for run in spoken_digits.digit_token_runs(text)]
+        return any(r.endswith(offer[-4:]) for r in runs)
+    return False
+
+
+def own_number_answer(caller_text: Optional[str]) -> Optional[bool]:
+    """The caller's answer to "Shall I book it on this number?": True (yes), False (no, or another number), None (not an
+    answer: digits, a question, something else)."""
+    text = str(caller_text or "")
+    if _OFFER_NO.search(text):
+        return False
+    if _OFFER_YES.search(text) and len(_digits_said(text)) < MIN_DIGITS:
+        return True
+    return None
+
+
+def offer_own_number(form: Optional[Dict[str, str]], number: Optional[str]) -> Dict[str, str]:
+    """`form` with the caller's own number (the caller ID) offered, unless a phone number is already known or the caller
+    already declined it. A new dict. A number that is not a valid Indian mobile number is not offered."""
+    out = dict(form or {})
+    found = _valid(re.sub(r"\D", "", str(number or "")))
+    if found and not out.get("phone") and not out.get(OFFER_NO):
+        out[OFFER] = found
+    return out
+
+
 def repair(form: Optional[Dict[str, str]], caller_text: Optional[str], agent_text: Optional[str] = None) -> Dict[str, str]:
     """`form` with the phone number repaired from what the caller just said (see the module docstring). A new dict;
     `form` itself is not changed. Unchanged when the turn has nothing to do with a phone number."""
@@ -97,6 +155,15 @@ def repair(form: Optional[Dict[str, str]], caller_text: Optional[str], agent_tex
     whole = spoken_digits.find_mobile(text)
     if whole:
         return _done(out, whole)
+    offer = out.get(OFFER)
+    if offer and not out.get("phone") and offers_own_number(agent_text, offer):
+        answer = own_number_answer(text)
+        if answer is True:
+            return _done(out, offer)                     # "haan, isi number pe": no digits dictated
+        if answer is False and len(_digits_said(text)) < MIN_DIGITS:
+            out.pop(OFFER, None)
+            out[OFFER_NO] = "1"                          # ask for the number, and offer the keypad at once
+            return out
     said = _digits_said(text)
     if len(said) < MIN_DIGITS or len(said) > 13:
         return out
@@ -138,6 +205,15 @@ def prompt_note(form: Optional[Dict[str, str]], keypad: bool = False) -> str:
     if form.get("phone"):
         return ""
     partial, tries = form.get(PARTIAL) or "", _tries(form)
+    offer = form.get(OFFER)
+    if offer and not partial and not tries:
+        tail = " ".join(offer[-4:])
+        return (f"(The caller is calling from a mobile number ending {tail}. When you need their phone number, do not ask "
+                f"them to say it: first ask, in the caller's language, whether to use this number, e.g. \"Shall I book it "
+                f"on this number, ending {tail}?\" Use it only after they say yes.)")
+    if form.get(OFFER_NO) and not partial and not tries:
+        return ("(The caller does not want the number they are calling from. Ask them to say their phone number"
+                + (", or type it on the phone keypad and press the hash key, #." if keypad else ".") + ")")
     if not partial and not tries:
         return ""
     parts = []
