@@ -95,10 +95,10 @@ HISTORY = [
 
 
 def test_known_slots_come_from_earlier_tool_calls_latest_first():
-    slots = tools.known_slots(HISTORY)
+    slots = {k: v for k, v in tools.known_slots(HISTORY).items() if not k.startswith("_")}   # "_..." keys are internal
     assert slots == {"name": "Priya Sharma", "phone": "98765", "date": "2026-10-23", "time": "11:00"}
     assert tools.known_slots([]) == {} and tools.known_slots(None) == {}
-    assert tools.known_slots([{"role": "agent", "text_content": "hi"}]) == {}
+    assert not any(not k.startswith("_") for k in tools.known_slots([{"role": "agent", "text_content": "hi"}]))
 
 
 def test_the_known_details_are_added_to_the_callers_message_once():

@@ -1,7 +1,7 @@
 """Retrieval ranking (services/retrieval.py): weighted score fusion maths and the RRF switch, question-index rows that
 stand for their parent passage (contract 3), passage headers (contract 4), the confidence rating (contract 2) and the
 backend hooks (retrieve_context, the hosted path with a fake Supabase client, the per-turn retrieval metadata). Nothing
-is sent to Embeddings."""
+is sent to a hosted model."""
 import asyncio
 
 import numpy as np

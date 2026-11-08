@@ -4,15 +4,15 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from services import embeddings, llm
+from services import llm, model_config
 
 MSGS = [{"role": "user", "content": "hi"}]
 
 
 def use_endpoint(monkeypatch, url=None, key="secret", model="tiny", effort=None):
-    """Point services/llm.py at `url` with a key. `effort`: LLM_REASONING_EFFORT (None leaves the default)."""
-    for name in ("LLM_BASE_URL", "LLM_API_KEY", "EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_MODEL", "LLM_REASONING_EFFORT", "LLM_RETRIES",
-                 "LLM_RETRY_MAX_WAIT_S", "VAKYA_OFFLINE", "LLM_PROVIDER", "LLM_PRIMARY_KEY", "LLM_PRIMARY_MODEL", "LLM_EFFORT"):
+    """Point services/llm.py at `url` with a key. `effort`: LLM_REASONING_EFFORT (None: off)."""
+    for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_REASONING_EFFORT", "LLM_RETRIES",
+                 "LLM_RETRY_MAX_WAIT_S", "VAKYA_OFFLINE", "LLM_PRIMARY_KEY", "LLM_PRIMARY_MODEL", "LLM_PRIMARY_BASE_URL", "LLM_EFFORT"):
         monkeypatch.delenv(name, raising=False)
     if url:
         monkeypatch.setenv("LLM_BASE_URL", url)
@@ -20,12 +20,11 @@ def use_endpoint(monkeypatch, url=None, key="secret", model="tiny", effort=None)
         monkeypatch.setenv("LLM_API_KEY", key)
     if model:
         monkeypatch.setenv("LLM_MODEL", model)
-    if effort is not None:
-        monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
-    monkeypatch.setattr(llm, "_effort_rejected", False)
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "off" if effort is None else effort)   # off unless a test asks for an effort
+    llm._rejected.clear()
     monkeypatch.setattr(llm, "_sleep", lambda s: None)
     llm.last_failures.clear()
-    embeddings._reset_for_tests()
+    model_config._reset_for_tests()
 
 
 def sse(*events) -> bytes:

@@ -9,8 +9,8 @@ How the model asks for a tool (VAKYA_TOOL_PROTOCOL):
 - json (the default): the prompt lists the tools and the model answers either with plain text or with one JSON object
   {"tool": name, "arguments": {...}}, parsed with llm.extract_json. It works with every OpenAI-compatible endpoint, whatever
   its tool-calling support.
-- native: OpenAI-style `tools` / `tool_calls` (Embeddings's OpenAI-compatible endpoint takes them with tool_choice "auto";
-  see services/embeddings.py), for models that call tools dependably. If no provider can, or the native exchange fails, the turn continues with the JSON
+- native: OpenAI-style `tools` / `tool_calls` (an OpenAI-compatible endpoint takes them with tool_choice "auto";
+  see services/llm.py), for models that call tools dependably. If no provider can, or the native exchange fails, the turn continues with the JSON
   protocol, replaying (never repeating) the calls already made.
 
 Safety: tools exist only for agents that enabled them; arguments are checked against the tool's JSON schema here and
@@ -45,7 +45,7 @@ import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import jsonschema
@@ -134,8 +134,47 @@ def _slot_mentioned(text: str, d, t, name: Any = None, phone: Any = None, nights
     return readback.slot_readback_ok(text, d, t, name, phone, nights)
 
 
+def _reasked_after_readback(previous_agent_text: str, arguments: dict, d, t,
+                            known_slots: Optional[Dict[str, str]]) -> bool:
+    """The full read-back of this booking was already given earlier in the call, and the agent's last turn is only a short
+    re-ask about the same day, time and name ("Shall I book Tuesday 10 November at 5 PM for Ayush?"). The caller's yes to it
+    books at once: the details were read back, so they are never read back a second time (8 Nov 2026: the agent read the
+    booking back twice because the short re-ask lacked the phone digits)."""
+    texts = (known_slots or {}).get(READBACKS_KEY) or ""
+    if not texts or d is None:
+        return False
+    if not _slot_mentioned(previous_agent_text, d, t, arguments.get("name"), None, arguments.get("nights")):
+        return False
+    fresh = _fresh_flags(known_slots, len(texts.split(READBACKS_SEP)))
+    return any(_slot_mentioned(x, d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
+               for x, ok in zip(texts.split(READBACKS_SEP), fresh) if x and ok)
+
+
+def _fresh_flags(known_slots: Optional[Dict[str, str]], count: int) -> List[bool]:
+    """For each earlier agent turn of the call: is it still fresh (younger than 3 minutes and fewer than 6 caller turns ago;
+    readback.pending_expired). Unknown times count as fresh."""
+    metas = ((known_slots or {}).get(READBACK_META_KEY) or "").split(READBACKS_SEP)
+    out = []
+    for i in range(count):
+        said_at, _, since = (metas[i] if i < len(metas) else "").partition("|")
+        out.append(not readback.pending_expired(said_at or None, int(since) if since.isdigit() else None, now=_now()))
+    return out
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _previous_is_stale(known_slots: Optional[Dict[str, str]]) -> bool:
+    """The agent's last turn (the pending read-back) is older than 3 minutes or 6 caller turns."""
+    texts = (known_slots or {}).get(READBACKS_KEY) or ""
+    if not texts:
+        return False
+    return not _fresh_flags(known_slots, len(texts.split(READBACKS_SEP)))[-1]
+
+
 def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optional[str],
-                   caller_text: Optional[str] = None) -> Optional[str]:
+                   caller_text: Optional[str] = None, known_slots: Optional[Dict[str, str]] = None) -> Optional[str]:
     """None when a committing tool may run, else what to tell the model. It may run when the previous agent turn read this
     booking back and asked (`_slot_mentioned`) and, when the caller's latest words are known (`caller_text`), they are a
     plain yes (not a no, not a change, not a new request). Otherwise: the exact sentence to say, in English, Hindi and
@@ -144,10 +183,17 @@ def readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optio
     if verb is None or not readback_enabled():
         return None
     if spec.tool == "cancel":
-        return _cancel_readback_error(spec, arguments, previous_agent_text, caller_text)
+        return _cancel_readback_error(spec, arguments, previous_agent_text, caller_text, known_slots)
     d, t = _iso_date(arguments.get("date")), _hhmm(arguments.get("time"))
-    read_back = bool(previous_agent_text) and _slot_mentioned(
-        previous_agent_text, d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
+    stale = _previous_is_stale(known_slots)
+    if spec.tool == "reschedule":
+        read_back = bool(previous_agent_text) and readback.change_readback_ok(previous_agent_text, d, t)
+    else:
+        read_back = bool(previous_agent_text) and (
+            _slot_mentioned(previous_agent_text, d, t, arguments.get("name"), arguments.get("phone"), arguments.get("nights"))
+            or _reasked_after_readback(previous_agent_text, arguments, d, t, known_slots))
+    if read_back and stale:
+        read_back = False        # the read-back expired: a later yes does not count, read it back afresh
     if read_back and (caller_text is None or readback.is_affirmative(caller_text, d, t)):
         return None
     spoken = readback.sentences(arguments, "move" if spec.tool == "reschedule" else "book",
@@ -216,7 +262,7 @@ def _checked_again_error(spec: "ToolSpec", arguments: dict, previous_agent_text:
 
 
 def _cancel_readback_error(spec: "ToolSpec", arguments: dict, previous_agent_text: Optional[str],
-                           caller_text: Optional[str]) -> Optional[str]:
+                           caller_text: Optional[str], known_slots: Optional[Dict[str, str]] = None) -> Optional[str]:
     """The gate of `cancel`: the previous agent turn must name the booking's day and time and ask ("Shall I cancel booking A12,
     Thursday 5 November at 3 pm?") and the caller's latest words must be a plain yes. The day and time are the booking's own,
     found by its id among this front desk's bookings; when there is no such live booking the tool answers for itself (not
@@ -231,7 +277,8 @@ def _cancel_readback_error(spec: "ToolSpec", arguments: dict, previous_agent_tex
     if row is None or row.get("status") != "booked" or not row.get("schedule_id") or (agent and row.get("agent_id") != agent):
         return None
     d, t = _iso_date(row.get("date")), _hhmm(row.get("time"))
-    read_back = bool(previous_agent_text) and _slot_mentioned(previous_agent_text, d, t)
+    read_back = bool(previous_agent_text) and readback.change_readback_ok(previous_agent_text, d, t) \
+        and not _previous_is_stale(known_slots)
     if read_back and (caller_text is None or readback.is_affirmative(caller_text, d, t)):
         return None
     spoken = readback.cancel_sentences(row["booking_id"], d, t)
@@ -242,11 +289,26 @@ def _cancel_readback_error(spec: "ToolSpec", arguments: dict, previous_agent_tex
             "Call cancel again with the same booking_id only after the caller's next message is a yes.")
 
 
+READBACKS_KEY = "_agent_turns"
+READBACKS_SEP = "\x1e"
+READBACK_META_KEY = "_agent_meta"   # per agent turn, parallel to READBACKS_KEY: "<ISO time>|<caller turns since>" (expiry)
+
+
 def known_slots(history: Optional[List[dict]]) -> Dict[str, str]:
     """Details the caller already gave in this conversation, read from the arguments of earlier tool calls (the turn
     records carry them, normalised: dates as YYYY-MM-DD). The latest value of each wins. A refused call (NOT DONE)
     counts too: its details were given."""
     out: Dict[str, str] = {}
+    said = [str(r.get("text_content") or "") for r in history or [] if isinstance(r, dict) and r.get("role") == "agent"]
+    if said:   # the agent's earlier turns, for the read-back rule (never shown to the model: see slots_line)
+        out[READBACKS_KEY] = READBACKS_SEP.join(said)
+        rows = [r for r in history or [] if isinstance(r, dict)]
+        meta = []
+        for i, r in enumerate(rows):
+            if r.get("role") == "agent":
+                since = sum(1 for later in rows[i + 1:] if later.get("role") != "agent")
+                meta.append(f"{r.get('created_at') or ''}|{since}")
+        out[READBACK_META_KEY] = READBACKS_SEP.join(meta)
     for row in history or []:
         for call in (row.get("tool_calls") or []) if isinstance(row, dict) else []:
             args = call.get("arguments") if isinstance(call, dict) else None
@@ -266,7 +328,9 @@ def slots_line(slots: Optional[Dict[str, str]]) -> str:
     if not slots:
         return ""
     confirmed = str(slots.get(PHONE_CONFIRMED_KEY) or "").lower() == "yes"
-    shown = {k: v for k, v in slots.items() if k != PHONE_CONFIRMED_KEY}
+    shown = {k: v for k, v in slots.items() if k not in (PHONE_CONFIRMED_KEY, READBACKS_KEY, READBACK_META_KEY)}
+    if not shown:
+        return ""
     if confirmed and shown.get("phone"):
         shown["phone"] = f"{shown['phone']} (phone confirmed: yes)"
     line = SLOTS_MARKER + ": " + ", ".join(f"{k} {v}" for k, v in shown.items()) + ". Do not ask for these again. "
@@ -652,9 +716,9 @@ def tools_prompt(specs: List[ToolSpec], *, json_protocol: bool, now: Optional[da
         lines += ["- Cancelling a schedule booking: ask \"Shall I cancel booking <ID>, <day, date and time>?\" (its day and time "
                   "are in find_booking), then call cancel after the yes."]
     if "reschedule" in names:
-        lines += ["- Changing a time: find the booking (find_booking), read the NEW day and time back, ask, and call "
-                  "reschedule after the yes. Never cancel and book again. Cancelling reads the booking's day and time back "
-                  "the same way."]
+        lines += ["- Changing a time: find the booking (find_booking), read the NEW day and time back in ONE question, and call "
+                  "reschedule after the first yes. Never cancel and book again. Cancelling reads the booking's day and time back "
+                  "the same way. Never ask about the phone number for a move or cancel (it is on the booking)."]
     if "whatsapp_consent" in names:
         lines += ["- The read-back of a booking already says the confirmation goes out on WhatsApp, so the caller's yes to it "
                   "is the consent: never ask about WhatsApp again on that call. Only when a result has whatsapp.status "
@@ -794,7 +858,7 @@ def execute(spec: ToolSpec, arguments: Any, *, previous_agent_text: Optional[str
         arguments = args
     problem = (_check_arguments(spec, arguments) or confirmation_error(spec, args, previous_agent_text)
                or _checked_again_error(spec, args, previous_agent_text, caller_text, known_slots)
-               or readback_error(spec, args, previous_agent_text, caller_text))
+               or readback_error(spec, args, previous_agent_text, caller_text, known_slots))
     if not problem:
         _consent_from_yes(spec, args, previous_agent_text, caller_text)
     if problem:

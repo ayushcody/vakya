@@ -43,7 +43,7 @@ describe("landing ending", () => {
 
   it("names the services it calls and keeps the receipt key link in the footer", () => {
     render(<Footer />);
-    expect(screen.getByText(/Embeddings Flash and embeddings/)).toBeInTheDocument();
+    expect(screen.getByText(/Hosted language model and embeddings/)).toBeInTheDocument();
     expect(screen.getByText(/Vobiz \(telephony\)/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /receipt public key/i }).getAttribute("href")).toMatch(/\/\.well-known\/vakya-receipt-key$/);
   });

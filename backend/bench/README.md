@@ -1,7 +1,7 @@
 # Vakya measurement suite
 
 Scripts that measure the running system over HTTP (and a few that run the app in one process), and a report writer. Speech is
-Gnani only (Prisma listens, Timbre speaks, Gnani clones voices) and the language model is Embeddings Flash, so every script that
+Gnani only (Prisma listens, Timbre speaks, Gnani clones voices) and the language model is hosted, so every script that
 speaks or listens spends Gnani credits, on the gateway's `bench` lane (lowest priority; it never starves a live call). Each
 script writes raw per-item results to `backend/bench/results/<name>-<timestamp>.json` (git-ignored) and prints a short
 summary. Each result file records the git commit, the machine (CPU, RAM, platform), `/api/health`, the settings used and
@@ -11,7 +11,7 @@ every raw measurement.
 
 ```
 ./vakya start                      # from the repo root; the API must be on http://127.0.0.1:8020
-./vakya doctor                     # GNANI_API_KEY and a Embeddings key must be set in backend/.env
+./vakya doctor                     # GNANI_API_KEY and a embeddings key must be set in backend/.env
 export VAKYA_API=http://127.0.0.1:8020   # optional; the default, or pass --api
 ```
 
@@ -82,7 +82,7 @@ callers. Tests: `tests/test_stress_report.py`, `tests/test_asr_scoring_entities.
 
 ## Caveats
 
-- Numbers depend on the network to Gnani and Embeddings and on the hosted models' load at the time. The health block in each
+- Numbers depend on the network to Gnani and the hosted models and on the hosted models' load at the time. The health block in each
   result file says which language model answered.
 - Close other apps. The machine's load average is recorded, but background work still changes the numbers. Run
   long measurements on an idle machine.

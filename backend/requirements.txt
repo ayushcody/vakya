@@ -1,6 +1,6 @@
 # Vakya backend requirements.   pip install -r requirements.txt
 # Nothing here runs a model on this machine: speech is Gnani AI's (Prisma, Timbre, voice cloning), the language model and the
-# embeddings are Google's Embeddings, all over HTTPS (replies by a hosted language model). Python 3.10 or newer (3.12 tested).
+# embeddings are hosted too, all over HTTPS. Python 3.10 or newer (3.12 tested).
 
 # API server / platform
 fastapi>=0.110
@@ -17,7 +17,6 @@ psutil
 slowapi
 cryptography   # Ed25519 receipt signatures and the sealed voice files
 jsonschema     # tool arguments are checked against the tool's schema
-llm      # the primary reply model's SDK (services/primary_llm.py)
 
 # Audio plumbing: reading and writing WAV, decoding uploads, resampling the 8 kHz phone line
 numpy>=2.0.0
@@ -26,7 +25,7 @@ librosa>=0.10.0
 scipy
 soxr
 
-# Documents and knowledge search (the embeddings are Embeddings's; the keyword search is built in)
+# Documents and knowledge search (the embeddings are hosted; the keyword search is built in)
 pypdf
 rapidfuzz>=3.0      # fuzzy name matching for the recognised words (difflib is the fallback)
 indic_transliteration   # Devanagari to Roman for names and for scoring Hinglish

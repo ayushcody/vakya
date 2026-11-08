@@ -35,11 +35,11 @@ from pydantic import BaseModel
 
 try:
     from core.errors import AppError
-    from services import booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
+    from services import booking_audit, booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
     from services.auth import get_current_user_id
 except ImportError:  # pragma: no cover - imported as backend.routers.bookings
     from backend.core.errors import AppError
-    from backend.services import booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
+    from backend.services import booking_audit, booking_evidence, schedule_bookings as sb, schedule_tools, schedules as sch
     from backend.services.auth import get_current_user_id
 
 log = logging.getLogger("vakya.bookings")
@@ -168,6 +168,17 @@ async def list_bookings(date_from: Optional[str] = Query(None, alias="from", max
     return {"bookings": out, "timezone": getattr(zone, "key", str(zone))}
 
 
+@router.get("/audit")
+async def booking_audit_log(limit: int = Query(100, ge=1, le=1000), booking_id: Optional[str] = Query(None, max_length=16),
+                            user_id: str = Depends(get_current_user_id)):
+    """The booking audit log, newest first: every create, move, cancel and refusal with who (agent | staff | api), the
+    conversation, the booking, before and after, the reason and the time. Phone numbers are masked to the last four digits.
+    Append-only (services/booking_audit.py)."""
+    wanted = str(booking_id).strip().upper() if booking_id else None
+    entries = await asyncio.to_thread(booking_audit.read, limit, user_id, wanted)
+    return {"entries": entries, "count": len(entries)}
+
+
 class StaffBooking(BaseModel):
     schedule_id: str
     start: str
@@ -189,7 +200,8 @@ async def create_booking(body: StaffBooking, user_id: str = Depends(get_current_
         try:
             start = sch.parse_dt(body.start, schedule.get("timezone"), "start")
             row = sb.create(schedule, day=start.date(), at=start.strftime("%H:%M"), name=body.name, phone=body.phone,
-                            note=body.note, nights=body.nights, party=body.party, caller=False, source="staff")
+                            note=body.note, nights=body.nights, party=body.party, caller=False, source="staff",
+                            actor="staff", owner=user_id)
         except sch.ScheduleError as e:
             raise AppError(e.code, e.message, 422, {"field": e.field}) from None
         except sb.BookingProblem as e:
@@ -230,7 +242,7 @@ async def move_booking(booking_id: str, body: MoveBooking, user_id: str = Depend
         try:
             start = sch.parse_dt(body.start, schedule.get("timezone"), "start")
             row, previous = sb.reschedule(wanted, None, day=start.date(), at=start.strftime("%H:%M"), nights=body.nights,
-                                          caller=False)
+                                          caller=False, actor="staff", owner=user_id)
         except sch.ScheduleError as e:
             raise AppError(e.code, e.message, 422, {"field": e.field}) from None
         except sb.BookingProblem as e:
@@ -248,13 +260,21 @@ async def cancel_booking(booking_id: str, user_id: str = Depends(get_current_use
     """Cancel a booking from the desk. Its calendar event, if it has one, is removed; a calendar failure never blocks
     the cancellation (the row then says calendar_sync "failed")."""
     ap = _store()
+    wanted = str(booking_id or "").strip().upper().replace(" ", "")
+    before = next((dict(b) for b in await asyncio.to_thread(ap.all_bookings) if b.get("booking_id") == wanted), None)
     try:
         booking = await asyncio.to_thread(ap.cancel_booking, booking_id)
     except ap.AppointmentError as e:
         msg = str(e)
+        booking_audit.record("refusal", actor="staff", booking_id=wanted or None, schedule_id=(before or {}).get("schedule_id"),
+                             phone=(before or {}).get("phone"), before=before, owner=user_id,
+                             reason="ALREADY_CANCELLED" if "already cancelled" in msg else "NOT_FOUND",
+                             attempted={"action": "cancel"})
         if "already cancelled" in msg:
             raise AppError("ALREADY_CANCELLED", msg, 409) from None
         raise AppError("NOT_FOUND", "Booking not found", 404, {"booking_id": booking_id}) from None
+    booking_audit.record("cancel", actor="staff", booking_id=booking.get("booking_id"), schedule_id=booking.get("schedule_id"),
+                         phone=booking.get("phone"), before=before, after=booking, owner=user_id)
     sb.note_change(booking, "cancelled", at=booking.get("cancelled_at"))
     booking = await asyncio.to_thread(ap.sync_cancellation, booking["booking_id"]) or booking   # never raises
     await asyncio.to_thread(_notify, "cancelled", booking, None, source="staff")

@@ -1,7 +1,7 @@
 """Decode any uploaded audio file to mono float32 at a chosen sample rate.
 
 librosa 1.0 reads files through soundfile only (WAV, FLAC, OGG/Vorbis, MP3), so formats that phones and browsers
-produce, such as M4A/AAC and WebM/Opus, fail there. Those fall back to ffmpeg, which reads almost anything.
+produce, such as M4A/AAC and WebM audio, fail there. Those fall back to ffmpeg, which reads almost anything.
 """
 import shutil
 import subprocess

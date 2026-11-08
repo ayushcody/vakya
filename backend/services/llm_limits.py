@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
     from backend.services import llm
 
 
-LLM_UNAVAILABLE_MSG = "No language model is available. Add LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY) to backend/.env."
+LLM_UNAVAILABLE_MSG = "No language model is available. Set LLM_API_KEY, LLM_BASE_URL and LLM_MODEL in backend/.env."
 
 
 def llm_unavailable(e: "llm.LLMUnavailable") -> AppError:

@@ -3,7 +3,7 @@
 Vakya hears with Gnani's **Prisma**, speaks with Gnani's **Timbre** voices and clones a voice through Gnani's voice-clone
 endpoint. There is no second speech provider and no local speech model: when Gnani cannot answer, Vakya says so honestly (a short
 pre-rendered Timbre line, then an offer of a callback or a person) instead of guessing with something else. Replies are written by
-Embeddings Flash (Google, hosted) and documents are searched with Embeddings embeddings, keyword search as the backup; Gnani does the speech only.
+a hosted language model and documents are searched with hosted embeddings, keyword search as the backup; Gnani does the speech only.
 
 The code was written without a key and first run against the live API on **5 Nov 2026**: Timbre speech and Prisma recognition
 (including `keyterms`, `topic`, `speaker_names` and a substitution rule) work; two guessed fields were wrong and are fixed (see
@@ -180,8 +180,7 @@ is `X-API-Key-ID` (any other header name gets `MISSING_API_KEY`). Error bodies a
 
 ## What is untested
 
-First live contact was on **5 Nov 2026** (the notes below). Still not run live: the realtime WebSocket, the clone embedding, Timbre's
-8 kHz raw audio on a real phone call, a real phone call at all, and the credit rates (the ledger still estimates from defaults; check
+First live contact was on **5 Nov 2026** (the notes below). On **8 Nov 2026** Prisma and Timbre ran on real Vobiz phone calls to an Indian mobile (reply start about 3.7 to 6 s, first filler audio about 1.1 s). Still not run live: the realtime WebSocket, the clone embedding, and the credit rates (the ledger still estimates from defaults; check
 the balance in Gnani's console to measure them). The tests (`backend/tests/test_gnani_client.py`, `test_gnani_providers.py`,
 `test_gnani_gateway.py`, `test_gnani_hold_lines.py`, `test_usage_ledger.py`, `test_usage_api.py`) use `httpx.MockTransport` and
 fakes shaped like the live replies. Still guessed:

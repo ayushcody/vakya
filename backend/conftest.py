@@ -1,4 +1,4 @@
-"""Shared pytest fixtures. Nothing here reaches Gnani or Embeddings."""
+"""Shared pytest fixtures. Nothing here reaches Gnani or a hosted model."""
 import math
 import os
 import struct
@@ -52,16 +52,16 @@ def _gnani_gateway_clean(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _no_embeddings_by_default(monkeypatch):
-    """No test calls Embeddings with the developer's real key: the language-model and embedding keys are empty (a test that needs
+def _no_hosted_models_by_default(monkeypatch):
+    """No test calls a hosted model with the developer's real key: the language-model and embedding keys are empty (a test that needs
     them sets its own, with a fake HTTP layer) and the on-disk embedding cache is off."""
-    for name in ("EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_PROVIDER", "LLM_PRIMARY_KEY", "LLM_PRIMARY_BASE_URL", "LLM_PRIMARY_MODEL", "LLM_EFFORT", "EMBEDDINGS_EMBED_MODEL", "EMBEDDINGS_EMBED_DIM"):
+    for name in ("EMBEDDINGS_API_KEY", "EMBEDDINGS_API_KEYS", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_PRIMARY_KEY", "LLM_PRIMARY_BASE_URL", "LLM_PRIMARY_MODEL", "LLM_EFFORT", "LLM_REASONING_EFFORT", "EMBEDDINGS_MODEL", "EMBEDDINGS_DIM", "EMBEDDINGS_BASE_URL", "EMBEDDINGS_TASK_TYPE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("EMBED_DISK_CACHE", "off")
-    from services import embeddings as _embeddings
-    _embeddings._reset_for_tests()
+    from services import model_config as _mc
+    _mc._reset_for_tests()
     yield
-    _embeddings._reset_for_tests()
+    _mc._reset_for_tests()
 
 
 @pytest.fixture(autouse=True)
@@ -181,6 +181,7 @@ def _schedules_and_bookings_private(monkeypatch, tmp_path):
     backend/data. A test that needs its own file sets the variable again."""
     monkeypatch.setenv("VAKYA_SCHEDULES_FILE", str(tmp_path / "schedules" / "schedules.json"))
     monkeypatch.setenv("VAKYA_APPOINTMENTS_FILE", str(tmp_path / "mcp_default" / "appointments.json"))
+    monkeypatch.setenv("VAKYA_BOOKING_AUDIT_FILE", str(tmp_path / "audit" / "booking_audit.jsonl"))
 
 
 @pytest.fixture(autouse=True)

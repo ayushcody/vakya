@@ -76,7 +76,11 @@ def run(run_id: str, mode: Optional[str] = Query(None, pattern="^(scripted|live)
 @router.get("/audio/{path:path}")
 def audio(path: str):
     base = (RESULTS_DIR / "audio").resolve()
-    target = (base / path).resolve()
-    if base not in target.parents or target.suffix.lower() not in AUDIO_TYPES or not target.is_file():
+    try:
+        target = (base / path).resolve()
+        found = base in target.parents and target.suffix.lower() in AUDIO_TYPES and target.is_file()
+    except (OSError, ValueError):    # a NUL byte or a name too long for the file system is a clip that is not there
+        found = False
+    if not found:
         raise AppError("NOT_FOUND", "Clip not found", 404)
     return FileResponse(target, media_type=AUDIO_TYPES[target.suffix.lower()], headers={"Cache-Control": "public, max-age=3600"})

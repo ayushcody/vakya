@@ -81,7 +81,7 @@ def build_statement() -> dict:
         "language_model": llm_state,
         "host": {"platform": platform.system(), "machine": platform.machine()},
         "blocked_when_offline": ["the hosted language model", "language-model servers not on this machine",
-                                 "Gnani speech", "Embeddings embeddings", "Supabase", "Google Calendar", "Vobiz phone calls"],
+                                 "Gnani speech", "Hosted embeddings", "Supabase", "Google Calendar", "Vobiz phone calls"],
     }
 
 

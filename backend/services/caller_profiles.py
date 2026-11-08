@@ -179,6 +179,34 @@ def _clean_booking(raw: Any) -> Optional[Dict[str, str]]:
     return out if ("date" in out or "time" in out) else None
 
 
+BOOKING_STATUSES = ("booked", "rescheduled", "cancelled")
+BOOKINGS_MAX = 8
+
+
+def _clean_bookings(raw: Any) -> List[Dict[str, Any]]:
+    """[{booking_id, date, time, status booked|rescheduled|cancelled, previous?: {date, time}, changed_at?}]: the caller's
+    bookings as the live booking store last showed them (`sync_bookings`)."""
+    out: List[Dict[str, Any]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        b = _clean_booking(item)
+        if not b:
+            continue
+        row: Dict[str, Any] = {k: v for k, v in b.items() if k in ("date", "time")}
+        bid = _clean("other", item.get("booking_id"), 16)
+        if bid:
+            row["booking_id"] = bid
+        row["status"] = item.get("status") if item.get("status") in BOOKING_STATUSES else "booked"
+        prev = _clean_booking(item.get("previous"))
+        if prev:
+            row["previous"] = {k: v for k, v in prev.items() if k in ("date", "time")}
+        if item.get("changed_at") and _parse_iso(item.get("changed_at")):
+            row["changed_at"] = str(item["changed_at"])
+        out.append(row)
+    return out[-BOOKINGS_MAX:]
+
+
 def _clean_follow_ups(raw: Any) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
     for item in raw if isinstance(raw, list) else []:
@@ -253,6 +281,7 @@ def clean_profile(raw: Dict[str, Any]) -> Dict[str, Any]:
         "last_call_at": raw.get("last_call_at") if _parse_iso(raw.get("last_call_at")) else None,
         "last_outcome": raw.get("last_outcome") if raw.get("last_outcome") in OUTCOMES else None,
         "last_booking": _clean_booking(raw.get("last_booking")),
+        "bookings": _clean_bookings(raw.get("bookings")),
         "follow_ups": _clean_follow_ups(raw.get("follow_ups")),
         "summary": _clean("other", raw.get("summary"), SUMMARY_MAX),
         "facts": _clean_facts(raw.get("facts")),
@@ -631,6 +660,199 @@ def family_question(profile: Dict[str, Any], lang: str) -> Optional[str]:
     }.get(lang)
 
 
+def live_bookings(number: Any, agent_id: Optional[str] = None, now: Optional[datetime] = None,
+                  rows: Optional[Sequence[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """The caller's bookings that are still ahead, from the live booking store (not the profile, which is only written when
+    a call ends and so is stale after a reschedule or a cancel), soonest first. Cancelled ones are left out. Best effort: []
+    when the store cannot be read."""
+    try:
+        digits = re.sub(r"\D", "", str(number or ""))[-10:]
+        if len(digits) != 10:
+            return []
+        if rows is None:
+            try:
+                from mcp_servers import appointments  # noqa: PLC0415
+            except ImportError:  # pragma: no cover
+                from backend.mcp_servers import appointments  # noqa: PLC0415
+            rows = appointments.all_bookings()
+        now = now or datetime.now()
+        out = []
+        for b in rows:
+            if b.get("status") == "cancelled" or re.sub(r"\D", "", str(b.get("phone") or ""))[-10:] != digits:
+                continue
+            if agent_id and b.get("agent_id") and b.get("agent_id") != agent_id:
+                continue
+            try:
+                start = datetime.fromisoformat(str(b.get("start") or f"{b['date']}T{b.get('time') or '00:00'}"))
+            except (KeyError, ValueError):
+                continue
+            end = None
+            try:
+                end = datetime.fromisoformat(str(b["end"])) if b.get("end") else None
+            except ValueError:
+                pass
+            if (end or start) > now:
+                out.append((start, b))
+        out.sort(key=lambda x: x[0])
+        return [b for _, b in out]
+    except Exception:  # noqa: BLE001
+        log.exception("live bookings unavailable")
+        return []
+
+
+def with_live_booking(profile: Dict[str, Any], agent_id: Optional[str] = None, now: Optional[datetime] = None,
+                      rows: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """A copy of the profile whose `last_booking` is the nearest upcoming non-cancelled booking in the live store (None when
+    the caller has none ahead: a cancelled booking is never greeted; a booking that has passed stays as "last time"). The profile
+    on disk is not changed."""
+    live = live_bookings(profile.get("number"), agent_id, now, rows)
+    out = dict(profile)
+    if live:
+        b = live[0]
+        out["last_booking"] = {k: v for k, v in (("date", b.get("date")), ("time", b.get("time")),
+                                                  ("purpose", b.get("reason") or None)) if v} or None
+    elif _is_upcoming(profile.get("last_booking"), now or datetime.now()):
+        out["last_booking"] = None      # the profile says it is still ahead but the store has no live booking: moved or cancelled
+    return out
+
+
+def _row_start(b: Dict[str, Any]) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(str(b.get("start") or f"{b['date']}T{b.get('time') or '00:00'}"))
+    except (KeyError, ValueError):
+        return None
+
+
+def _store_rows(number: Any, agent_id: Optional[str], rows: Optional[Sequence[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    digits = re.sub(r"\D", "", str(number or ""))[-10:]
+    if len(digits) != 10:
+        return []
+    if rows is None:
+        try:
+            from mcp_servers import appointments  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.mcp_servers import appointments  # noqa: PLC0415
+        rows = appointments.all_bookings()
+    return [b for b in rows if re.sub(r"\D", "", str(b.get("phone") or ""))[-10:] == digits
+            and not (agent_id and b.get("agent_id") and b.get("agent_id") != agent_id)]
+
+
+def sync_bookings(profile: Dict[str, Any], agent_id: Optional[str] = None, now: Optional[datetime] = None,
+                  rows: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """The profile brought in line with the live booking store: `bookings` lists the caller's bookings that are still ahead
+    (and ones cancelled or moved that were, so the agent knows: "A28 ... rescheduled from 5 PM", "A27 ... cancelled") with an
+    explicit status, `last_booking` is the nearest upcoming non-cancelled booking, and a person's `last_booking` that was
+    moved or cancelled follows it. Returns a new dict; the store is not written (`sync_profile` does that). A number with no
+    booking in the store leaves the profile as it is."""
+    now = now or datetime.now()
+    try:
+        mine = _store_rows(profile.get("number"), agent_id, rows)
+    except Exception:  # noqa: BLE001
+        log.exception("booking store unavailable")
+        return profile
+    if not mine:
+        return profile
+    items: List[Tuple[datetime, Dict[str, Any]]] = []
+    for b in mine:
+        start = _row_start(b)
+        if start is None or (start + timedelta(days=1)) <= now and not b.get("moved_from") and b.get("status") != "cancelled":
+            continue
+        if b.get("status") == "cancelled":
+            status = "cancelled"
+        elif b.get("moved_from"):
+            status = "rescheduled"
+        else:
+            status = "booked"
+        if status != "booked" and start.date() < now.date():
+            continue                                    # a past one that was moved or cancelled is not worth saying
+        item: Dict[str, Any] = {"booking_id": b.get("booking_id"), "date": b.get("date"), "time": b.get("time"), "status": status}
+        if status == "rescheduled":
+            item["previous"] = {"date": b["moved_from"].get("date"), "time": b["moved_from"].get("time")}
+            item["changed_at"] = b.get("moved_at")
+        elif status == "cancelled":
+            item["changed_at"] = b.get("cancelled_at")
+        items.append((start, item))
+    items.sort(key=lambda x: x[0])
+    out = dict(profile)
+    out["bookings"] = _clean_bookings([i for _, i in items][-BOOKINGS_MAX:])
+    ahead = live_bookings(profile.get("number"), agent_id, now, mine)
+    if ahead:
+        b = ahead[0]
+        out["last_booking"] = _clean_booking({"date": b.get("date"), "time": b.get("time"), "purpose": b.get("reason") or None})
+    elif _is_upcoming(profile.get("last_booking"), now):
+        out["last_booking"] = None
+    people = []
+    for person in profile.get("people") or []:
+        person = dict(person)
+        last = person.get("last_booking") or {}
+        for it in out["bookings"]:
+            if it["status"] == "booked":
+                continue
+            old = it.get("previous") if it["status"] == "rescheduled" else {"date": it.get("date"), "time": it.get("time")}
+            if old and last.get("date") == old.get("date") and last.get("time") == old.get("time"):
+                if it["status"] == "rescheduled":
+                    person["last_booking"] = {**last, "date": it["date"], "time": it["time"]}
+                else:
+                    person.pop("last_booking", None)
+                break
+        people.append(person)
+    out["people"] = people
+    return out
+
+
+def _atomic(fn: Callable) -> Callable:
+    """Run a read-modify-write of one profile (find, change, put) under the module lock, so two calls of the same number that
+    end together, or an owner's edit that lands during a call's write, never overwrite each other's change (the store's own
+    lock covers only each single read or write)."""
+    import functools  # noqa: PLC0415
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with _lock:
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_atomic
+def sync_profile(owner: str, number: Any, agent_id: Optional[str] = None, mode: str = "local",
+                 rows: Optional[Sequence[Dict[str, Any]]] = None, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+    """Repair the stored profile of a number from the live booking store and write it back when it changed (the one-off sync:
+    called at the start of a phone call and whenever a booking is moved or cancelled). Blocking; never raises. Returns the
+    profile (None when there is none)."""
+    n = number_of(number)
+    if not enabled() or not n or not owner:
+        return None
+    try:
+        existing = lookup_any_age(owner, n, mode)
+        if existing is None:
+            return None
+        fixed = sync_bookings(existing, agent_id, now, rows)
+        if fixed.get("bookings") != existing.get("bookings") or fixed.get("last_booking") != existing.get("last_booking") \
+                or fixed.get("people") != existing.get("people"):
+            fixed = clean_profile({**fixed, "updated_at": _now_iso()})
+            fixed["id"] = fixed["id"] or profile_id(owner, n)
+            get_store(mode).put(fixed)
+            log.info("caller profile bookings synced (%s)", mask_number(n))
+        return fixed
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not sync a caller profile: %s", e.__class__.__name__)
+        return None
+
+
+def sync_number(number: Any, agent_id: Optional[str] = None) -> None:
+    """Sync every local profile of a number (a booking was moved or cancelled by anyone: the phone agent, staff or the desk
+    UI). Best effort, local file store; hosted profiles are synced at the start of the caller's next call."""
+    n = number_of(number)
+    if not enabled() or not n:
+        return
+    try:
+        for raw in list(get_store("local")._read().values()):   # noqa: SLF001
+            if isinstance(raw, dict) and raw.get("number") == n and raw.get("owner"):
+                sync_profile(raw["owner"], n, agent_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not sync caller profiles: %s", e.__class__.__name__)
+
+
 def returning_greeting(profile: Optional[Dict[str, Any]], supported: Optional[Sequence[str]] = None,
                        today: Optional[date] = None, notice: bool = False,
                        now: Optional[datetime] = None) -> Optional[Tuple[str, str]]:
@@ -797,7 +1019,52 @@ def asked_person(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def block_text(profile: Dict[str, Any]) -> str:
+def _clock12(t: Optional[str]) -> str:
+    try:
+        h, m = int(t[:2]), int(t[3:5])
+    except (TypeError, ValueError):
+        return ""
+    return f"{h % 12 or 12}{f':{m:02d}' if m else ''} {'AM' if h < 12 else 'PM'}"
+
+
+def _day_short(d: Optional[str]) -> str:
+    try:
+        x = datetime.strptime(str(d), "%Y-%m-%d")
+    except ValueError:
+        return ""
+    return f"{x.strftime('%a')} {x.day} {x.strftime('%b')}"
+
+
+def _bookings_line(bookings: Sequence[Dict[str, Any]]) -> str:
+    """"Bookings: A28 Tue 10 Nov 6 PM (rescheduled from 5 PM); A27 Mon 9 Nov 5 PM (cancelled)": live ones first."""
+    if not bookings:
+        return ""
+    order = {"booked": 0, "rescheduled": 0, "cancelled": 1}
+    bits = []
+    for b in sorted(bookings, key=lambda x: (order.get(x.get("status"), 0), x.get("date") or "", x.get("time") or "")):
+        what = " ".join(x for x in (_day_short(b.get("date")), _clock12(b.get("time"))) if x)
+        note = ""
+        if b.get("status") == "rescheduled":
+            prev = b.get("previous") or {}
+            was = _clock12(prev.get("time")) if prev.get("date") == b.get("date") else \
+                " ".join(x for x in (_day_short(prev.get("date")), _clock12(prev.get("time"))) if x)
+            note = f" (rescheduled from {was})" if was else " (rescheduled)"
+        elif b.get("status") == "cancelled":
+            note = " (cancelled)"
+        bits.append(f"{b['booking_id'] + ' ' if b.get('booking_id') else ''}{what}{note}")
+    return "Bookings: " + "; ".join(bits)
+
+
+def _upcoming_line(upcoming: Sequence[Dict[str, Any]]) -> str:
+    bits = []
+    for b in list(upcoming)[:4]:
+        what = _when_for_prompt({"date": b.get("date"), "time": b.get("time")})
+        if what.strip():
+            bits.append(f"{b.get('booking_id') + ' ' if b.get('booking_id') else ''}{what.strip()}")
+    return "upcoming bookings of this caller (live): " + "; ".join(bits) if bits else ""
+
+
+def block_text(profile: Dict[str, Any], upcoming: Optional[Sequence[Dict[str, Any]]] = None) -> str:
     """The compact "what we know about this caller" block for the caller's message of every turn of the call. It leads with the
     family (the people this number books for), then the caller's own details. Values are caller data (cleaned, one line);
     the model is told to confirm what it knows in one short question rather than ask from scratch, to read a booking back
@@ -815,7 +1082,10 @@ def block_text(profile: Dict[str, Any]) -> str:
     if facts:
         parts.append("usual: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in facts.items()))
     booking = profile.get("last_booking")
-    if booking:
+    line = _bookings_line(profile.get("bookings") or []) or (_upcoming_line(upcoming) if upcoming is not None else "")
+    if line:
+        parts.append(line)
+    elif booking and upcoming is None:     # live store not read: the profile's last booking
         what = _when_for_prompt(booking)
         if booking.get("purpose"):
             what += f" for {booking['purpose']}"
@@ -835,12 +1105,18 @@ def block_text(profile: Dict[str, Any]) -> str:
                    "someone else?\". Then book for whoever they name, and confirm that person's usual details only as far as "
                    "they help this booking. Never volunteer one person's visits, doctor or details when the caller names "
                    "someone else." if ask else "")
+    existing_rule = (" The caller was identified by their caller ID and already has the bookings listed above, so the number is "
+                     "known: never ask about the phone number. A booking marked cancelled is gone: never offer it or change it. When they refer to one of these bookings (\"my Monday "
+                     "appointment\", \"that booking\", \"मुझे सोमवार की appointment\") it is THAT booking, not a new one: do not "
+                     "check availability or start a booking, and do not ask for a number. If they gave no verb, ask in one short "
+                     "question what they want to do with it (change the time, cancel, or something else); if they did (cancel, "
+                     "shift to 6), act on that booking." if line else "")
     return ("(What we know about this caller from earlier calls: " + "; ".join(parts) + "."
             + (f" The number on this line is {hint}." if hint else "")
             + " Never read it all out. Confirm what you know in one short question instead of asking from scratch (\"Same "
             "number as last time, " + (hint if hint and "x" in hint else "98xxxx3210") + "?\"), and read a booking back before "
             "you make it. The caller may not be the same person: share nothing beyond what helps this call."
-            + family_rule + " If they ask to be forgotten, use forget_me.)")
+            + existing_rule + family_rule + " If they ask to be forgotten, use forget_me.)")
 
 
 # what a live call knows about its caller: conversation id -> {"block", "owner", "number", "names"} (newest kept)
@@ -848,11 +1124,14 @@ _CONTEXT: "collections.OrderedDict[str, Dict[str, Any]]" = collections.OrderedDi
 _CONTEXT_MAX = 200
 
 
-def set_context(conversation_id: Optional[str], profile: Optional[Dict[str, Any]]) -> None:
+def set_context(conversation_id: Optional[str], profile: Optional[Dict[str, Any]], agent_id: Optional[str] = None) -> None:
     """Remember the block for the conversation (the phone call opened it): every turn's prompt reads it."""
     if not conversation_id or not profile:
         return
-    block = block_text(profile)
+    upcoming = None
+    if profile.get("number"):
+        upcoming = live_bookings(profile["number"], agent_id)     # the live store: a reschedule or cancel is seen
+    block = block_text(profile, upcoming)
     if not block:
         return
     with _lock:
@@ -906,7 +1185,7 @@ def forget_context(conversation_id: Optional[str] = None) -> None:
             _CONTEXT.pop(str(conversation_id), None)
 
 
-def prefill_form(profile: Optional[Dict[str, Any]]) -> Dict[str, str]:
+def prefill_form(profile: Optional[Dict[str, Any]], confirmed: bool = False) -> Dict[str, str]:
     """The name and phone the caller details form starts a call with, so the agent does not ask for them again."""
     if not profile:
         return {}
@@ -917,6 +1196,8 @@ def prefill_form(profile: Optional[Dict[str, Any]]) -> Dict[str, str]:
         phone = caller_memory.clean_value("phone", form_phone(profile["number"]))
         if phone:
             form["phone"] = phone
+            if confirmed:      # identified by caller ID and already booked: the number is settled, it is never asked
+                form["phone_confirmed"] = "yes"
     return form
 
 
@@ -1212,6 +1493,7 @@ def merge_call(existing: Optional[Dict[str, Any]], owner: str, number: str, upda
     return clean_profile(p)
 
 
+@_atomic
 def record_call(owner: str, number: Optional[str], mode: str, update: Dict[str, Any], *, conversation_id: Optional[str],
                 returning: bool, follow_ups: Sequence[str] = (), source: str = "phone") -> Optional[Dict[str, Any]]:
     """Read the existing profile, apply the call, write it back. Blocking; never raises. Returns the profile."""
@@ -1223,6 +1505,7 @@ def record_call(owner: str, number: Optional[str], mode: str, update: Dict[str, 
         raw = store.get(owner, n)
         p = merge_call(raw if isinstance(raw, dict) else None, owner, n, update, conversation_id=conversation_id,
                        returning=returning, follow_ups=follow_ups, source=source)
+        p = sync_bookings(p)      # the call may have moved or cancelled a booking: say so on the profile
         store.put(p)
         log.info("caller profile updated (%s, %d calls, outcome %s, source %s)", mask_number(n), p["call_count"],
                  p["last_outcome"], p["source"])
@@ -1498,6 +1781,7 @@ class ProfileEditError(ValueError):
     condition) or something malformed."""
 
 
+@_atomic
 def update_profile(owner: str, key: str, patch: Dict[str, Any], mode: str = "local") -> Optional[Dict[str, Any]]:
     """Apply the owner's edit to a caller's profile and return it (None when there is none). `patch` may hold display_name,
     preferred_language, facts ({key: value, or None to remove}), people ([{name, relation, age_band}]: the whole list),
@@ -1597,6 +1881,7 @@ def find_person(profile: Dict[str, Any], who: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+@_atomic
 def edit_person(owner: str, key: str, name: str, patch: Dict[str, Any], mode: str = "local") -> Optional[Dict[str, Any]]:
     """The owner edits one person of a number: `patch` may hold name (rename), relation, age_band, facts ({key: value, or None
     to remove}). Their last booking stays. Raises ProfileEditError for a value Vakya does not keep; None when the caller or the
@@ -1661,6 +1946,7 @@ def edit_person(owner: str, key: str, name: str, patch: Dict[str, Any], mode: st
     return out
 
 
+@_atomic
 def remove_person(owner: str, key: str, name: str, mode: str = "local") -> Optional[Dict[str, Any]]:
     """Forget one person of a number (their name, relation, details and last booking); the caller and the rest of the family
     stay. None when the caller or the person is not there. A live call stops mentioning them. Blocking."""

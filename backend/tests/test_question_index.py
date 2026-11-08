@@ -65,8 +65,8 @@ class FakeChat:
             r = self.replies.pop(0)
             if isinstance(r, BaseException):
                 raise r
-            return llm.ChatResult(r, "embeddings", "m", 5, {"total_tokens": 700})
-        return llm.ChatResult(reply_for(messages), "embeddings", "m", 5, {"total_tokens": 700})
+            return llm.ChatResult(r, "openai-compatible", "m", 5, {"total_tokens": 700})
+        return llm.ChatResult(reply_for(messages), "openai-compatible", "m", 5, {"total_tokens": 700})
 
 
 def passages(n, words=12):
@@ -146,7 +146,7 @@ def test_language_mix_per_passage():
 
 
 def test_429_is_retried_with_a_growing_wait():
-    rate = llm.LLMUnavailable({"embeddings": "failed: RuntimeError: HTTP 429 rate limit"})
+    rate = llm.LLMUnavailable({"openai-compatible": "failed: RuntimeError: HTTP 429 rate limit"})
     chat = FakeChat([rate, rate, reply_for([{"content": 'x\n[{"id": 0, "text": "alpha beta gamma"}]'}])])
     sleep = NoWait()
     out = qi.generate_batch(qi.make_batches(passages(1))[0], chat=chat, pacer=qi.Pacer(sleep=sleep), sleep=sleep)
@@ -156,7 +156,7 @@ def test_429_is_retried_with_a_growing_wait():
 
 def test_retries_run_out_cleanly(monkeypatch):
     monkeypatch.setenv("QUESTION_INDEX_RETRIES", "3")
-    rate = llm.LLMUnavailable({"embeddings": "failed: RuntimeError: HTTP 429"})
+    rate = llm.LLMUnavailable({"openai-compatible": "failed: RuntimeError: HTTP 429"})
     chat = FakeChat([rate, rate, rate])
     with pytest.raises(RuntimeError, match="failed"):
         qi.generate_batch(qi.make_batches(passages(1))[0], chat=chat, pacer=qi.Pacer(), sleep=NoWait())
@@ -164,7 +164,7 @@ def test_retries_run_out_cleanly(monkeypatch):
 
 
 def test_offline_is_a_skip_not_a_retry():
-    chat = FakeChat([llm.LLMUnavailable({"embeddings": "EMBEDDINGS_API_KEY is not set"})])
+    chat = FakeChat([llm.LLMUnavailable({"openai-compatible": "LLM_API_KEY is not set"})])
     with pytest.raises(qi.Skipped):
         qi.generate_batch(qi.make_batches(passages(1))[0], chat=chat, pacer=qi.Pacer(), sleep=NoWait())
     assert len(chat.calls) == 1
@@ -213,7 +213,7 @@ def test_index_passages_saves_batch_by_batch_and_stops_when_the_document_is_gone
 
 def test_index_passages_keeps_what_it_has_when_the_quota_runs_out(monkeypatch):
     monkeypatch.setenv("QUESTION_INDEX_RETRIES", "1")
-    rate = llm.LLMUnavailable({"embeddings": "failed: HTTP 429"})
+    rate = llm.LLMUnavailable({"openai-compatible": "failed: HTTP 429"})
     good = reply_for([{"content": 'x\n' + json.dumps([{"id": i, "text": "alpha beta gamma"} for i in range(4)])}])
     chat = FakeChat([good, rate])
     saved = []
@@ -223,7 +223,7 @@ def test_index_passages_keeps_what_it_has_when_the_quota_runs_out(monkeypatch):
 
 
 def test_index_passages_offline_and_no_text():
-    chat = FakeChat([llm.LLMUnavailable({"embeddings": "EMBEDDINGS_API_KEY is not set"})])
+    chat = FakeChat([llm.LLMUnavailable({"openai-compatible": "LLM_API_KEY is not set"})])
     res = qi.index_passages(passages(2), embed=fake_embed, save=lambda r: len(r), chat=chat, pacer=qi.Pacer(),
                             sleep=NoWait())
     assert res["status"] == "skipped" and res["questions"] == 0

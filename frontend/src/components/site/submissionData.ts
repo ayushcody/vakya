@@ -123,7 +123,7 @@ export const LIMITATIONS: { title: string; body: string }[] = [
   },
   {
     title: "Caller Theatre ran on a scripted model",
-    body: "All nine scenarios pass with a scripted stand-in for the language model. That shows the tools, the schedule rules and the read-back work end to end; it says nothing about what Embeddings Flash does with the same calls, and its latency is not meaningful because the stand-in answers instantly.",
+    body: "All nine scenarios pass with a scripted stand-in for the language model. That shows the tools, the schedule rules and the read-back work end to end; it says nothing about what the hosted language model does with the same calls, and its latency is not meaningful because the stand-in answers instantly.",
   },
   {
     title: "Hours from words are rules, not magic",

@@ -44,7 +44,7 @@ def test_ready_without_a_key_is_not_ready_and_says_what_is_missing(app_client):
 
 def test_ready_with_a_key_shows_gnani_per_lane_and_never_calls_it(app_client, monkeypatch):
     monkeypatch.setenv("GNANI_API_KEY", "test-key-not-real")
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("LLM_API_KEY", "test-key-not-real"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setattr("services.gnani_client._request", lambda *a, **k: pytest.fail("ready must not call Gnani"))
     body = get(app_client, "/api/ready")
     assert body["gnani_configured"] is True and body["providers"]["desk"]["tts"] == {
@@ -53,11 +53,11 @@ def test_ready_with_a_key_shows_gnani_per_lane_and_never_calls_it(app_client, mo
     assert body["ok"] is True
 
 
-def test_ready_says_when_the_embeddings_key_is_missing(app_client, monkeypatch):
+def test_ready_says_when_the_language_model_is_not_set(app_client, monkeypatch):
     monkeypatch.setenv("GNANI_API_KEY", "test-key-not-real")
     body = get(app_client, "/api/ready")
-    assert body["embeddings_configured"] is False and body["ok"] is False
-    assert any("set LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY)" in p for p in body["problems"])
+    assert body["llm_configured"] is False and body["ok"] is False
+    assert any("set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL" in p for p in body["problems"])
 
 
 def test_ready_reports_an_open_breaker_and_a_held_back_desk_lane(app_client, monkeypatch):

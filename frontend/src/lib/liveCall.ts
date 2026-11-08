@@ -28,7 +28,7 @@ export interface CallerEvent extends Envelope {
 
 export type ToolStatus =
   | "checking" | "free" | "taken" | "listing" | "listed" | "booking" | "readback" | "booked" | "refused"
-  | "cancelling" | "confirm" | "cancelled" | "finding" | "found" | "failed";
+  | "cancelling" | "confirm" | "cancelled" | "moved" | "finding" | "found" | "failed";
 
 export interface SlotOption {
   date: string;
@@ -37,7 +37,7 @@ export interface SlotOption {
 
 export interface ToolEvent extends Envelope {
   type: "tool";
-  tool: "check_availability" | "list_free_slots" | "book" | "cancel" | "find_booking";
+  tool: "check_availability" | "list_free_slots" | "book" | "cancel" | "find_booking" | "reschedule" | "move";
   call_id: string;
   phase: "start" | "end";
   status: ToolStatus;

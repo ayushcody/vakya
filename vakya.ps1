@@ -71,20 +71,24 @@ function Get-Setting {
 }
 
 function Show-Keys {
-    # Gnani (speech) and Embeddings (language model and knowledge search). Only whether a key is set is printed, never the key.
+    # Gnani (speech), the hosted language model and the embeddings (knowledge search). Only whether a key is set is printed, never the key.
     if (Get-Setting 'GNANI_API_KEY') {
         Ok 'Gnani key set (speech: Prisma listening, Timbre speaking, voice cloning)'
     } else {
         Bad 'GNANI_API_KEY is not set: the agent can neither hear nor speak'
         Fix 'add GNANI_API_KEY=... to backend\.env'
     }
-    if (Get-Setting 'LLM_PRIMARY_KEY') {
-        Ok 'Language model key set'
-    } elseif ((Get-Setting 'EMBEDDINGS_API_KEY') -or (Get-Setting 'EMBEDDINGS_API_KEYS') -or (Get-Setting 'LLM_API_KEY')) {
-        Ok 'Embeddings key set (language model and knowledge search)'
+    if ((Get-Setting 'LLM_API_KEY') -and (Get-Setting 'LLM_BASE_URL') -and (Get-Setting 'LLM_MODEL')) {
+        Ok 'Language model set (key, base URL and model)'
     } else {
-        Bad 'No language model key: the agent cannot answer'
-        Fix 'add LLM_PRIMARY_KEY=... (or EMBEDDINGS_API_KEY=..., or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend\.env'
+        Bad 'The language model is not set up: the agent cannot answer'
+        Fix 'add LLM_API_KEY=..., LLM_BASE_URL=... and LLM_MODEL=... to backend\.env'
+    }
+    if (((Get-Setting 'EMBEDDINGS_API_KEY') -or (Get-Setting 'EMBEDDINGS_API_KEYS')) -and (Get-Setting 'EMBEDDINGS_BASE_URL') -and (Get-Setting 'EMBEDDINGS_MODEL')) {
+        Ok 'Embeddings set (knowledge search)'
+    } else {
+        Warn 'Embeddings not set: documents are searched by keyword only'
+        Fix 'add EMBEDDINGS_API_KEY=..., EMBEDDINGS_BASE_URL=... and EMBEDDINGS_MODEL=... to backend\.env'
     }
 }
 
@@ -474,7 +478,7 @@ function Invoke-Doctor {
         Ok ("Language model: {0} ({1})" -f $llm.active, $llm.model)
     } elseif ($llm) {
         Warn 'No language model: agents cannot answer'
-        Fix 'add LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS, or LLM_API_KEY) to backend\.env, then .\vakya.ps1 restart'
+        Fix 'add LLM_API_KEY, LLM_BASE_URL and LLM_MODEL to backend\.env, then .\vakya.ps1 restart'
     }
 
     $sb = $health.supabase
@@ -512,7 +516,7 @@ Vakya for Windows: one command to set up, start, stop and check the studio.
   .\vakya.ps1 doctor           check the machine and the running app, with a fix for every problem
   .\vakya.ps1 logs [api|web]   follow the logs (Ctrl+C to stop)
   .\vakya.ps1 test             run the backend and frontend test suites
-  .\vakya.ps1 warm            check the Gnani and Embeddings keys, then prepare the hold lines
+  .\vakya.ps1 warm            check the Gnani and language model keys, then prepare the hold lines
   .\vakya.ps1 clean-web        delete frontend\.next (the web build cache) when the web app is not running
 
 If PowerShell blocks the script, run it like this:

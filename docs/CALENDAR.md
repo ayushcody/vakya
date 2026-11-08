@@ -5,7 +5,7 @@ Vakya can keep one Google Calendar in step with its bookings, in both directions
 * **Out.** A booking made on a call or at the desk becomes an event; moving the booking moves the event (same event, new start and end, and the description says "Moved from Thu 5 Nov 3:00 pm"); cancelling the booking deletes it. A stay is one event from check-in to check-out.
 * **In.** The owner's own events block times. A lunch, a holiday or a meeting on the same calendar makes those slots unavailable to callers and to staff bookings, with the reason "busy on the calendar" ("We are busy Thursday at 4 pm. 5 pm or 6 pm, which would suit you?"). Only time-slot schedules read the calendar; a stay (rooms by the night) does not.
 
-Without the two settings below nothing here runs and the desk works from its own list exactly as before. Code: `backend/services/gcal.py` (the client), `backend/mcp_servers/appointments.py` (`sync_booking`, `sync_move`, `sync_cancellation`), `backend/services/availability.py` (the Engine takes the busy times), tests `backend/tests/test_calendar_read.py`, `test_reschedule.py`, `test_appointments_calendar.py` (all with a fake Google; nothing in the suite talks to Google).
+Without the two settings below nothing here runs and the desk works from its own list exactly as before. Code: `backend/services/gcal.py` (the client), `backend/mcp_servers/appointments.py` (`sync_booking`, `sync_move`, `sync_cancellation`), `backend/services/availability.py` (the Engine takes the busy times), tests `backend/tests/test_calendar_read.py`, `test_reschedule.py`, `test_appointments_calendar.py` (all with a fake Google; nothing in the suite talks to Google). On 8 Nov 2026 a real calendar event was created and deleted live from a booking.
 
 ## Switching it on
 

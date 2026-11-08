@@ -8,7 +8,7 @@ Vakya is two containers and one public HTTPS address. Any container host will do
 | Phone-only port | the same image | 8021 | Only the call stream, the answer document, the hangup callback, the missed-call link and the web-call page. This is the one Vobiz reaches. |
 | Web app | `frontend/Dockerfile` | 3010 | The site, the desk and `/verify`. |
 
-No model is downloaded and no accelerator is needed. Speech goes to Gnani, replies and document search go to Embeddings, and calls go through Vobiz, all over HTTPS from the API container.
+No model is downloaded and no accelerator is needed. Speech goes to Gnani, replies go to a hosted language model and document search to hosted embeddings, and calls go through Vobiz, all over HTTPS from the API container.
 
 ## 1. Build and run
 
@@ -34,7 +34,8 @@ Copy `.env.example` to `.env` and fill it. The settings that matter:
 | Setting | Purpose |
 | --- | --- |
 | `GNANI_API_KEY` | Gnani Prisma, Timbre and voice cloning. Without it nothing can hear or speak. |
-| `EMBEDDINGS_API_KEY` | Embeddings embeddings for document search, and Embeddings Flash for replies when `LLM_PROVIDER=embeddings`. |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | The hosted language model that writes the replies (an OpenAI-compatible endpoint). |
+| `EMBEDDINGS_API_KEY`, `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL` | Hosted embeddings for document search. |
 | `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls. |
 | `PUBLIC_BASE_URL` | The public HTTPS address of the phone-only port, for example `https://phone.example.in`. |
 | `CORS_ORIGINS` | The origin of the web app, no trailing slash. |
@@ -54,7 +55,7 @@ The API keeps agents, documents, call records, caller profiles, voices and recei
 
 ## 5. What to expect
 
-- **Cold start.** The first request after a deploy is a little slower while the API opens its connections to Gnani and Embeddings. Place one test call before presenting.
+- **Cold start.** The first request after a deploy is a little slower while the API opens its connections to Gnani and the hosted models. Place one test call before presenting.
 - **Rate limits.** Gnani allows one active request at a time and the language model has its own limits. When Gnani is busy the caller hears a short held line and is offered a callback (`docs/GNANI.md`).
 - **One replica.** The gateway's one-request-at-a-time rule and the in-memory live-call log live in one process. Run one API replica.
 - **Untested.** This deployment path has not been run against a live Gnani key or a live Vobiz number.

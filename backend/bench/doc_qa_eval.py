@@ -9,9 +9,9 @@ It never talks to the running API and never writes to backend/data: everything r
 copy of the local store (a LocalStore in a temp dir), with the app's own code.
 
 Phase 1, retrieval (--retrieval-only). Splits each document with services/chunking.py, embeds the passages and the
-questions through Embeddings when EMBEDDINGS_API_KEY is set (services/retrieval.encode_texts: batched, cached on disk), stores
+questions through the embeddings service when EMBEDDINGS_API_KEY is set (services/retrieval.encode_texts: batched, cached on disk), stores
 the passages in a temporary LocalStore and ranks them with LocalStore.match_chunks (dense cosine + BM25 fused, exactly
-what knowledge.retrieve_context calls in local mode). Without a key, or when Embeddings cannot be reached, passages are stored
+what knowledge.retrieve_context calls in local mode). Without a key, or when the embeddings service cannot be reached, passages are stored
 without vectors and every variant is the BM25 keyword search (the search an agent falls back to). A question is a hit at k
 when ALL its evidence strings are inside the top k passages; MRR uses the first passage holding ANY evidence string.
 Variants:
@@ -25,13 +25,13 @@ Phase 2, answers (--answers-only). Imports backend.py with its data paths pointe
 through the real template code (routers.templates._create_from_template; the hospital agent is the clinic template
 personalised for Green Valley Hospital with the PDF uploaded through knowledge.extract_knowledge_text and
 knowledge.ingest_document) and answers every question with backend.turn_blocking, the typed-text turn path of
-POST /api/agents/{id}/turn: language policy, retrieval, tools, the system prompt (turn_messages), Embeddings through
+POST /api/agents/{id}/turn: language policy, retrieval, tools, the system prompt (turn_messages), the language model through
 services/llm.py, and enforce_language. Only speech synthesis and the audio file are
 stubbed (turn_spoken, turn_voice, turn_synth, provenance.apply_provenance, turn_store). Instant answers are off
 (the temp store has none anyway), Google Calendar is off and the MCP tool servers write to temp files.
 Language-model calls are paced to stay under a tokens-per-minute budget (--tpm-budget).
 
-Phase 3, judge (runs after phase 2 unless --no-judge; --judge-only FILE re-judges saved answers). A second Embeddings
+Phase 3, judge (runs after phase 2 unless --no-judge; --judge-only FILE re-judges saved answers). A second language model
 model (--judge-model; --judge-alt-model for a reply the judge model itself wrote) grades each reply with a strict rubric,
 next to deterministic checks: the reply language (language_policy.reply_matches, the app's own check), the key numbers
 of the gold answer, and numbers in the reply that appear nowhere in the agent's documents, prompt or the question.
@@ -81,8 +81,8 @@ LANGS = ("en", "hi", "hinglish")
 TYPES = ("direct", "paraphrase", "number", "yesno", "multi", "distractor", "unanswerable")
 DOC_ORDER = ("hospital", "clinic", "college")
 KS = (1, 3, 5)
-JUDGE_MODEL = "embeddings-3.8-flash"
-JUDGE_ALT_MODEL = "embeddings-3.6-flash"
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL") or os.environ.get("LLM_MODEL", "")          # model ids are set in the environment, not here
+JUDGE_ALT_MODEL = os.environ.get("JUDGE_ALT_MODEL", "")
 EVAL_USER = "doc-qa-eval"
 GIB = 1024 ** 3
 
@@ -97,7 +97,7 @@ BASELINE_PINS = {
     "RETRIEVAL_FUSION": "rrf", "HYBRID_SEARCH": "on", "LLM_THINKING": "off", "LLM_ANSWER_TEMPERATURE": "0.3",
 }
 RECORDED_ENV = tuple(BASELINE_PINS) + (
-    "EMBEDDINGS_EMBED_MODEL", "EMBEDDINGS_EMBED_DIM", "LLM_MODEL", "INSTANT_ANSWERS", "VAKYA_TOOL_PROTOCOL",
+    "EMBEDDINGS_MODEL", "EMBEDDINGS_DIM", "LLM_MODEL", "INSTANT_ANSWERS", "VAKYA_TOOL_PROTOCOL",
     "RETRIEVAL_WEIGHTS", "RETRIEVAL_NORM")
 RUN_INFO: Dict[str, Any] = {}
 
@@ -278,7 +278,7 @@ def run_retrieval(args, spec: dict, questions: List[dict]) -> dict:
              "chunk80": (80, 20), "chunk200": (200, 20)}
 
     # Every passage of every variant, embedded in ONE call (batched by 100 and cached, so a rerun is free). Without a key
-    # (or when Embeddings fails) the passages are stored without vectors and every variant is the keyword search.
+    # (or when the embeddings service fails) the passages are stored without vectors and every variant is the keyword search.
     all_chunks: List[str] = []
     for v in variants:
         cw, ov = sizes.get(v, sizes["prod"])
@@ -300,8 +300,8 @@ def run_retrieval(args, spec: dict, questions: List[dict]) -> dict:
                 q_ms.append((time.perf_counter() - t) * 1000)
         except retrieval.EmbeddingUnavailable as e:
             passage_vec, qvecs = {}, {}
-            out["notes"].append(f"Embeddings embeddings failed ({e}): keyword search only")
-            print(f"  Embeddings embeddings failed ({e}): keyword search only")
+            out["notes"].append(f"hosted embeddings failed ({e}): keyword search only")
+            print(f"  hosted embeddings failed ({e}): keyword search only")
     else:
         out["notes"].append("no EMBEDDINGS_API_KEY: every variant is the BM25 keyword search")
         print("  no EMBEDDINGS_API_KEY: every variant is the BM25 keyword search")
@@ -310,7 +310,7 @@ def run_retrieval(args, spec: dict, questions: List[dict]) -> dict:
 
     def build(chunk_words: int, overlap: int, pooled: bool = False):
         """A temp LocalStore with one agent per document (or one pooled agent) and the passages stored the way
-        knowledge.ingest_document stores them (with their Embeddings vector, or without one when there is none)."""
+        knowledge.ingest_document stores them (with their embedding vector, or without one when there is none)."""
         store = LocalStore(tempfile.mkdtemp(dir=tmp))
         agents, chunk_doc = {}, {}
         pooled_id = store.insert("agents", {"user_id": EVAL_USER, "name": "pooled"})["id"] if pooled else None
@@ -569,9 +569,9 @@ def run_answers(args, spec: dict, questions: List[dict], out_path: Path) -> Path
     tmp = tempfile.mkdtemp(prefix="doc_qa_answers_")
     print(f"answers: temp store {tmp}")
     B = import_backend(tmp)
-    from services import embeddings, llm, language_policy  # noqa: F401
+    from services import model_config, llm, language_policy  # noqa: F401
     if not llm.configured():
-        raise SystemExit("EMBEDDINGS_API_KEY is not set (backend/.env)")
+        raise SystemExit("The language model is not configured (LLM_API_KEY, LLM_BASE_URL, LLM_MODEL in backend/.env)")
     stub_speech(B)
     if args.answer_top_k != B.RETRIEVAL_TOP_K:
         B.retrieve_context.__defaults__ = (args.answer_top_k,)   # the default turn_context relies on
@@ -581,7 +581,7 @@ def run_answers(args, spec: dict, questions: List[dict], out_path: Path) -> Path
     check_gold(spec, texts)
 
     data = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else {
-        "settings": {"answer_top_k": args.answer_top_k, "primary_model": embeddings.chat_model(),
+        "settings": {"answer_top_k": args.answer_top_k, "primary_model": model_config.chat_model(),
                      "fallbacks": [], "tpm_budget": args.tpm_budget,
                      "retry_fallback": args.retry_fallback, "started": stamp(),
                      "code_path": "backend.turn_blocking (typed turn) with turn_spoken/turn_voice/turn_synth/"
@@ -748,8 +748,8 @@ def judge_prompt(items: List[Tuple[dict, dict]], agent: dict) -> str:
             f"also an allowed source):\n{instr}\n\n" + "\n".join(judge_item(q, a) for q, a in items) + "\n" + JUDGE_RUBRIC)
 
 
-def embeddings_json(model: str, system: str, user: str, pacer: Pacer, max_tokens: int = 1800) -> Tuple[dict, dict]:
-    """One Embeddings call in JSON mode through services.llm (LLM_MODEL is set to `model` for the call), with a polite wait on
+def judge_json(model: str, system: str, user: str, pacer: Pacer, max_tokens: int = 1800) -> Tuple[dict, dict]:
+    """One language model call in JSON mode through services.llm (LLM_MODEL is set to `model` for the call), with a polite wait on
     a rate limit. Returns (parsed JSON, usage)."""
     from services import llm
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -820,7 +820,7 @@ def run_judge(args, spec: dict, path: Path) -> None:
         model = args.judge_model if args.judge_model not in answered_by else args.judge_alt_model
         agent = data["agents"][items[0][0]["doc"]]
         try:
-            verdict, usage = embeddings_json(model, JUDGE_SYSTEM, judge_prompt(items, agent), pacer)
+            verdict, usage = judge_json(model, JUDGE_SYSTEM, judge_prompt(items, agent), pacer)
         except Exception as e:  # noqa: BLE001
             print(f"    judge failed for {ids}: {e}")
             if "daily token limit" in str(e):

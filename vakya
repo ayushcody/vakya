@@ -12,7 +12,7 @@
 #   ./vakya hooks             run ./vakya test before every git push from this clone
 #   ./vakya stress [opts]     the acoustic-stress report card: task completion under 8 kHz, noise and codecs
 #                               (backend/bench/stress_report.py, results in docs/STRESS_REPORT.md)
-#   ./vakya warm              check the Gnani and Embeddings keys, then ask the API to prepare its hold lines (the short phrases
+#   ./vakya warm              check the Gnani and language model keys, then ask the API to prepare its hold lines (the short phrases
 #                               played while a reply is being written) so the first call of a demo is not slower than the rest
 #   ./vakya demo [--add-bookings]
 #                             fill the desk with invented demo front desks and staff bookings so the Bookings pages are never
@@ -61,10 +61,10 @@ setting() {  # KEY [default] -> shell environment, else backend/.env, else the d
 }
 PHONE_PORT="$(setting PHONE_PUBLIC_PORT 8021)"   # the phone-only public port the tunnel points at (backend/phone_public.py)
 
-# The two keys Vakya needs: Gnani (speech: Prisma listens, Timbre speaks, voice cloning) and Embeddings (the language model, and the
-# embeddings that search the knowledge base). Only whether a key is set is ever printed, never the key.
+# The two keys Vakya needs: Gnani (speech: Prisma listens, Timbre speaks, voice cloning) and the hosted language model (LLM_API_KEY, LLM_BASE_URL, LLM_MODEL; the
+# embeddings that search the knowledge base are optional). Only whether a key is set is ever printed, never the key.
 gnani_key() { setting GNANI_API_KEY; }
-embeddings_key() { local k; k="$(setting EMBEDDINGS_API_KEY)"; [[ -n "$k" ]] || k="$(setting EMBEDDINGS_API_KEYS)"; [[ -n "$k" ]] || k="$(setting LLM_API_KEY)"; printf '%s' "$k"; }
+llm_key() { setting LLM_API_KEY; }
 
 if [[ -t 1 ]]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; D=$'\e[2m'; N=$'\e[0m'; else B= G= Y= R= D= N=; fi
 ok()   { echo "  ${G}✓${N} $*"; }
@@ -93,9 +93,10 @@ install_hint() {  # package name -> how to install it on this OS
 key_report() {  # shared by setup, warm and doctor: one line per key, with the fix when it is missing
     if [[ -n "$(gnani_key)" ]]; then ok "Gnani key set (speech: Prisma listening, Timbre speaking, voice cloning)"
     else bad "GNANI_API_KEY is not set: the agent can neither hear nor speak"; fix "add GNANI_API_KEY=... to backend/.env"; fi
-    if [[ -n "$(setting LLM_PRIMARY_KEY)" ]]; then ok "Language model key set"
-    elif [[ -n "$(embeddings_key)" ]]; then ok "Embeddings key set (language model and knowledge search)"
-    else bad "No language model key: the agent cannot answer"; fix "add LLM_PRIMARY_KEY=... (or EMBEDDINGS_API_KEY=..., or several as EMBEDDINGS_API_KEYS=k1,k2, or LLM_API_KEY=...) to backend/.env"; fi
+    if [[ -n "$(llm_key)" && -n "$(setting LLM_BASE_URL)" && -n "$(setting LLM_MODEL)" ]]; then ok "Language model set (key, base URL and model)"
+    else bad "The language model is not set up: the agent cannot answer"; fix "add LLM_API_KEY=..., LLM_BASE_URL=... and LLM_MODEL=... to backend/.env"; fi
+    if [[ -n "$(setting EMBEDDINGS_API_KEY)$(setting EMBEDDINGS_API_KEYS)" && -n "$(setting EMBEDDINGS_BASE_URL)" && -n "$(setting EMBEDDINGS_MODEL)" ]]; then ok "Embeddings set (knowledge search)"
+    else warn "Embeddings not set: documents are searched by keyword only"; fix "add EMBEDDINGS_API_KEY=..., EMBEDDINGS_BASE_URL=... and EMBEDDINGS_MODEL=... to backend/.env"; fi
 }
 key_summary() { key_report; }
 
@@ -537,7 +538,7 @@ llm = h.get("llm") or {}
 if llm.get("active"):
     ok(f"Language model: {llm['active']} ({llm.get('model')})")
 elif "llm" in h:
-    warn("No language model: agents cannot answer", "add LLM_PRIMARY_KEY (or EMBEDDINGS_API_KEY or EMBEDDINGS_API_KEYS, or LLM_API_KEY) to backend/.env, then ./vakya restart")
+    warn("No language model: agents cannot answer", "add LLM_API_KEY, LLM_BASE_URL and LLM_MODEL to backend/.env, then ./vakya restart")
 sb = h.get("supabase") or {}
 if sb.get("configured"):
     ok("Supabase connected" if sb.get("reachable") else "Supabase configured but unreachable")

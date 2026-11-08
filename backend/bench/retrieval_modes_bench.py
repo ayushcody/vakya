@@ -2,7 +2,7 @@
 Hinglish/Devanagari normaliser, and the retrieval confidence rating.
 
 Self-contained: it never calls the running API and never touches backend/data. It splits the test documents the way the
-app does, embeds passages and questions through Embeddings when EMBEDDINGS_API_KEY is set (services/retrieval.encode_texts:
+app does, embeds passages and questions through the hosted embedder when EMBEDDINGS_API_KEY is set (services/retrieval.encode_texts:
 batched, cached on disk, so a second run costs nothing), and ranks with services/retrieval.rank_rows (the code
 LocalStore.match_chunks and the hosted path call). Without a key only the keyword systems run: that is the search an
 agent falls back to when embeddings are unavailable.
@@ -136,11 +136,11 @@ def metrics(results: List[dict]) -> dict:
 # ----------------------------------------------------------------------------------------------- encoding
 
 def encode_passages(texts: List[str]):
-    """Embeddings passage vectors (one batched request per 100 texts), or None when embeddings are unavailable."""
+    """Hosted embedding passage vectors (one batched request per 100 texts), or None when embeddings are unavailable."""
     try:
         return list(retrieval.encode_texts(texts, kind="passage"))
     except retrieval.EmbeddingUnavailable as e:
-        print(f"  Embeddings embeddings unavailable ({e}): keyword systems only")
+        print(f"  hosted embeddings unavailable ({e}): keyword systems only")
         return None
 
 
@@ -255,7 +255,7 @@ def main():
             out["query_encode_ms"] = {"median": round(statistics.median(t_q), 1), "p95": round(pct(t_q, 95), 1)}
             print("query embedding ms (cache hits included): " + json.dumps(out["query_encode_ms"]))
         except retrieval.EmbeddingUnavailable as e:
-            print(f"  Embeddings embeddings unavailable ({e}): keyword systems only")
+            print(f"  hosted embeddings unavailable ({e}): keyword systems only")
             qvec = {}
 
     for s in sets:

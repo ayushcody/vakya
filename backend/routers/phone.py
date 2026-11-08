@@ -686,6 +686,10 @@ class CallSession:
         if not self.party:
             return None
         self.profile = await asyncio.to_thread(caller_profiles.lookup, self.claims["u"], self.party, self.claims["m"])
+        if self.profile is not None:   # bring its bookings in line with the live store (a move or cancel since the last call)
+            synced = await asyncio.to_thread(caller_profiles.sync_profile, self.claims["u"], self.party,
+                                             self.agent.get("id"), self.claims["m"])
+            self.profile = synced or self.profile
         if self.profile is not None:
             self.log.append({"event": "known_caller", "calls": self.profile.get("call_count")})
         return self.profile
@@ -696,8 +700,11 @@ class CallSession:
         profile = await self._known_caller()
         if not profile or not self.conversation_id:
             return
-        caller_profiles.set_context(self.conversation_id, profile)
-        form = caller_profiles.prefill_form(profile)
+        agent_id = self.agent.get("id")
+        caller_profiles.set_context(self.conversation_id, profile, agent_id)
+        known = bool(await asyncio.to_thread(caller_profiles.live_bookings, profile.get("number"), agent_id)
+                     or profile.get("last_booking"))
+        form = caller_profiles.prefill_form(profile, confirmed=known)
         if form and caller_memory.enabled():
             db = self.b.local_db if self.claims["m"] == "local" else None
             await asyncio.to_thread(caller_memory.save, self.conversation_id, form, db, self.claims["u"])

@@ -1,8 +1,8 @@
-"""Knowledge-retrieval evaluation: BM25 keyword search alone, Embeddings embeddings alone, and the two fused.
+"""Knowledge-retrieval evaluation: BM25 keyword search alone, hosted embeddings alone, and the two fused.
 
 It imports services/retrieval.py directly (the same tokenizer, BM25 and fusion the API uses) and never calls the running
 API. With EMBEDDINGS_API_KEY set (backend/.env or the environment) the passages and the questions are embedded through
-Embeddings (services/retrieval.encode_texts: one batched request per 100 texts, cached on disk, so a second run is free).
+the embeddings service (services/retrieval.encode_texts: one batched request per 100 texts, cached on disk, so a second run is free).
 Without a key only the BM25 row is scored: that is the search an agent falls back to with no key.
 
 Data: bench/data/retrieval_questions.json (19 questions about the clinic template document, in English, Hindi in
@@ -10,7 +10,7 @@ Devanagari and Hinglish in Roman letters). A question is a HIT at k when one of 
 `gold` strings. The documents are split into small chunks (about 40 words, never across a heading), because the
 production chunker (500 words) turns each of these short templates into a single chunk and every system would score 100%.
 
-    backend/.venv/bin/python backend/bench/retrieval_eval.py                       # BM25, Embeddings, fused
+    backend/.venv/bin/python backend/bench/retrieval_eval.py                       # BM25, embeddings, fused
     backend/.venv/bin/python backend/bench/retrieval_eval.py --quick
     backend/.venv/bin/python backend/bench/retrieval_eval.py --chunker production   # the app's 120-word chunks
 
@@ -103,7 +103,7 @@ def is_hit(chunks: List[str], order: List[int], gold: List[str], k: int) -> bool
 
 
 def evaluate(questions, docs, timings: Dict[str, dict]):
-    """Returns ({system name: [ranking per question]}, [top dense cosine per question]). The Embeddings systems need a key."""
+    """Returns ({system name: [ranking per question]}, [top dense cosine per question]). The embeddings systems need a key."""
     systems: Dict[str, List[List[int]]] = {"BM25 only": [retrieval.bm25_ranking(q["q"], docs[q["doc"]]) for q in questions]}
     top_dense: List[float] = []
     status = retrieval.embedder_status()
@@ -122,7 +122,7 @@ def evaluate(questions, docs, timings: Dict[str, dict]):
             qvecs.append(retrieval.encode_query(q["q"]))
             qtimes.append((time.perf_counter() - t) * 1000)
     except retrieval.EmbeddingUnavailable as e:
-        print(f"Embeddings embeddings unavailable ({e}): scoring BM25 only")
+        print(f"hosted embeddings unavailable ({e}): scoring BM25 only")
         return systems, top_dense
     timings["embedder"]["query_ms_median"] = round(statistics.median(qtimes), 1)
     timings["embedder"]["query_ms_p95"] = round(float(np.percentile(qtimes, 95)), 1)

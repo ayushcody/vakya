@@ -245,6 +245,14 @@ def _list(schedule: dict, args: dict) -> Tuple[bool, Any]:
     return True, out
 
 
+def _problem(e: "sb.BookingProblem", done_key: str) -> Any:
+    """What a tool answers when a rule refuses: a machine error the agent turns into a spoken sentence (`say`, English and
+    Hindi) for the rules that carry one (TOO_MANY_BOOKINGS, CANCEL_TOO_LATE), else the plain sentence."""
+    if e.say:
+        return {done_key: False, "error": e.code, "say": e.say, "suggestion": "call_staff"}
+    return e.message
+
+
 def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
     day = _date(args.get("date"))
     if day is None:
@@ -260,10 +268,10 @@ def _book(schedule: dict, agent_id: str, args: dict) -> Tuple[bool, Any]:
     except sb.BookingRefused as e:
         r = e.result
         before, after = _human(r["before"], stay), _human(r["after"], stay)
-        return False, {"booked": False, "reason": r["reason"], "say": r["spoken"],
+        return False, {"booked": False, "error": "SLOT_UNAVAILABLE", "reason": r["reason"], "say": r["spoken"],
                        "alternatives": [x for x in (before, after) if x]}
     except sb.BookingProblem as e:
-        return False, e.message
+        return False, _problem(e, "booked")
     except sch.ScheduleError as e:
         return False, e.message
     out = sb.public(row, sb.token_map())
@@ -282,7 +290,7 @@ def _cancel(agent_id: str, args: dict) -> Tuple[bool, Any]:
     try:
         row = sb.cancel(args.get("booking_id"), agent_id, caller=True)
     except sb.BookingProblem as e:
-        return False, e.message
+        return False, _problem(e, "cancelled")
     out = sb.public(row)
     notice = _notify("cancelled", row)
     if notice:
@@ -309,9 +317,11 @@ def _reschedule(agent_id: str, args: dict) -> Tuple[bool, Any]:
         r = e.result
         stay = r.get("nights") is not None and "nights" in r
         before, after = _human(r["before"], stay), _human(r["after"], stay)
-        return False, {"moved": False, "reason": r["reason"], "say": r["spoken"],
+        return False, {"moved": False, "error": "SLOT_UNAVAILABLE", "reason": r["reason"], "say": r["spoken"],
                        "alternatives": [x for x in (before, after) if x]}
-    except (sb.BookingProblem, sch.ScheduleError) as e:
+    except sb.BookingProblem as e:
+        return False, _problem(e, "moved")
+    except sch.ScheduleError as e:
         return False, e.message
     out = sb.public(row, sb.token_map())
     out["moved_from"] = {"date": previous["date"], "weekday": previous.get("weekday"), "time": previous["time"]}

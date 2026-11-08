@@ -15,7 +15,7 @@ The reply model is shown the dialogue so far (`backend/services/call_notes.py`, 
 The call notes block always carries every captured detail (name, phone, date, time, the person the booking is for, the
 trade's details such as a party size or a preferred stylist, and what the booking tools were given) and a compact summary of
 the turns that were left out: what was booked or cancelled, what the caller agreed to or refused, what they asked, and what
-the agent told them (prices, times, offers). The summary is composed in code, so no turn waits for it. When a Embeddings
+the agent told them (prices, times, offers). The summary is composed in code, so no turn waits for it. When the language model
 key is configured, a better summary is written in the background and used from the next turn (a failure
 keeps the code's summary). The tools always see the whole stored call, so an earlier booking is never lost to them.
 
@@ -62,12 +62,12 @@ details worth keeping. The agent's `template_id` picks the schema; an agent made
 
 Each detail has a type (`text`, `number` with a range, `enum` with choices, `time`) and is validated when it is read and
 again when the profile is written. Rules read the plain cases (a party size, the nights of a stay, an age band, "for my son
-Rohan"); Embeddings Flash, when a key is configured, reads the rest in the background after each turn and only
+Rohan"); the hosted language model, when a key is configured, reads the rest in the background after each turn and only
 fills what the schema names.
 
 ### Never kept
 
-Whatever route it comes in by (the rules, Embeddings, the owner's edit), these never reach a profile, and the model
+Whatever route it comes in by (the rules, the language model, the owner's edit), these never reach a profile, and the model
 is also told not to return them:
 
 * Aadhaar, PAN, passport, voter id, driving licence or ration card numbers, and any 12 to 19 digit run that is not a phone number

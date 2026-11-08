@@ -73,6 +73,8 @@ class ScheduleBody(BaseModel):
     check_out: Optional[str] = None
     min_notice_minutes: Optional[int] = None
     horizon_days: Optional[int] = None
+    cancel_notice_minutes: Optional[int] = None
+    max_active_per_phone: Optional[int] = None
     closed_dates: Optional[List[str]] = None
 
 

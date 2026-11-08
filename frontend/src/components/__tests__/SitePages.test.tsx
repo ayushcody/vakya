@@ -106,7 +106,7 @@ describe("page content", () => {
     expect(container.querySelector("#gnani")).toHaveTextContent("Live on Gnani since 5 Nov.");
     expect(container.querySelector("#team")).toHaveTextContent("not affiliated with Gnani AI");
     // nothing from the removed platform
-    expect(container.textContent).not.toMatch(/WhatsApp|widget|Hear a voice/i);
+    expect(container.textContent).not.toMatch(/widget|Hear a voice/i);
     expect(container.textContent).not.toMatch(/\bStudio\b/); // the product page; the lower-case "Gym and studio" desk is fine
     // no calendar claim as fact
     expect(container.textContent).not.toMatch(/books appointments into Google Calendar/i);

@@ -1,5 +1,5 @@
 """Process-wide state and configuration: the environment, the Supabase client, the local data directories and the hosted
-embedder (Embeddings).
+embedder.
 
 Everything here is read through this module (`state.supabase`, `state.local_db`, ...) and never copied into another
 module's globals, so the tests can replace a value in one place and every caller sees it.
@@ -42,7 +42,7 @@ APP_VERSION = "2.0.0"
 
 def platform_info() -> dict:
     """Which machine this is (operating system, version, architecture). Nothing runs on it but the API: speech comes from
-    Gnani and the language model from Embeddings."""
+    Gnani and the hosted language model."""
     import platform as _platform
     system = _platform.system()
     os_name = {"Darwin": "macOS", "Windows": "Windows", "Linux": "Linux"}.get(system, system or "Unknown")
@@ -68,7 +68,7 @@ SUPABASE_ANON_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY") or os.getenv("SUP
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
 supabase = None
 if offline.enabled():
-    print("Offline mode: Supabase, Gnani, Embeddings, Calendar and phone calls are switched off.")
+    print("Offline mode: Supabase, Gnani, the language model, Calendar and phone calls are switched off.")
 elif SUPABASE_URL and SUPABASE_KEY and create_client is not None:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -83,9 +83,9 @@ SIGNED_URL_EXPIRES_S = max(60, int(os.getenv("SIGNED_URL_EXPIRES_S", "3600") or 
 
 
 class LazyEmbeddingModel:
-    """The hosted embedder: Embeddings embeddings (services/retrieval.py), reached over HTTP on first use. `encode(texts,
+    """The hosted embedder (services/retrieval.py), reached over HTTP on first use. `encode(texts,
     kind="passage" | "query")` returns unit-length float32 vectors, or raises retrieval.EmbeddingUnavailable when there
-    is no Embeddings key or Embeddings cannot be reached (callers then search by keyword or store the text without a vector)."""
+    is no embeddings key or the embeddings service cannot be reached (callers then search by keyword or store the text without a vector)."""
 
     @property
     def loaded(self) -> bool:
@@ -103,7 +103,7 @@ embedding_model = LazyEmbeddingModel()
 # ============================================================================
 
 LOCAL_DATA_DIR = os.path.join(BACKEND_DIR, "data")
-# Knowledge is embedded by Embeddings (EMBEDDINGS_EMBED_MODEL, embeddings-embedding-2 by default; EMBEDDINGS_EMBED_DIM, 768 by default),
+# Knowledge is embedded by the hosted embedder (EMBEDDINGS_MODEL; EMBEDDINGS_DIM, 768 by default),
 # which is multilingual: a Hindi question finds an English document and the reverse. Local chunks record the model and
 # dimension they were embedded with and are re-embedded on their next search when either differs (see
 # refresh_local_embeddings); with no key they are searched by BM25 keyword match.

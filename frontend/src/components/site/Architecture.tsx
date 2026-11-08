@@ -61,8 +61,8 @@ const STAGES: Stage[] = [
   {
     key: "llm",
     name: "Language model with tools",
-    api: "Embeddings Flash (Google, hosted)",
-    points: ["Answers from the business's documents (Embeddings embeddings, keyword search as backup)", "Tools: check a time, list free times, book, cancel, knowledge search, end call", "Syncs to Google Calendar when connected"],
+    api: "a hosted language model",
+    points: ["Answers from the business's documents (hosted embeddings, keyword search as backup)", "Tools: check a time, list free times, book, cancel, knowledge search, end call", "Syncs to Google Calendar when connected"],
     status: "built",
   },
   {
@@ -143,7 +143,7 @@ export function Architecture() {
       </Reveal>
 
       <Reveal as="p" className="mt-6 max-w-[64ch] text-sm leading-relaxed text-[var(--s-mute)]">
-        {GNANI_STATUS.long} The model that writes replies is not Gnani&apos;s: it is Embeddings Flash, hosted by Google. There is no second speech model: when Gnani is busy or down, the caller hears a
+        {GNANI_STATUS.long} The model that writes replies is not Gnani&apos;s: it is a hosted language model, set in backend/.env. There is no second speech model: when Gnani is busy or down, the caller hears a
         short pre-rendered Timbre line and is offered a callback.
       </Reveal>
     </section>

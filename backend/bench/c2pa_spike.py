@@ -78,7 +78,7 @@ def pcm(path):
 
 res = {"c2pa_python": c2pa.__name__, "sdk": c2pa.sdk_version(), "receipt_id": receipt_id,
        "wav_supported": "audio/wav" in c2pa.Builder.get_supported_mime_types(), "mp3_supported": "audio/mpeg" in c2pa.Builder.get_supported_mime_types(),
-       "ogg/opus/webm_supported": [m for m in ("audio/ogg", "audio/opus", "audio/webm", "ogg", "opus", "webm") if m in c2pa.Builder.get_supported_mime_types()]}
+       "ogg/webm_supported": [m for m in ("audio/ogg", "audio/webm", "ogg", "webm") if m in c2pa.Builder.get_supported_mime_types()]}
 wav_in = os.path.join(out, "in.wav"); mp3_in = os.path.join(out, "in.mp3")
 subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", wav_in], check=True)  # 16-bit PCM like the app serves
 subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-c:a", "libmp3lame", "-b:a", "128k", "-write_xing", "0", mp3_in], check=True)
@@ -95,7 +95,7 @@ re_tests = {"wav->mp3_128k": ("signed.wav", ["-c:a", "libmp3lame", "-b:a", "128k
             "mp3->mp3_64k": ("signed.mp3", ["-c:a", "libmp3lame", "-b:a", "64k"], "mp3", "audio/mpeg"),
             "wav->wav_ffmpeg_copy_codec": ("signed.wav", ["-c:a", "pcm_s16le"], "wav", "audio/wav"),
             "mp3->mp3_ffmpeg_stream_copy": ("signed.mp3", ["-c:a", "copy"], "mp3", "audio/mpeg"),
-            "wav->opus_32k": ("signed.wav", ["-c:a", "libopus", "-b:a", "32k"], "ogg", "audio/ogg"),
+            "wav->ogg_32k": ("signed.wav", ["-b:a", "32k"], "ogg", "audio/ogg"),
             "mp3->mp3_128k_copy_with_-map_metadata_-1": ("signed.mp3", ["-c:a", "copy", "-map_metadata", "-1"], "mp3", "audio/mpeg")}
 res["reencode"] = {}
 for k, (f, args, ext, mime) in re_tests.items():

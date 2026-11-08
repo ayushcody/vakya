@@ -462,7 +462,7 @@ def test_the_small_model_is_asked_after_the_reply_and_never_holds_it_up(rig, env
     import threading
     from services import caller_memory as cm
     from tests.test_caller_memory import FakeModel
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("LLM_API_KEY", "test-key-not-real"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setenv("CALLER_MEMORY_LLM", "on")
     gate = threading.Event()
     fake = FakeModel({"name": "Priya Sharma", "doctor": "Dr Rao"}, gate=gate)

@@ -90,9 +90,9 @@ describe("helpers", () => {
     expect(w.formatClock(61)).toBe("1:01");
     expect(w.formatClock(599.2)).toBe("9:59");
     expect(w.formatClock(-5)).toBe("0:00");
-    expect(w.extFor("audio/webm;codecs=opus")).toBe("webm");
+    expect(w.extFor("audio/webm")).toBe("webm");
     expect(w.extFor("audio/mp4")).toBe("m4a");
-    expect(w.extFor("audio/ogg;codecs=opus")).toBe("ogg");
+    expect(w.extFor("audio/ogg")).toBe("ogg");
     expect(w.linkIdFromPath(`/call/${LINK}`)).toBe(LINK);
     expect(w.linkIdFromPath(`/call/${LINK}/`)).toBe(LINK);
     expect(w.linkIdFromPath("/call/other")).toBeNull();

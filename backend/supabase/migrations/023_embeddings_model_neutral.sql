@@ -1,12 +1,12 @@
 -- 023_embeddings_model_neutral.sql: one model-neutral vector column and match function for knowledge search, sized for the
--- configured embedding dimension (EMBEDDINGS_EMBED_DIM, 768 by default; embeddings-embedding-2 and embeddings-embedding-001 both
+-- configured embedding dimension (EMBEDDINGS_DIM, 768 by default; the embedding model can
 -- return a vector of any size from 128 to 3072). Idempotent; nothing existing is changed or dropped.
 --
 -- Why a new column: a pgvector column has a fixed size, and the older ones (`embedding` vector(384) from 000,
 -- `embedding_1024` from 011) hold vectors of a model the backend no longer uses. Vectors of different models are never
 -- comparable, so they are not reused: the backend writes `embedding_vec` and re-embeds an agent's chunks into it on the
 -- first search after the upload or the switch (services/knowledge.py, `_backfill_cloud_embeddings`: it picks the rows whose
--- `embedding_vec` is null or whose `embed_model` differs from the configured model). With no Embeddings key nothing is
+-- `embedding_vec` is null or whose `embed_model` differs from the configured model). With no embeddings key nothing is
 -- written and nothing is lost: the backend ranks the chunks by BM25 until a key is set.
 --
 -- Contract of match_document_chunks_vec: the same as match_document_chunks in 020: the `match_count` closest rows
@@ -21,7 +21,7 @@
 --   4. create index document_chunks_embedding_vec_idx on public.document_chunks using hnsw (embedding_vec vector_cosine_ops);
 --   5. drop function public.match_document_chunks_vec(vector, integer, uuid);
 --      and create it again from this file with vector(N) in place of vector(768);
---   6. set EMBEDDINGS_EMBED_DIM=N in backend/.env and restart the backend.
+--   6. set EMBEDDINGS_DIM=N in backend/.env and restart the backend.
 -- The backend refuses to store or search with any other size (EMBEDDING_DIM_UNSUPPORTED) and re-embeds the agents' chunks
 -- on their next search.
 

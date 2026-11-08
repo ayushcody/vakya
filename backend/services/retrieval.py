@@ -1,8 +1,8 @@
-"""Knowledge retrieval building blocks: the hosted embedder (Embeddings embeddings), a Hindi/English/Hinglish normaliser and
+"""Knowledge retrieval building blocks: the hosted embedder, a Hindi/English/Hinglish normaliser and
 tokenizer, BM25, score fusion, question-row -> passage mapping and a retrieval confidence rating.
 
 Two ways to search, one ranking function:
-  * hybrid   a Embeddings key is set: each passage and each question has a vector; the dense cosine is fused with BM25.
+  * hybrid   an embeddings key is set: each passage and each question has a vector; the dense cosine is fused with BM25.
   * keyword  no key, a quota error, a network error: no vector, so BM25 over the same passages ranks them alone. The
              search never fails and never answers "nothing" only because the embedder is away.
 
@@ -12,7 +12,7 @@ Pipeline (see rank_rows, LocalStore.match_chunks and knowledge.retrieve_context)
      -> weighted fusion of normalised scores (RETRIEVAL_FUSION=rrf: Reciprocal Rank Fusion)
      -> question rows stand for their parent passage (best score wins) -> assess_confidence -> top k
 
-The embedder (encode_texts / encode_query) calls Google's REST API with httpx: models/{model}:batchEmbedContents, at most
+The embedder (encode_texts / encode_query) calls the configured embeddings endpoint with httpx: models/{model}:batchEmbedContents, at most
 EMBED_BATCH_SIZE texts per request, retries with backoff on 429 / 5xx, every vector scaled to unit length here (so
 cosine == dot product whatever the model does), and a cache keyed by a hash of model + dimension + kind + text: in
 memory (LRU) and in a small SQLite file under backend/data (never required). Nothing is imported or loaded at module
@@ -36,9 +36,9 @@ import httpx
 import numpy as np
 
 try:
-    from services import embeddings
+    from services import model_config
 except ImportError:  # pragma: no cover - imported as backend.services.retrieval
-    from backend.services import embeddings
+    from backend.services import model_config
 
 log = logging.getLogger(__name__)
 
@@ -77,29 +77,33 @@ EMBED_COOLDOWN_S = 30.0           # after a failed call the embedder is not trie
 EMBED_CACHE_SIZE = 4096           # vectors kept in memory
 EMBED_DISK_CACHE_ROWS = 20000     # vectors kept in the SQLite file (float16: 1.5 KB each at 768 dimensions)
 
-# embeddings-embedding-2 has no task type: the text itself carries the task (docs: ai.google.dev/embeddings-api/docs/embeddings).
+# By default there is no task type: the text itself carries the task. EMBEDDINGS_TASK_TYPE=on sends the task as a request field
+# (taskType) instead and leaves the text as it is, for an embedding model that has one.
 QUERY_PREFIX = "task: search result | query: {text}"
 PASSAGE_PREFIX = "title: {title} | text: {text}"
-LEGACY_TASK_TYPES = {"query": "RETRIEVAL_QUERY", "passage": "RETRIEVAL_DOCUMENT"}   # embeddings-embedding-001
+TASK_TYPES = {"query": "RETRIEVAL_QUERY", "passage": "RETRIEVAL_DOCUMENT"}
+
+
+NEEDS_EMBEDDINGS = "Needs embeddings"
 
 
 class EmbeddingUnavailable(RuntimeError):
-    """The embedder cannot answer now: no Embeddings key, a quota or network error, or a reply that is not a vector. Search
+    """The embedder cannot answer now: no embeddings key, a quota or network error, or a reply that is not a vector. Search
     goes on by keyword; documents are stored without a vector and embedded later."""
 
 
 def embedding_model_name() -> str:
-    """The id stored with every vector (`embed_model`): EMBEDDINGS_EMBED_MODEL, else embeddings-embedding-2."""
-    return embeddings.embed_model()
+    """The id stored with every vector (`embed_model`): EMBEDDINGS_MODEL."""
+    return model_config.embed_model()
 
 
 def embedding_dim() -> int:
-    """The vector size asked for (`outputDimensionality`): EMBEDDINGS_EMBED_DIM, else 768."""
-    return embeddings.embed_dim()
+    """The vector size asked for (`outputDimensionality`): EMBEDDINGS_DIM, else 768."""
+    return model_config.embed_dim()
 
 
 def embeddings_configured() -> bool:
-    return embeddings.embeddings_configured()
+    return model_config.embeddings_configured()
 
 
 _embed_lock = threading.Lock()
@@ -113,17 +117,17 @@ _disk_failed = False
 
 
 def embedder_status() -> dict:
-    """{"provider": "embeddings", "model", "dim", "configured", "reason", "mode"}: `mode` is "hybrid" when searches use
+    """{"provider": "hosted", "model", "dim", "configured", "reason", "mode"}: `mode` is "hybrid" when searches use
     vectors and BM25 together, "keyword" when BM25 alone answers (no key, or the embedder failed a moment ago)."""
     configured = embeddings_configured()
     cooling = configured and time.monotonic() < _embed_down_until
     reason = None
     if not configured:
-        reason = "Needs a Embeddings key"
+        reason = model_config.embeddings_missing()
     elif cooling:
-        reason = "Embeddings embeddings are unreachable just now: searching by keyword" + (
+        reason = "The embeddings service is unreachable just now: searching by keyword" + (
             f" ({_embed_last_error})" if _embed_last_error else "")
-    return {"provider": "embeddings", "model": embedding_model_name(), "dim": embedding_dim(), "configured": configured,
+    return {"provider": "hosted", "model": embedding_model_name(), "dim": embedding_dim(), "configured": configured,
             "reason": reason, "mode": "hybrid" if configured and not cooling else "keyword"}
 
 
@@ -141,8 +145,9 @@ def reset_embedder_state() -> None:
         _embed_last_error = None
 
 
-def _is_legacy_model(model: str) -> bool:
-    return "embedding-001" in model
+def _task_type_mode() -> bool:
+    """EMBEDDINGS_TASK_TYPE=on: the task goes in the request's taskType field instead of in the text."""
+    return (os.getenv("EMBEDDINGS_TASK_TYPE") or "").strip().lower() in ("on", "1", "true", "yes")
 
 
 def _cache_key(model: str, dim: int, kind: str, text: str) -> str:
@@ -150,10 +155,10 @@ def _cache_key(model: str, dim: int, kind: str, text: str) -> str:
 
 
 def _prepare_input(text: str, kind: str, title: Optional[str], model: str) -> str:
-    """What is sent for one text. embeddings-embedding-2: prefixed (query / passage with a title, "none" when there is no
-    title); embeddings-embedding-001: the text as it is (the task type is a request field)."""
+    """What is sent for one text. Default: prefixed (query / passage with a title, "none" when there is no title);
+    with EMBEDDINGS_TASK_TYPE=on: the text as it is (the task type is a request field)."""
     text = (text or "").strip() or "."
-    if _is_legacy_model(model):
+    if _task_type_mode():
         return text
     if kind == "query":
         return QUERY_PREFIX.format(text=text)
@@ -254,13 +259,13 @@ def _retry_delay(attempt: int, response) -> float:
 
 def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str, attempts: int,
                    timeout: float) -> List[np.ndarray]:
-    url = f"{embeddings.EMBED_ENDPOINT}/models/{model}:batchEmbedContents"
+    url = f"{model_config.embed_base_url()}/models/{model}:batchEmbedContents"
     reqs = []
     for text in inputs:
         item: Dict[str, Any] = {"model": f"models/{model}", "content": {"parts": [{"text": text}]},
                                 "outputDimensionality": dim}
-        if _is_legacy_model(model):
-            item["taskType"] = LEGACY_TASK_TYPES[kind]
+        if _task_type_mode():
+            item["taskType"] = TASK_TYPES[kind]
         reqs.append(item)
     headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
     last = "no attempt"
@@ -274,16 +279,16 @@ def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str,
             if status == 200:
                 vectors = [e.get("values") for e in (response.json().get("embeddings") or [])]
                 if len(vectors) != len(inputs) or any(not v for v in vectors):
-                    raise EmbeddingUnavailable(f"Embeddings returned {len(vectors)} vectors for {len(inputs)} texts")
+                    raise EmbeddingUnavailable(f"The embeddings service returned {len(vectors)} vectors for {len(inputs)} texts")
                 return [_unit(v) for v in vectors]
             last = f"HTTP {status}"
-            if embeddings.is_key_error(status):
+            if model_config.is_key_error(status):
                 try:
                     text = str(getattr(response, "text", "") or "") or json.dumps(response.json())
                 except Exception:  # noqa: BLE001
                     text = ""
-                nxt = embeddings.next_key_after_failure(headers["x-goog-api-key"], status, text) \
-                    if switches < len(embeddings.keys()) else None
+                nxt = model_config.next_key_after_failure(headers["x-goog-api-key"], status, text) \
+                    if switches < len(model_config.keys()) else None
                 if nxt:                     # another key takes over at once; this does not use up a retry
                     headers = {**headers, "x-goog-api-key": nxt}
                     switches += 1
@@ -301,7 +306,7 @@ def _request_batch(inputs: List[str], kind: str, model: str, dim: int, key: str,
         if attempt + 1 < attempts:
             _sleep(_retry_delay(attempt, response))
         attempt += 1
-    raise EmbeddingUnavailable(f"Embeddings embeddings failed after {attempts} attempt(s): {last}")
+    raise EmbeddingUnavailable(f"Embeddings failed after {attempts} attempt(s): {last}")
 
 
 def encode_texts(texts: Sequence[str], *, kind: str = "passage", titles: Optional[Sequence[Optional[str]]] = None,
@@ -311,7 +316,7 @@ def encode_texts(texts: Sequence[str], *, kind: str = "passage", titles: Optiona
     the removed local encoder (batch_size, normalize_embeddings, ...) are accepted and ignored.
 
     Cached by sha256(model + dimension + kind + text): a text seen before costs no request. Raises EmbeddingUnavailable
-    when there is no key or Embeddings cannot be reached (the caller falls back to keyword search or stores the text
+    when there is no key or the embeddings service cannot be reached (the caller falls back to keyword search or stores the text
     without a vector)."""
     global _embed_down_until, _embed_last_error
     texts = [str(t) if t is not None else "" for t in texts]
@@ -338,11 +343,11 @@ def encode_texts(texts: Sequence[str], *, kind: str = "passage", titles: Optiona
                 found[k] = v
         missing = [k for k in missing if k not in found]
     if missing:
-        key = embeddings.embed_key()
-        if not key:
-            raise EmbeddingUnavailable("Needs a Embeddings key")
+        key = model_config.embed_key()
+        if not key or not model_config.embed_base_url() or not model:
+            raise EmbeddingUnavailable(NEEDS_EMBEDDINGS)
         if time.monotonic() < _embed_down_until:
-            raise EmbeddingUnavailable(_embed_last_error or "Embeddings embeddings are unreachable just now")
+            raise EmbeddingUnavailable(_embed_last_error or "The embeddings service is unreachable just now")
         first = {k: x for k, x in zip(keys, inputs)}
         attempts = EMBED_QUERY_ATTEMPTS if kind == "query" else EMBED_MAX_ATTEMPTS
         timeout = EMBED_QUERY_TIMEOUT_S if kind == "query" else EMBED_TIMEOUT_S
@@ -351,15 +356,15 @@ def encode_texts(texts: Sequence[str], *, kind: str = "passage", titles: Optiona
         try:
             for i in range(0, len(missing), size):
                 part = missing[i:i + size]
-                for k, v in zip(part, _request_batch([first[k] for k in part], kind, model, dim, embeddings.embed_key() or key, attempts, timeout)):
+                for k, v in zip(part, _request_batch([first[k] for k in part], kind, model, dim, model_config.embed_key() or key, attempts, timeout)):
                     if v.shape[0] != dim:
-                        raise EmbeddingUnavailable(f"Embeddings returned {v.shape[0]}-dimensional vectors, not {dim}")
+                        raise EmbeddingUnavailable(f"The embeddings service returned {v.shape[0]}-dimensional vectors, not {dim}")
                     fresh[k] = v
         except EmbeddingUnavailable as e:
-            if "Needs a Embeddings key" not in str(e):
+            if NEEDS_EMBEDDINGS not in str(e):
                 _embed_down_until = time.monotonic() + _float_env("EMBED_COOLDOWN_S", EMBED_COOLDOWN_S)
                 _embed_last_error = str(e)[:160]
-                log.warning("Embeddings embeddings failed: %s (keyword search until it is back)", e)
+                log.warning("Embeddings failed: %s (keyword search until it is back)", e)
             if fresh:                       # the batches that did arrive are worth keeping
                 _remember(fresh)
             raise
@@ -504,7 +509,6 @@ _VARIANTS: Dict[str, Sequence[str]] = {
                 "बताये", "बताना"),
     "hota": ("hoti", "hote", "hoga", "hogi", "honge", "hona", "होता", "होती", "होते", "होगा", "होगी", "होंगे", "होना"),
     "hun": ("hoon", "hu", "hoo", "हूँ", "हूं", "हू"),
-    "baje": ("bje", "बजे"),
     # money
     "rupee": ("rupees", "rs", "inr", "rupaye", "rupye", "rupay", "rupaya", "rupiya", "rupiye", "rupe", "रुपये", "रुपए",
               "रुपया", "रुपयों", "रु"),
@@ -512,7 +516,7 @@ _VARIANTS: Dict[str, Sequence[str]] = {
     "fee": ("fees", "phees", "phee", "fis", "shulk", "फीस", "फ़ीस", "शुल्क"),
     "price": ("keemat", "kimat", "daam", "mulya", "कीमत", "क़ीमत", "दाम", "मूल्य"),
     "free": ("muft", "nishulk", "मुफ्त", "मुफ़्त", "निःशुल्क", "निशुल्क"),
-    "discount": ("chhoot", "chhut", "छूट"),
+    "discount": ("chhoot", "chhut", "discounts", "छूट", "डिस्काउंट"),
     "payment": ("bhugtan", "भुगतान"),
     # people, places, services (English loanwords first: their Devanagari spelling transliterates differently)
     "doctor": ("dr", "doktar", "daktar", "dactor", "dactar", "docter", "doktor", "daktor", "doctr", "doctoron",
@@ -523,10 +527,10 @@ _VARIANTS: Dict[str, Sequence[str]] = {
                  "दवाइयाँ", "औषधि"),
     "pharmacy": ("chemist", "farmesi", "pharmesi", "फार्मेसी", "फ़ार्मेसी", "केमिस्ट"),
     "appointment": ("apointment", "appoinment", "apoinment", "appointmant", "अपॉइंटमेंट", "अपोइंटमेंट", "अपाइंटमेंट"),
-    "emergency": ("imarjensi", "imrjensi", "emarjensi", "emergancy", "emarjency", "इमरजेंसी", "इमर्जेंसी",
+    "emergency": ("imarjensi", "इमर्जन्सी", "आणीबाणी", "anibani", "imrjensi", "emarjensi", "emergancy", "emarjency", "इमरजेंसी", "इमर्जेंसी",
                   "aapatkal", "आपातकाल"),
     "ambulance": ("embulens", "ambulans", "embulance", "एम्बुलेंस", "एंबुलेंस"),
-    "dentist": ("dental", "teeth", "tooth", "dant", "daant", "दांत", "दाँत", "डेंटिस्ट", "डेंटल"),
+    "dentist": ("dental", "teeth", "tooth", "dant", "daant", "daat", "दात", "दंतवैद्य", "दांत", "दाँत", "डेंटिस्ट", "डेंटल"),
     "test": ("janch", "jaanch", "जांच", "जाँच", "टेस्ट"),
     "report": ("riport", "रिपोर्ट"),
     "blood": ("khoon", "khun", "rakt", "खून", "ख़ून", "रक्त"),
@@ -550,12 +554,12 @@ _VARIANTS: Dict[str, Sequence[str]] = {
     "name": ("naam", "नाम"),
     "available": ("milega", "milegi", "milenge", "milta", "milti", "milte", "uplabdh", "उपलब्ध", "मिलेगा", "मिलेगी",
                   "मिलेंगे", "मिलता", "मिलती", "मिलते"),
-    "open": ("khula", "khuli", "khule", "khulta", "khulti", "khulte", "khulna", "khulega", "khulegi", "khulenge",
+    "open": ("opening", "opens", "opened", "khula", "khuli", "khule", "khulta", "khulti", "khulte", "khulna", "khulega", "khulegi", "khulenge",
              "opan", "खुला", "खुली", "खुले", "खुलता", "खुलती", "खुलते", "खुलना", "खुलेगा", "खुलेगी", "ओपन"),
-    "closed": ("band", "बंद"),
+    "closed": ("close", "closing", "closes", "band", "बंद"),
     "cancel": ("cancellation", "kainsil", "radd", "रद्द", "कैंसिल"),
     # time
-    "time": ("timing", "timings", "samay", "samai", "taim", "tym", "टाइम", "समय", "टाइमिंग"),
+    "time": ("timing", "timings", "baje", "samay", "samai", "taim", "tym", "टाइम", "समय", "टाइमिंग"),
     "hour": ("ghanta", "ghante", "ghanton", "घंटा", "घंटे", "घंटों"),
     "today": ("aaj", "आज"),
     "now": ("abhi", "अभी"),
@@ -565,15 +569,34 @@ _VARIANTS: Dict[str, Sequence[str]] = {
     "year": ("saal", "varsh", "साल", "वर्ष"),
     "morning": ("subah", "subha", "सुबह"),
     "evening": ("shaam", "sham", "शाम"),
-    "night": ("raat", "रात"),
+    "night": ("raat", "ratri", "raatri", "रात", "रात्री"),
     "afternoon": ("dopahar", "dopehar", "दोपहर"),
-    "sunday": ("ravivar", "raviwar", "itvar", "itwar", "इतवार", "रविवार"),
+    "sunday": ("ravivar", "raviwar", "itvar", "itwar", "ravivari", "इतवार", "रविवार", "रविवारी"),
     "monday": ("somvar", "somwar", "सोमवार"),
     "tuesday": ("mangalvar", "mangalwar", "मंगलवार"),
     "wednesday": ("budhvar", "budhwar", "बुधवार"),
     "thursday": ("guruvar", "guruwar", "brihaspativar", "गुरुवार", "बृहस्पतिवार"),
     "friday": ("shukravar", "shukrawar", "शुक्रवार"),
     "saturday": ("shanivar", "shaniwar", "शनिवार"),
+    # clinic and front-desk words that Hindi, Marathi and Hinglish callers say for an English document (measured on the
+    # 60-entry clinic FAQ in tests/faq_fixture.py: each of these turned a miss into a hit)
+    "parking": ("parkin", "paarking", "पार्किंग", "gaadi", "gadi", "gaadiyan", "gaadiyon", "गाड़ी", "गाडी", "गाड्या", "गाड्यांसाठी"),
+    "x": ("eks", "एक्स"),
+    "ray": ("रे",),
+    "sugar": ("shugar", "sakhar", "sakhre", "शुगर", "साखर", "साखरेच्या", "साखरेची"),
+    "senior": ("buzurg", "bujurg", "buzurgon", "bujurgon", "elderly", "बुज़ुर्ग", "बुज़ुर्गों", "बुजुर्ग", "बुजुर्गों"),
+    "sonography": ("ultrasound", "sonografi", "सोनोग्राफी", "सोनोग्राफ़ी"),
+    "physiotherapy": ("physio", "fisiotherapy", "फिजियोथेरेपी", "फिज़ियोथेरेपी"),
+    "vaccine": ("vaccination", "vaccines", "tika", "teeka", "lasikaran", "लसीकरण", "लसीकरणे", "टीका", "टीकाकरण", "लस"),
+    "insurance": ("vima", "bima", "mediclaim", "cashless", "विमा", "बीमा", "कॅशलेस", "कैशलेस"),
+    "whatsapp": ("whatsap", "व्हॉट्सअॅप", "व्हॉट्सअॅपवर", "व्हाट्सएप", "व्हाट्सऐप", "व्हॉट्सऐप"),
+    "video": ("वीडियो", "व्हिडिओ"),
+    "lift": ("लिफ्ट", "elevator"),
+    "gst": ("जीएसटी",),
+    "thyroid": ("थायराइड", "थायरॉइड"),
+    "ecg": ("ईसीजी", "ecg"),
+    "fasting": ("bhookha", "bhukha", "bhooka", "khali", "khaali", "भूखा", "खाली", "उपाशी", "upashi"),
+    "store": ("shop", "dukan", "dukaan", "दुकान", "स्टोर"),
 }
 
 
@@ -774,7 +797,7 @@ def dense_ranking(similarities: Sequence[float]) -> List[int]:
 # candidates (theoretical min-max: score / best score, the paper's TM2C2; RETRIEVAL_NORM=minmax for observed min-max),
 # then fused = sum(w_s * norm_s) / sum(active w_s). Dense 0.8 : BM25 0.2 (BM25 keeps exact numbers, names and Hinglish
 # spellings that a vector blurs). When a signal has no value at all (no vectors: keyword search) it drops out and BM25
-# alone orders the passages. The weights were tuned on the previous local embedder's bench sets, not on Embeddings's: run
+# alone orders the passages. The weights were tuned on the previous local embedder's bench sets, not on the hosted embedder's: run
 # bench/retrieval_eval.py with a key before changing them.
 DEFAULT_FUSION_WEIGHTS: Dict[str, float] = {"dense": 0.8, "bm25": 0.2}
 SIGNALS = ("dense", "bm25")
@@ -994,6 +1017,58 @@ def hybrid_order(query: str, texts: Sequence[str], similarities: Sequence[Option
     return [e["index"] for e in rank_rows(query, [{"chunk_text": t} for t in texts], similarities)]
 
 
+# ------------------------------------------------------------------------------------------------ FAQ strong match
+
+# A caller who asks what a stored FAQ question asks (in any script or spelling) should get that entry first and a short
+# prompt. Among the best-ranked passages, an FAQ entry ("Q: ...\nA: ...") is a strong match when at least 60% of the
+# caller's content words are in its question, at least a quarter of the question's words are in the caller's, and no other
+# entry comes within 0.25 of it. Measured on the 60-entry clinic FAQ (tests/test_faq_answering.py).
+FAQ_STRONG_COVERAGE = 0.6
+FAQ_STRONG_PRECISION = 0.25
+FAQ_STRONG_MARGIN = 0.25
+FAQ_POOL = 8                 # passages ranked before the strong match is looked for
+FAQ_STRONG_KEEP = 2          # passages kept (strong match first) when one entry clearly answers
+
+
+def faq_strong_enabled() -> bool:
+    return os.getenv("FAQ_STRONG_MATCH", "on").strip().lower() not in ("off", "0", "false", "no")
+
+
+def faq_question(row: dict) -> Optional[str]:
+    """The question of an FAQ entry passage ("Q: ..." first line), else None."""
+    text = row_text(row).lstrip()
+    if not text[:2].lower() == "q:":
+        return None
+    first = text.split("\n", 1)[0][2:].strip()
+    return first or None
+
+
+def faq_strong_match(query: str, rows: Sequence[dict]) -> Optional[int]:
+    """Index (into `rows`) of the FAQ entry that clearly answers `query`, or None. Never raises."""
+    try:
+        q = set(content_tokens(query))
+        if not q:
+            return None
+        scored = []
+        for i, r in enumerate(rows):
+            fq = faq_question(r)
+            if fq is None:
+                continue
+            e = set(content_tokens(fq))
+            common = len(q & e)
+            scored.append((common / len(q), common / len(e) if e else 0.0, i))
+        if not scored:
+            return None
+        scored.sort(key=lambda t: (-t[0], -t[1], t[2]))
+        cov, prec, idx = scored[0]
+        second = scored[1][0] if len(scored) > 1 else 0.0
+        if cov >= FAQ_STRONG_COVERAGE and prec >= FAQ_STRONG_PRECISION and cov - second >= FAQ_STRONG_MARGIN:
+            return idx
+    except Exception as e:  # noqa: BLE001
+        log.warning("faq_strong_match failed: %s", e)
+    return None
+
+
 # ------------------------------------------------------------------------------------------------ confidence
 
 # How sure retrieval is that the passages answer the question (contract 2, read by services/grounding.py). Inputs:
@@ -1002,7 +1077,7 @@ def hybrid_order(query: str, texts: Sequence[str], similarities: Sequence[Option
 # and BM25 rankings agree on the best passage. Without any vector (keyword search) only the last three exist: "high"
 # needs half the question's content words in the best passage, "low" fewer than 15%.
 # The dense thresholds below were calibrated on the previous local embedder (unrelated text 0.3-0.45, an answering
-# passage 0.55-0.8). Embeddings's cosines sit higher, so they are shifted up: treat them as a starting point and calibrate
+# passage 0.55-0.8). The hosted embedder's cosines sit higher, so they are shifted up: treat them as a starting point and calibrate
 # with bench/retrieval_eval.py (it prints the dense scores of answerable and unanswerable questions). Every threshold
 # has an env override (RETRIEVAL_CONF_DENSE_HIGH=...).
 CONF_DENSE_HIGH = 0.68      # best passage this close in meaning: high, when another signal agrees

@@ -31,8 +31,8 @@ All files are idempotent, so re-running them is safe. `000` must run first becau
 
 ### Embeddings (knowledge search)
 
-The backend embeds knowledge with Google's Embeddings embeddings: `EMBEDDINGS_EMBED_MODEL` (default `embeddings-embedding-2`) at
-`EMBEDDINGS_EMBED_DIM` dimensions (default 768, any value from 128 to 3072), using `EMBEDDINGS_API_KEY`. Hosted mode keeps the
+The backend embeds knowledge with hosted embeddings: `EMBEDDINGS_MODEL` at
+`EMBEDDINGS_DIM` dimensions (default 768, any value from 128 to 3072), using `EMBEDDINGS_API_KEY`. Hosted mode keeps the
 vectors in `document_chunks.embedding_vec` and searches them with `match_document_chunks_vec` (migration `023`), both
 sized for the configured dimension; each chunk records the `embed_model` and `embed_dim` that produced its vector. The
 older `embedding` (384) and `embedding_1024` columns are left alone and are not read.
@@ -40,10 +40,10 @@ older `embedding` (384) and `embedding_1024` columns are left alone and are not 
 **Run `023` before deploying this backend**, otherwise uploads and searches that use vectors fail in hosted mode. After
 that no manual backfill is needed: the first search of an agent embeds its chunks that have no vector yet or were embedded
 with another model (once per process, in bounded batches). To change the model or the dimension, follow the note at the
-top of `023`, set `EMBEDDINGS_EMBED_MODEL` / `EMBEDDINGS_EMBED_DIM`, and restart; the backend refuses a dimension the column does
+top of `023`, set `EMBEDDINGS_MODEL` / `EMBEDDINGS_DIM`, and restart; the backend refuses a dimension the column does
 not have.
 
-With no Embeddings key, or when Embeddings cannot be reached (quota, network), nothing breaks: documents are stored without vectors,
+With no embeddings key, or when the embeddings service cannot be reached (quota, network), nothing breaks: documents are stored without vectors,
 and a search ranks the agent's chunks by BM25 keyword match (English and Hindi/Devanagari/Hinglish), which needs no
 database function. When a key is set the stored chunks are embedded on the next search.
 
@@ -69,8 +69,9 @@ are required only in hosted mode; local mode runs without them.
 | `NEXT_PUBLIC_SUPABASE_URL` | hosted mode | Project URL, e.g. `https://your-project.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | hosted mode, secret | Backend DB and storage access (bypasses RLS, so never expose it) |
 | `SUPABASE_JWT_SECRET` | hosted mode, for authenticated routes, secret | Verifies the user JWTs sent to the API |
-| `EMBEDDINGS_API_KEY` | recommended, secret | The language model (Embeddings Flash) and knowledge-search embeddings. Without it agents answer from keyword search only and the language model is unavailable |
-| `EMBEDDINGS_EMBED_MODEL`, `EMBEDDINGS_EMBED_DIM` | optional | Embedding model (default `embeddings-embedding-2`) and vector size (default 768; must match migration `023`) |
+| `EMBEDDINGS_API_KEY`, `EMBEDDINGS_BASE_URL` | recommended, key is secret | Knowledge-search embeddings. Without them agents answer from keyword search only |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | required for replies, key is secret | The hosted language model. Without them the language model is unavailable |
+| `EMBEDDINGS_MODEL`, `EMBEDDINGS_DIM` | model required with the embeddings key; dimension optional | Embedding model and vector size (default 768; must match migration `023`) |
 | `GNANI_API_KEY` | required for speech, secret | Gnani AI speech: Prisma (hearing), Timbre (speaking) and voice cloning |
 | `SIGNED_URL_EXPIRES_S` | optional | Lifetime of signed audio links in seconds (default 3600) |
 

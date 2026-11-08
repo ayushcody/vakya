@@ -1,7 +1,7 @@
 """Get ready for a live demo: check the keys, open the connections and prepare the held lines.
 
 Nothing loads on this machine: speech is Gnani's (Prisma hears, Timbre speaks) and the language model and the embeddings are
-Embeddings's. So warming is small. POST /api/warmup runs, in order: the Gnani key (a check, no request), the language model
+hosted. So warming is small. POST /api/warmup runs, in order: the Gnani key (a check, no request), the language model
 (one tiny request, which also opens the connection), knowledge search (one embedding), and the held lines (the short
 "One moment please" and "I will call you back" clips, rendered once by Timbre and kept on disk: a few requests the first
 time, none after). GET /api/warmup reports progress.
@@ -97,7 +97,7 @@ async def _warm_embedding() -> str:
     b = _b()
     st = b.retrieval.embedder_status()
     if not st["configured"]:
-        raise Skipped(f"{st['reason'] or 'Needs a Embeddings key'}: search by keyword only")
+        raise Skipped(f"{st['reason'] or 'Needs embeddings'}: search by keyword only")
 
     def work() -> str:
         # one document-sized text and one query, so the first real search does not pay for the connection
@@ -130,8 +130,8 @@ async def _warm_clips() -> str:
 # id, label, runner name (looked up at run time)
 _COMPONENTS = [
     ("gnani", "Speech (Gnani Prisma and Timbre)", "_warm_gnani"),
-    ("llm", "Language model (Embeddings)", "_warm_llm"),
-    ("embedding", "Knowledge search (Embeddings embeddings)", "_warm_embedding"),
+    ("llm", "Language model", "_warm_llm"),
+    ("embedding", "Knowledge search (embeddings)", "_warm_embedding"),
     ("hold_lines", "Held lines (\"one moment\", \"I will call you back\")", "_warm_hold_lines"),
 ]
 

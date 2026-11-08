@@ -306,7 +306,7 @@ def test_create_agent_without_llm_is_503(app_client, env, monkeypatch):
     r = app_client.post("/api/agents", headers=LOCAL, json={"name": "X", "role_description": "y"})
     assert r.status_code == 503
     body = r.json()
-    assert body["code"] == "LLM_UNAVAILABLE" and "EMBEDDINGS_API_KEY" in body["error"]
+    assert body["code"] == "LLM_UNAVAILABLE" and "LLM_API_KEY" in body["error"]
     assert set(body["details"]["reasons"]) == {"openai-compatible"}
     assert app_client.get("/api/agents", headers=LOCAL).json() == {"agents": []}
 
@@ -314,7 +314,7 @@ def test_create_agent_without_llm_is_503(app_client, env, monkeypatch):
 def test_health_reports_the_language_model(app_client, env, monkeypatch):
     llm_part = app_client.get("/api/health").json()["llm"]
     assert set(llm_part) == {"active", "model", "label", "providers", "usage_today"}
-    assert llm_part["active"] is None and llm_part["providers"][0]["reason"] == "Needs a Embeddings key"
-    monkeypatch.setenv("EMBEDDINGS_API_KEY", "test-key")
-    assert app_client.get("/api/health").json()["llm"]["active"] == "embeddings"
+    assert llm_part["active"] is None and llm_part["providers"][0]["reason"].startswith("Needs a language model: set LLM_API_KEY")
+    monkeypatch.setenv("LLM_API_KEY", "test-key"); monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1"); monkeypatch.setenv("LLM_MODEL", "test-model")
+    assert app_client.get("/api/health").json()["llm"]["active"] == "hosted"
     assert app_client.post("/api/llm/warm", headers=LOCAL).status_code in (404, 405)   # there is no local model to warm

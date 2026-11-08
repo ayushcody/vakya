@@ -1,4 +1,4 @@
-# `docker compose up` starts postgres + backend + frontend. Put GNANI_API_KEY and EMBEDDINGS_API_KEY in .env next to this file.
+# `docker compose up` starts postgres + backend + frontend. Put GNANI_API_KEY, the LLM_* and the EMBEDDINGS_* settings in .env next to this file.
 services:
   postgres:
     image: postgres:16-alpine

@@ -110,7 +110,7 @@ def test_a_failing_document_keeps_its_old_passages_and_the_rest_go_on(data):
 
 def test_no_embedder_stores_the_new_passages_without_vectors_marked_for_later(data):
     tmp, store, old1, old2, new = data
-    r = rechunk_documents(store, lambda texts: None, "m")           # None: no Embeddings key, nothing could be embedded
+    r = rechunk_documents(store, lambda texts: None, "m")           # None: no embeddings key, nothing could be embedded
     assert r["failed"] == 0 and r["documents"] == 2
     rows = chunks_of(store, old1)
     assert len(rows) > 3 and all(c["embedding"] is None and c["embed_pending"] and c["embed_model"] is None for c in rows)

@@ -129,7 +129,7 @@ def restructure_documents(store, encode: Callable[[List[str]], Sequence], embed_
                 raise ValueError("no text could be rebuilt from the stored passages")
             if not dry_run:
                 made = encode([chunking.embedding_text(p["header"], p["content"]) for p in new])
-                # None: no embedder (no Embeddings key). The passages are stored without a vector, marked for later.
+                # None: no embedder (no embeddings key). The passages are stored without a vector, marked for later.
                 vectors = None if made is None else [np.asarray(v, dtype=np.float32).tolist() for v in made]
                 if vectors is not None and len(vectors) != len(new):
                     raise ValueError("the embedder returned the wrong number of vectors")
@@ -170,7 +170,7 @@ def index_questions_for_documents(store, encode: Callable[[List[str]], Sequence]
               "errors": []}
     if not dry_run and chat is None:
         if not question_index.available():
-            report["status"] = "no language model (set LLM_PRIMARY_KEY or EMBEDDINGS_API_KEY)"
+            report["status"] = "no language model (set LLM_API_KEY, LLM_BASE_URL and LLM_MODEL)"
             return report
     grouped = _group_rows(store)
     for doc in store.select("documents", _mine(agent_id, user_id)):

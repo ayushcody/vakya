@@ -18,9 +18,9 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from services import availability as av, schedules as sch
+    from services import availability as av, booking_audit, schedules as sch
 except ImportError:  # pragma: no cover
-    from backend.services import availability as av, schedules as sch
+    from backend.services import availability as av, booking_audit, schedules as sch
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -36,9 +36,10 @@ class BookingRefused(Exception):
 class BookingProblem(ValueError):
     """Bad input (a name, a phone number) or a booking that cannot be found, worded to be said out loud."""
 
-    def __init__(self, code: str, message: str, field: Optional[str] = None):
+    def __init__(self, code: str, message: str, field: Optional[str] = None, say: Optional[Dict[str, str]] = None):
         super().__init__(message)
         self.code, self.message, self.field = code, message, field
+        self.say = say          # the sentence for the caller in English and Hindi, for the rules below (None: `message` is it)
 
 
 def _ap():
@@ -116,9 +117,9 @@ def future_bookings(schedule_id: str, rows: Optional[List[dict]] = None) -> List
 
 # ---------------------------------------------------------------------------------------------- writing
 
-def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: Any = None, note: Any = None,
-           nights: Optional[int] = None, party: Optional[int] = None, caller: bool = False, source: str = "staff",
-           now: Optional[datetime] = None, relation: Any = None, booked_by: Any = None) -> dict:
+def _create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: Any = None, note: Any = None,
+            nights: Optional[int] = None, party: Optional[int] = None, caller: bool = False, source: str = "staff",
+            now: Optional[datetime] = None, relation: Any = None, booked_by: Any = None) -> dict:
     """Book a time (`at` "HH:MM" on `day`) or a stay (`day` is the check-in date) and return the stored row. Raises
     BookingRefused when it is not free and BookingProblem for bad input. `caller=True` holds the booking to the minimum
     notice and the horizon (the agent); staff are not held to them."""
@@ -139,6 +140,8 @@ def create(schedule: dict, *, day: date, at: Optional[str], name: Any, phone: An
     _warm_calendar(schedule, day)
     with ap.transaction() as data:
         current = now or sch.now(schedule.get("timezone"))
+        if caller and digits:
+            _check_active_limit(schedule, data["bookings"], digits, current)
         engine = av.Engine(schedule, av.live_bookings(data["bookings"], schedule["id"]),
                            sch.list_blocks(schedule["id"]), current, external=av.calendar_source(schedule))
         result = engine.check(day=day, at=at, nights=n, caller=caller)
@@ -182,7 +185,7 @@ def _on_behalf(relation: Any, booked_by: Any, person: str) -> Dict[str, str]:
     return out
 
 
-def cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = False) -> dict:
+def _cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = False) -> dict:
     """Cancel a booking against a schedule. With `agent_id` only that front desk's own bookings can be cancelled (the
     agent's tool); a caller cannot cancel one whose time has passed. Raises BookingProblem."""
     ap = _ap()
@@ -196,13 +199,170 @@ def cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = Fa
         current = sch.now(row.get("timezone"))
         if caller and datetime.fromisoformat(row.get("end") or row["start"]) <= current:
             raise BookingProblem("IN_THE_PAST", f"Booking {wanted} is in the past and cannot be cancelled.", "booking_id")
+        if caller:
+            _check_change_notice(row, current, "cancel")
         row["status"] = "cancelled"
         row["cancelled_at"] = current.isoformat(timespec="seconds")
         row["version"] = int(row.get("version") or 1) + 1
         out = dict(row)
     note_change(out, "cancelled", at=out["cancelled_at"])
+    _sync_caller(out)
     ap.sync_cancellation(wanted, ap.CALENDAR_WAIT_S if caller else None)
     return out
+
+
+# ---------------------------------------------------------------------------------------------- rules and the audit trail
+
+def _setting(schedule: Optional[dict], key: str) -> int:
+    value = (schedule or {}).get(key)
+    return sch.DEFAULTS[key] if value is None else int(value)
+
+
+def _span(minutes: int) -> Dict[str, str]:
+    if minutes % 1440 == 0 and minutes >= 1440:
+        d = minutes // 1440
+        return {"en": f"{d} day{'s' if d != 1 else ''}", "hi": f"{d} दिन"}
+    if minutes % 60 == 0 and minutes >= 60:
+        h = minutes // 60
+        return {"en": f"{h} hour{'s' if h != 1 else ''}", "hi": f"{h} घंटे"}
+    return {"en": f"{minutes} minutes", "hi": f"{minutes} मिनट"}
+
+
+def _check_active_limit(schedule: dict, rows: List[dict], digits: str, current: datetime) -> None:
+    """The agent may not hold more than `max_active_per_phone` live future bookings (of this front desk) for one number. Runs
+    inside the appointments transaction. Raises BookingProblem TOO_MANY_BOOKINGS."""
+    limit = _setting(schedule, "max_active_per_phone")
+    if limit <= 0:
+        return
+    agent = schedule.get("agent_id")
+    count = 0
+    for b in rows:
+        if b.get("status") != "booked" or b.get("phone") != digits or not b.get("schedule_id"):
+            continue
+        if (agent and b.get("agent_id") != agent) or (not agent and b.get("schedule_id") != schedule["id"]):
+            continue
+        try:
+            if datetime.fromisoformat(str(b["end"])) > current.replace(tzinfo=None):
+                count += 1
+        except (KeyError, TypeError, ValueError):
+            continue
+    if count >= limit:
+        raise BookingProblem(
+            "TOO_MANY_BOOKINGS", f"This number already has {count} upcoming bookings, the most that can be made by phone ({limit}).",
+            "phone", say={"en": f"This number already has {count} upcoming bookings, which is the most I can make by phone. "
+                                "If you need another, please call the front desk and they will help.",
+                          "hi": f"इस नंबर पर पहले से {count} बुकिंग हैं, फ़ोन पर इससे ज़्यादा मैं नहीं कर सकती। "
+                                "और बुकिंग के लिए कृपया फ्रंट डेस्क को कॉल करें, वे आपकी मदद करेंगे।"})
+
+
+def _check_change_notice(row: dict, current: datetime, verb: str) -> None:
+    """The agent may not cancel or move a booking that starts within `cancel_notice_minutes` (default 60): the slot cannot be
+    sold again. A polite refusal pointing to the staff. Raises BookingProblem CANCEL_TOO_LATE."""
+    schedule = sch.get(row.get("schedule_id")) if row.get("schedule_id") else None
+    minutes = _setting(schedule, "cancel_notice_minutes")
+    if minutes <= 0:
+        return
+    try:
+        start = datetime.fromisoformat(str(row["start"])).replace(tzinfo=None)
+    except (KeyError, TypeError, ValueError):
+        return
+    if start - current.replace(tzinfo=None) < timedelta(minutes=minutes):
+        span = _span(minutes)
+        word = {"cancel": ("cancel", "रद्द नहीं कर सकती"), "move": ("move", "बदल नहीं सकती")}[verb]
+        raise BookingProblem(
+            "CANCEL_TOO_LATE", f"Booking {row['booking_id']} starts in less than {span['en']}, too late to {word[0]} by phone.",
+            "booking_id", say={"en": f"I'm sorry, this booking starts in less than {span['en']}, so I can't {word[0]} it by phone. "
+                                     "Please call the front desk and they will sort it out with you.",
+                               "hi": f"माफ़ कीजिए, यह बुकिंग {span['hi']} से कम समय में शुरू हो रही है, इसलिए मैं इसे फ़ोन पर {word[1]}। "
+                                     "कृपया फ्रंट डेस्क को कॉल करें, वे आपकी मदद करेंगे।"})
+
+
+def _refusal_code(e: Exception) -> str:
+    if isinstance(e, BookingRefused):
+        return str((e.result or {}).get("reason") or "unavailable").upper()
+    return str(getattr(e, "code", type(e).__name__))
+
+
+def _who(actor: Optional[str], caller: bool) -> str:
+    return actor or ("agent" if caller else "staff")
+
+
+def create(schedule: dict, *, actor: Optional[str] = None, owner: Optional[str] = None, **kw: Any) -> dict:
+    """Book a time or a stay (see `_create`) and write it on the audit log, with the refusal when it is refused. `actor` is
+    "agent" (the default for `caller=True`), "staff" or "api". Staff and API bookings are held to capacity and the schedule's
+    hours but not to the caller rules (minimum notice, horizon, the limit per phone number)."""
+    who = _who(actor, kw.get("caller", False))
+    attempted = {"action": "create", "date": str(kw.get("day")), "time": kw.get("at"), "nights": kw.get("nights")}
+    try:
+        row = _create(schedule, **kw)
+    except (BookingRefused, BookingProblem, sch.ScheduleError) as e:
+        booking_audit.record("refusal", actor=who, schedule_id=schedule.get("id"), phone=kw.get("phone"),
+                             reason=_refusal_code(e), attempted=attempted, owner=owner)
+        raise
+    booking_audit.record("create", actor=who, booking_id=row["booking_id"], schedule_id=schedule.get("id"), phone=row.get("phone"),
+                         after=row, reason=kw.get("source"), owner=owner)
+    return row
+
+
+def cancel(booking_id: str, agent_id: Optional[str] = None, *, caller: bool = False, actor: Optional[str] = None,
+           owner: Optional[str] = None) -> dict:
+    """Cancel a booking (see `_cancel`) and write it on the audit log. The agent (`caller=True`) cannot cancel a booking that
+    starts within the schedule's `cancel_notice_minutes`; staff can."""
+    who = _who(actor, caller)
+    wanted = str(booking_id or "").strip().upper().replace(" ", "")
+    before = _find_row(wanted)
+    try:
+        row = _cancel(booking_id, agent_id, caller=caller)
+    except (BookingProblem, sch.ScheduleError) as e:
+        booking_audit.record("refusal", actor=who, booking_id=wanted or None, schedule_id=(before or {}).get("schedule_id"),
+                             phone=(before or {}).get("phone"), before=before, reason=_refusal_code(e),
+                             attempted={"action": "cancel"}, owner=owner)
+        raise
+    booking_audit.record("cancel", actor=who, booking_id=row["booking_id"], schedule_id=row.get("schedule_id"),
+                         phone=row.get("phone"), before=before, after=row, owner=owner)
+    return row
+
+
+def reschedule(booking_id: str, agent_id: Optional[str] = None, *, actor: Optional[str] = None, owner: Optional[str] = None,
+               **kw: Any) -> Tuple[dict, dict]:
+    """Move a booking (see `_reschedule`) and write it on the audit log, with the refusal when it is refused."""
+    who = _who(actor, kw.get("caller", False))
+    wanted = str(booking_id or "").strip().upper().replace(" ", "")
+    before = _find_row(wanted)
+    attempted = {"action": "move", "date": str(kw.get("day")), "time": kw.get("at"), "nights": kw.get("nights")}
+    try:
+        row, previous = _reschedule(booking_id, agent_id, **kw)
+    except (BookingRefused, BookingProblem, sch.ScheduleError) as e:
+        booking_audit.record("refusal", actor=who, booking_id=wanted or None, schedule_id=(before or {}).get("schedule_id"),
+                             phone=(before or {}).get("phone"), before=before, reason=_refusal_code(e), attempted=attempted,
+                             owner=owner)
+        raise
+    booking_audit.record("move", actor=who, booking_id=row["booking_id"], schedule_id=row.get("schedule_id"),
+                         phone=row.get("phone"), before=previous, after=row, owner=owner)
+    return row, previous
+
+
+def _find_row(wanted: str) -> Optional[dict]:
+    try:
+        return next((dict(b) for b in _ap().all_bookings() if b.get("booking_id") == wanted), None)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+
+def _sync_caller(row: dict) -> None:
+    """After a booking is moved or cancelled (by the agent, staff or the desk): the caller's profile says so
+    (services/caller_profiles.py sync_number). Never raises."""
+    if not row.get("phone"):
+        return
+    try:
+        try:
+            from services import caller_profiles  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import caller_profiles  # noqa: PLC0415
+        caller_profiles.sync_number(row["phone"], row.get("agent_id"))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def note_change(row: dict, kind: str, **fields: Any) -> None:
@@ -220,8 +380,8 @@ def note_change(row: dict, kind: str, **fields: Any) -> None:
         pass
 
 
-def reschedule(booking_id: str, agent_id: Optional[str] = None, *, day: date, at: Optional[str], nights: Optional[int] = None,
-               caller: bool = False, now: Optional[datetime] = None) -> Tuple[dict, dict]:
+def _reschedule(booking_id: str, agent_id: Optional[str] = None, *, day: date, at: Optional[str], nights: Optional[int] = None,
+                caller: bool = False, now: Optional[datetime] = None) -> Tuple[dict, dict]:
     """Move a booking to another time, in one transaction, and return (the booking as it is now, the booking as it was).
 
     The same row is changed in place (same booking_id): date, weekday, time, start and end, and for a stay the nights. The
@@ -263,6 +423,8 @@ def reschedule(booking_id: str, agent_id: Optional[str] = None, *, day: date, at
             raise BookingRefused(result)
         start = datetime.fromisoformat(result["requested"]["start"]).replace(tzinfo=None)
         end = datetime.fromisoformat(result["requested"]["end"]).replace(tzinfo=None)
+        if caller:
+            _check_change_notice(row, current, "move")   # after the new time was checked: its refusal is the one to report
         if start.isoformat(timespec="minutes") == str(row.get("start")) and (not stay or n == row.get("nights")):
             raise BookingProblem("SAME_TIME", f"Booking {wanted} is already at that time.", "start")
         previous = dict(row)
@@ -276,6 +438,7 @@ def reschedule(booking_id: str, agent_id: Optional[str] = None, *, day: date, at
         moved = dict(row)
     note_change(moved, "moved", at=moved["moved_at"], moved_from=moved["moved_from"],
                 to={"date": moved["date"], "time": moved["time"], "start": moved["start"]})
+    _sync_caller(moved)
     ap.sync_move(wanted, ap.CALENDAR_WAIT_S if caller else None)
     return (ap._find(wanted) or moved), previous   # noqa: SLF001 - the row after the calendar had its say
 

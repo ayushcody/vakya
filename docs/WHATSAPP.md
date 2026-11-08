@@ -81,5 +81,6 @@ A family booking goes to the number on the booking and names the person: "Hello!
 
 - The request shape (endpoint, `template.components[].body.parameters`) follows Meta's template-message guide. The pages read while writing this (messages endpoint and version v27.0, error shape, template placeholders) are under developers.facebook.com/documentation/business-messaging/whatsapp/ (`messages/send-messages.md`, `direct-send/send-utility-and-authentication-messages.md`, `templates/components.md`); none printed a full template send example, so the first real send is the check. No real message has been sent from Vakya.
 - Meta's rules on template approval, categories, pricing and rate limits are not stated here; read them in Meta's documentation before relying on them.
+- On 8 Nov 2026 the approved templates (confirmed, moved, cancelled) in English, Hindi and Marathi were delivered live.
 - Hindi and Marathi template wording has not been reviewed by a native speaker.
 - A web call whose booking row has no conversation id is held to the backstop time.

@@ -492,6 +492,8 @@ def returning_opening(b: Any, agent: dict, profile: Optional[dict], callback: bo
         words = " ".join(x for x in (lead.format(name=profile["display_name"], org=org),
                                      caller_profiles.REMEMBER_NOTICE[language] if notice else "", ask) if x)
     else:
+        if profile.get("number"):    # the live booking store, not the profile written at the end of the last call
+            profile = caller_profiles.with_live_booking(profile, agent.get("id"))
         got = caller_profiles.returning_greeting(profile, supported, notice=notice)
         if got is None:
             return None
@@ -615,7 +617,7 @@ async def _warm_shared(shared: Any, agent: dict) -> str:
 
 
 async def _warm_retrieval(b: Any, agent: dict, user_id: str, mode: str) -> str:
-    """One tiny search for the agent: embeds the query (Embeddings; keyword search without a key) and builds its index."""
+    """One tiny search for the agent: embeds the query (hosted embedder; keyword search without a key) and builds its index."""
     await b.retrieve_context(agent["id"], "Hello", user_id=user_id, storage_mode=mode)
     return "ok"
 
@@ -736,11 +738,11 @@ def schedule_warm(b: Any, agent: dict, user_id: str, mode: str) -> Optional["asy
 
 async def warm_call_models(b: Any) -> Dict[str, str]:
     """A call has started (pickup, or the stream of an inbound call): the embedder is run once on a tiny text so the call's
-    first search is not a cold start (skipped without a Embeddings key: search is by keyword then). Returns
+    first search is not a cold start (skipped without a embeddings key: search is by keyword then). Returns
     {"embedding": "ok" | "skipped ..." | "failed: ..."}; never raises."""
     out: Dict[str, str] = {}
     if not b.retrieval.embeddings_configured():
-        return {"embedding": "skipped (Needs a Embeddings key)"}
+        return {"embedding": "skipped (Needs embeddings)"}
     try:
         await asyncio.to_thread(b.embedding_model.encode, ["warm-up"])
         out["embedding"] = "ok"

@@ -7,6 +7,8 @@ against a schedule in services/schedule_bookings.py, and the spoken-hours parser
     Schedule {id "S1", agent_id, name, description, kind "slots" | "nights", accent, timezone, slot_minutes 5..240,
               buffer_minutes 0..120, capacity 1..500, week {mon..sun: [{start "HH:MM", end "HH:MM"}]},
               check_in, check_out (nights only), min_notice_minutes, horizon_days, closed_dates ["YYYY-MM-DD"],
+              cancel_notice_minutes (default 60: the agent cannot cancel a booking that starts sooner; staff can),
+              max_active_per_phone (default 3, 0 = no limit: live future bookings one number may hold; the agent's limit),
               created_at, updated_at}
     Block    {id "K1", schedule_id, start, end, reason}          staff marked a range busy (one row per range)
 
@@ -50,7 +52,8 @@ MAX_SCHEDULES = 200
 MAX_CLOSED_DATES = 400
 MAX_NIGHTS = 60
 
-DEFAULTS = {"slot_minutes": 30, "buffer_minutes": 0, "capacity": 1, "min_notice_minutes": 60, "horizon_days": 30}
+DEFAULTS = {"slot_minutes": 30, "buffer_minutes": 0, "capacity": 1, "min_notice_minutes": 60, "horizon_days": 30,
+            "cancel_notice_minutes": 60, "max_active_per_phone": 3}
 
 _HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -88,6 +91,9 @@ def iso(dt: datetime, tz: Optional[str] = None) -> str:
     return dt.replace(tzinfo=zone(tz)).isoformat()
 
 
+MIN_YEAR, MAX_YEAR = 2000, 2200     # what a schedule accepts: far from the limits of `datetime`
+
+
 def parse_dt(value: Any, tz: Optional[str] = None, field: str = "start") -> datetime:
     """An ISO 8601 string (with or without an offset) as a naive local datetime of the zone. A value with an offset is
     converted into the zone first."""
@@ -96,18 +102,28 @@ def parse_dt(value: Any, tz: Optional[str] = None, field: str = "start") -> date
     except (TypeError, ValueError):
         raise ScheduleError("INVALID_DATETIME", f"{field} must be an ISO date and time like 2026-11-05T10:00:00+05:30.",
                             field) from None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(zone(tz)).replace(tzinfo=None)
-    return dt.replace(second=0, microsecond=0)
+    try:
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(zone(tz)).replace(tzinfo=None)
+        dt = dt.replace(second=0, microsecond=0)
+        if not MIN_YEAR <= dt.year <= MAX_YEAR:
+            raise OverflowError(dt.year)
+    except OverflowError:       # 0001-01-01 or 9999-12-31: date arithmetic further down would overflow
+        raise ScheduleError("INVALID_DATETIME", f"{field} must be a date between the years {MIN_YEAR} and {MAX_YEAR}.",
+                            field) from None
+    return dt
 
 
 def parse_day(value: Any, field: str = "date") -> date:
     if not isinstance(value, str) or not _DATE.match(value.strip()):
         raise ScheduleError("INVALID_DATE", f"{field} must look like 2026-11-05 (year-month-day).", field)
     try:
-        return date.fromisoformat(value.strip())
+        day = date.fromisoformat(value.strip())
     except ValueError:
         raise ScheduleError("INVALID_DATE", f"{field} is not a real date.", field) from None
+    if not MIN_YEAR <= day.year <= MAX_YEAR:
+        raise ScheduleError("INVALID_DATE", f"{field} must be a date between the years {MIN_YEAR} and {MAX_YEAR}.", field)
+    return day
 
 
 # ---------------------------------------------------------------------------------------------- times of day
@@ -231,6 +247,10 @@ def normalise_schedule(payload: Any, existing: Optional[dict] = None) -> dict:
         "check_out": None,
         "min_notice_minutes": _int(merged, "min_notice_minutes", 0, 10080, DEFAULTS["min_notice_minutes"], "Minimum notice"),
         "horizon_days": _int(merged, "horizon_days", 1, 365, DEFAULTS["horizon_days"], "How far ahead"),
+        "cancel_notice_minutes": _int(merged, "cancel_notice_minutes", 0, 10080, DEFAULTS["cancel_notice_minutes"],
+                                      "Cancel notice"),
+        "max_active_per_phone": _int(merged, "max_active_per_phone", 0, 100, DEFAULTS["max_active_per_phone"],
+                                     "Most bookings per phone number"),
     }
     if kind == "nights":
         ci = to_min(merged.get("check_in"), "check_in") if merged.get("check_in") else None

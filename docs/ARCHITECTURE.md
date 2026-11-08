@@ -32,7 +32,7 @@ flowchart LR
 
 ## Missed-call callback
 
-A missed call to the business's missed-call number should not cost it a customer, so the front desk rings back. **Built and tested with fakes; not yet tried on a live Vobiz number.**
+A missed call to the business's missed-call number should not cost it a customer, so the front desk rings back. **Built and tested with fakes; not yet tried live.** Outbound calls through Vobiz were verified live on 8 Nov 2026.
 
 - The owner asks for a link: `POST /api/phone/missed-call-link {agent_id}` returns a signed URL `/api/phone/missed-call/{token}` (valid 365 days; the token names the agent and the owner and opens nothing else). In the Vobiz console it is the Answer URL (POST) of an XML Application the missed-call number is attached to; it answers `<Response><Hangup reason="rejected"/></Response>`, so the call is never answered or billed.
 - The route is served on the phone-only port (8021), answers 200 at once, and places the call `MISSED_CALL_DELAY_S` (default 8) later through the same outbound path as a call from the desk. It respects `PHONE_ALLOWED_NUMBERS`, calls a number back once per `MISSED_CALL_DEDUPE_S` (default 600), never while a call with that number is live, and at most 10 calls an hour per owner. `MISSED_CALL_CALLBACK=off` turns it off.
@@ -87,7 +87,8 @@ Order inside a turn: `caller`, then for each tool `tool` start and end, then the
 | Key | Effect |
 | --- | --- |
 | `GNANI_API_KEY` | Prisma, Timbre and cloning. Without it nothing can hear or speak. |
-| `EMBEDDINGS_API_KEY` | The embeddings for document search (without them keyword search answers) and the reply model. |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | The hosted language model that writes the replies (an OpenAI-compatible endpoint, set in `.env`). |
+| `EMBEDDINGS_API_KEY`, `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL` | The embeddings for document search (without them keyword search answers). |
 | `VOBIZ_*` | Real phone calls. Without them the browser web call still works. |
 | `GOOGLE_CALENDAR_ID` and a service account file | Calendar sync. Without them bookings stay in Vakya's own list. |
 
@@ -97,4 +98,4 @@ Local mode keeps everything under `backend/data/` (git-ignored, files mode 0600 
 
 ## What this architecture does not do
 
-It does not run Gnani's Evon (weights only), does not use Gnani's agent builder (out of scope for the challenge), has no government API, and has not served a real caller. The measured behaviour of the recognition stage is the acoustic-stress report card (`docs/STRESS_REPORT.md`), which is pending a run on Gnani Prisma.
+It does not run Gnani's Evon (weights only), does not use Gnani's agent builder (out of scope for the challenge), has no government API, and has not served a real caller. The measured behaviour of the recognition stage is the acoustic-stress report card (`docs/STRESS_REPORT.md`, run on Gnani Prisma on 6 Nov). Real calls through Vobiz with Prisma and Timbre, a Google Calendar event and WhatsApp templates were verified live on 8 Nov 2026.

@@ -4,168 +4,155 @@
 
 # Vakya: call once, it's booked
 
-**A phone front desk for Indian small businesses. It answers in Hindi, Marathi and English, checks the schedule for a free time, reads every number and date back, and books only after the caller says yes.**
+**Clinics miss calls because the front desk is busy with the person in front of them. Vakya answers the phone in Hindi, Marathi or English, books a free slot, and sends the confirmation on WhatsApp.**
 
-Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech by **Gnani Prisma, Timbre and voice cloning** · replies by a **hosted language model** · telephony by **Vobiz** · Hindi, Marathi, English and code-mixed speech over 8 kHz phone audio.
+Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech: **Gnani Prisma** (speech to text) and **Timbre** (voice). Replies: a hosted language model. Telephony: **Vobiz**.
 
 | Deliverable | Link |
 | --- | --- |
-| Live demo | Coming |
-| 60-second video | Coming |
-| LinkedIn post | Coming |
-| X post | Coming |
-| Repository | This repository |
+| Demo video | _link to be added_ |
+| LinkedIn post | _link to be added_ |
+| X post | _link to be added_ |
+| One-page pitch | [`docs/PITCH.md`](docs/PITCH.md) |
 
-**Honest status:** the Gnani integration is written and tested against fakes. It has not yet been run against the live API, so nothing on this page is a Gnani measurement. See [Measured results](#measured-results) and [Limitations](#limitations).
+## What it does in 30 seconds
 
----
+- Picks up a real phone call (Vobiz, Indian mobile) and says it is an AI.
+- Understands Hindi, Marathi, English and mixed speech through Gnani Prisma; speaks through Gnani Timbre.
+- Checks the schedule, offers a free time, reads the day, time and phone number back, and books only after the caller says yes.
+- Moves or cancels a booking the same way. Verified on 8 Nov: booking A28 created, moved from 5 to 6 PM, A27 cancelled, all in Hindi, each on the first "yes".
+- Creates, moves and deletes the Google Calendar event.
+- Sends a WhatsApp message from an approved template (confirmed, moved, cancelled) in English, Hindi or Marathi.
+- Remembers the caller by phone number: greets by name, mentions the upcoming appointment, tracks rescheduled and cancelled status.
+- Gives the owner a desk to watch calls live, take one over, edit schedules, and see every booking with its proof.
 
-## The problem
-
-- Small clinics, hotels, salons and offices in India miss calls. The front desk is busy with the person in front of them, so the phone rings out.
-- Callers do not speak one language. A Marathi caller says "appointment" in English and the day in Marathi, in the same sentence.
-- Phone audio is bad. It is 8 kHz, band-limited, often from a street, and a recogniser that is fine on clean audio drops digits and days.
-- A booking built on a misheard digit is worse than no booking: the patient never gets the reminder.
-
-## What Vakya does
-
-A caller rings the business's number, or gives a missed call and Vakya rings back. The agent speaks first, says it is an AI, answers from the business's own documents and books through the schedule.
-
-- **Generic front desks for eight trades.** Clinic, hotel, salon, restaurant, office, institute, service centre and gym. The owner picks a type from an illustrated gallery, types the organisation's name, and gets the agent together with its default schedule. No business name is invented for the owner.
-- **Visual schedules with exact availability and nearest alternatives.** A week calendar (a month grid of rooms left for hotels) where a drag blocks a range, and a one-page schedule form that also reads "Mon to Sat 10 to 1 and 5 to 9, Sunday closed" in English, Hindi and Marathi. Whether a time is free is decided by one deterministic engine, not by the model, and the calendar, the "Ask like a caller" tester, a staff booking and the agent on the phone all use it. When a time is taken, outside the hours or not where a slot starts, it returns the reason and the nearest free times either side. Details: [`docs/SCHEDULES.md`](docs/SCHEDULES.md).
-- **Read-back, then commit.** Day, date, time and phone number are said aloud. The booking tool answers "not done" until the agent has read them back and the caller has said yes, and a corrected digit is read back again.
-- **Missed-call callback on Vobiz.** A missed call to the business's missed-call number should not cost it a customer, so the front desk rings back. The number's Answer URL is a signed link that rejects the call unanswered (never answered, never billed), and Vakya places the call 8 seconds later, once per number per 10 minutes, at most 10 calls an hour, and only to allowed numbers when a list is set. Built and tested with fakes; not yet tried on a live Vobiz number. See [`docs/PHONE.md`](docs/PHONE.md).
-- **Caller memory, mapped to the number.** A returning caller is greeted by name in their language ("Namaste Sunita ji, pichli baar aapne Mangalvaar 4 baje ki appointment li thi"). The profile is keyed by the phone number and holds the name, language, the people booked for, the trade's usual details, the last booking and follow-up notes. It never holds ID numbers, card numbers, OTPs or health conditions, expires after a retention period, and the caller can say "forget me". See [`docs/CALLER_MEMORY.md`](docs/CALLER_MEMORY.md).
-- **"Running late" and tokens by phone.** The receptionist taps "Running 40 min late" once. Callers who ask "how many patients before me?" hear their token, how many are ahead and about when to come ("आपका टोकन 3 है; आपसे पहले 2 मरीज़ हैं…"), and the desk sees the later patients whose time moved by 15 minutes or more, with "Call to let them know" on each. [`docs/RUNNING_LATE.md`](docs/RUNNING_LATE.md).
-- **One number, the whole family.** A son books for his mother; next time the agent asks "Is this for Sunita ji again, or for someone else?". Each number keeps the people it books for, with their relation and usual details, and the bookings list says who booked for whom. Those names are passed to Gnani Prisma's `speaker_names` so they come back spelled right. [`docs/CALLER_MEMORY.md`](docs/CALLER_MEMORY.md).
-- **Ears that learn.** When Prisma mishears a name, the owner taps "Misheard?" on that line once; it becomes one of the desk's ten Prisma substitution rules and a key term. Before each caller turn Vakya also tells Prisma what is coming (a name, a day or time, digits, or a yes or no) through `topic` and key terms, and the live view shows "Listening for: a name (Sunita, Rahul)". The fields were accepted on Gnani's live API on 5 Nov (a substitution rule, key terms, and speaker names each fixed how Prisma spelled "Vakya" on one clip); not yet tried on a real call. [`docs/HEARING.md`](docs/HEARING.md).
-- **Watch it think.** The live call is a split screen: on the left what is being said, every word tinted by its script and language, with a chip for each thing the agent checks or does; on the right the front desk's schedule reacting to it, and what Vakya remembers about the caller. A staff member can take the call over.
-- **Proof of booking, with sealed receipts.** When the agent books, it keeps the caller's utterance behind each field, its own read-back and the caller's yes, hashes each, and seals them under one signed Ed25519 receipt. Anyone can check the receipt at `/verify` or offline with [`sdk/verify`](sdk/verify). Changing one byte of a clip or one letter of a transcript breaks it. Public views redact the name and number. Format: [`docs/RECEIPT_SPEC.md`](docs/RECEIPT_SPEC.md).
-- **Caller Theatre.** Ten synthetic callers phone a front desk (a son booking again for his mother, an elderly Marathi caller, a rushed Hinglish caller, street noise, one wrong digit, a full slot, a cancellation, a returning caller, a request to note an ID number, a two-night hotel stay) and the score comes from what ended up in the booking system, not from how the call sounded. Failures are shown as plainly as passes. [`docs/THEATRE.md`](docs/THEATRE.md).
-- **A cost meter and the Gnani gateway.** *Production numbers, not claims:* every Gnani request goes through one gateway that allows one active request at a time (a Gnani account answers 429 to a second), serves repeats from a cache, opens a circuit breaker after repeated failures, keeps a share of the credit budget in reserve for live calls, and writes one line per request to a usage ledger. The desk shows estimated credits per call and per booking, labelled as estimates until the rates are measured on our account. [`docs/GNANI.md`](docs/GNANI.md).
-- **When Gnani is busy or down there is no second speech model.** The caller hears a short Timbre line rendered ahead of time ("one moment" or "I will call you back") and is offered a callback or a person.
-- **A browser web call** (a link or a QR code) to try it without a phone, and a bookings list that syncs to Google Calendar when one is connected (tested with fakes).
-
-A short example, written by us (invented clinic, invented number, not a recording):
-
-> **Agent:** गुरुवार, ५ नोव्हेंबर, संध्याकाळी ५:३०, फोन नंबर ९८७६५ ४३२१९. बरोबर आहे का? *(Thursday 5 November, 5:30 pm, phone 98765 43219. Is that right?)*
-> **Caller:** नाही, शेवटचा अंक नऊ नाही, शून्य आहे. *(No, the last digit is not nine, it is zero.)*
-> **Agent:** माफ करा. फोन नंबर ९८७६५ ४३२१०. आता बरोबर आहे का? *(Sorry. Phone 98765 43210. Is that right now?)*
-> **Caller:** हो, बरोबर. *(Yes, correct.)*
-
-## How Gnani's models are used
-
-| Model | Endpoint | Format in Vakya | Where in the code |
-| --- | --- | --- | --- |
-| **Prisma v3** (speech to text) | `POST /stt/v3`; realtime `wss://api.vachana.ai/stt/v3/stream` | `format=codemix` (English stays in Latin script), `language_code` from the agent's languages (or `indic-auto`), `keyterms` from the business's documents and staff names, `previous_text` from the caller's last turn. REST per utterance today; the 8 kHz socket is not yet on the phone path | [`backend/services/gnani_client.py`](backend/services/gnani_client.py), [`gnani.py`](backend/services/gnani.py), [`asr.py`](backend/services/asr.py) |
-| **Timbre** (text to speech) | `POST /api/v1/tts/inference` | Raw PCM16 at 8 kHz for the phone line, played as it is with no resampling; 24 kHz WAV for the browser | [`backend/services/gnani.py`](backend/services/gnani.py), [`routers/phone.py`](backend/routers/phone.py) |
-| **Voice cloning** | `POST /api/v1/tts/voice-clone/embeddings`, then Timbre with `model: vachana-vc-v1` and `speaker_embedding` | The consented recording becomes a 768-number embedding, stored sealed with the voice | [`gnani_client.py`](backend/services/gnani_client.py) (`clone_embedding`), [`voice_vault.py`](backend/services/voice_vault.py) |
-
-**Status:** all three are covered by tests against fakes and none has been run against the live API. [`docs/GNANI.md`](docs/GNANI.md) lists exactly what is guessed. The first thing to do with a key is `backend/bench/gnani_smoke.py`.
-
-**What reasons, honestly:** the model that decides what to say and which tool to call is a hosted language model, not a Gnani model. Document search uses hosted embeddings, with keyword search as the backup. The caller's words and the passages of the business's documents a turn needs reach the model's provider when it answers. Gnani does the speech; the language model does the thinking.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    C["Caller<br/>Vobiz line, 8 kHz"] -->|audio| G["Gnani gateway<br/>one slot, cache, breaker,<br/>budget, ledger"]
-    G -->|audio| P["Gnani Prisma v3<br/>codemix, keyterms"]
-    P -->|text| T["Turn manager<br/>barge-in, read-back then commit,<br/>slot memory, caller memory"]
-    T <-->|prompt, tool calls| L["Language model with tools<br/>schedules (check, list, book, cancel),<br/>knowledge search, calendar"]
-    T -->|reply text| S["Gnani Timbre<br/>raw 8 kHz, or a cloned voice"]
-    S --> G
-    G -->|audio| C
-    G -.->|busy or down| H["Pre-rendered Timbre line,<br/>callback offered"]
-    T -.-> R["Consent, label,<br/>signed receipt, proof of booking, /verify"]
-    T -.-> M["Live monitor, Watch it think,<br/>takeover"]
-    W["Browser web call"] -->|audio| P
-```
-
-The long version is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Measured results
-
-Only what has been measured is here.
-
-- **Caller Theatre, scripted run: 9 of 9 scenarios passed, 41 of 41 booking fields correct.** This is a **scripted** run: the model step was a deterministic stand-in rather than Embeddings Flash, and the input was typed text, so speech recognition, the caller voices and the line noise were not exercised. It shows the tools, the schedule rules and the read-back work end to end; it says nothing about what a language model does with the same calls, and its latency is not meaningful (the stand-in answers instantly, so no timing is reported). One run per scenario (20261104-052003), made before the tenth scenario was added. [`docs/THEATRE.md`](docs/THEATRE.md).
-- **The acoustic-stress report card is measured on Gnani Prisma v3.0 (6 Nov 2026).** The same 24 invented booking calls (Hindi, Marathi, Hinglish) clean, over an 8 kHz line, through G.711 and in street noise at 10, 5 and 0 dB, scored on whether the name, day and time came through: 100% in every condition down to 5 dB noise, 96% at 0 dB (100% with keyterms), median 0.8 s per clip. Ten-digit phone numbers are the first field noise takes (3 of 6 at 5 dB). The audio is synthetic. Latency and credits per live call are not measured yet. [`docs/STRESS_REPORT.md`](docs/STRESS_REPORT.md), [`docs/RESULTS.md`](docs/RESULTS.md).
-
-Reproduce the report card once a key is set: `./vakya stress --conditions all --provider gnani --keyterms`.
-
-## Trust and safety
-
-- **Disclosure.** Every call opens with a spoken statement that it is an AI.
-- **Consent.** A cloned voice needs a ticked consent statement (or, in strict mode, a one-time spoken sentence with a random code). The record is stored with the voice; withdrawing consent deletes both. See [`docs/VOICE_VAULT.md`](docs/VOICE_VAULT.md).
-- **Receipt, manifest and label.** An Ed25519 signed receipt, a C2PA content manifest and an AI-generated file label on every clip, and a Proof of booking for every booking; anyone can check a clip at `/verify` or offline with [`sdk/verify`](sdk/verify). Limits of the claim: [`docs/REVOCABLE_PROVENANCE.md`](docs/REVOCABLE_PROVENANCE.md).
-- **Callers can be forgotten.** A returning caller's profile is kept only to serve their next call, expires after `CALLER_PROFILE_RETENTION_DAYS`, and can be deleted by number. It holds the caller's number, so treat the store as personal data.
-- **A person can step in.** Staff can watch a live call and take it over; the agent can ask for a person but never chooses the number it transfers to.
-- **Data leaves the machine only through the services you key in.** Gnani receives the audio of a call and the text it speaks, Google receives the text of a turn and the document passages it needs, Vobiz carries the call.
-- **Synthetic data only.** No real caller, number or recording is used anywhere in this repository. The legal notes here are design choices, not legal advice.
-
-## Quickstart
+## Try it
 
 ```bash
 git clone https://github.com/ayushcody/vakya.git && cd vakya
-./vakya setup                                   # checks Python 3.10+ and Node 20+; builds backend/.venv, installs the web app
-printf 'GNANI_API_KEY=...\nEMBEDDINGS_API_KEY=...\n' >> backend/.env
-./vakya start                                   # API on :8020, web app on :3010, phone-only port on :8021
-open http://localhost:3010/desk/try             # make a web call and correct a digit on purpose
+./vakya setup                      # needs Python 3.10+ and Node 20+
+# put your keys in backend/.env (see backend/.env.example): GNANI_API_KEY, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+./vakya start                      # API :8020, web app :3010, phone-only port :8021
+open http://localhost:3010/desk/try   # a browser call, no phone needed
 ```
 
-`./vakya warm` before a demo checks the keys and prepares the held lines, `./vakya doctor` checks the machine and the running app, `./vakya test` runs the test suites and `./vakya stress` runs the report card. On Windows use `vakya.ps1` (untested). Nothing is downloaded: every model is a hosted service. For containers on any host, see [`deploy/README.md`](deploy/README.md).
+1. Open the desk, pick a front desk type (clinic is the default) and type the organisation's name.
+2. Open `/desk/try`, allow the microphone, and ask for an appointment in Hindi or Marathi.
+3. Give a wrong last digit of your number on purpose and hear it read back and corrected.
+4. Say yes. The booking appears on the Bookings page with its proof.
+5. For a real phone call, add the Vobiz settings from the table below and run `./vakya start`; it opens the tunnel for you.
+
+Other commands: `./vakya doctor` (checks the machine and the running app), `./vakya warm` (checks keys before a demo), `./vakya test`, `./vakya stress` (the noise report card). Windows uses `vakya.ps1` (untested).
+
+## Measured results
+
+| What | Result | Notes |
+| --- | --- | --- |
+| Noise report card, Gnani Prisma v3.0 (6 Nov), 24 invented booking calls (Hindi, Marathi, Hinglish) | **100%** name, day and time heard in clean, 8 kHz, G.711, and noise at 10 and 5 dB | Scored on whether name, day and time came through |
+| Same, noise at 0 dB | **96%**, 100% with keyterms | A miss: 4% of calls lost a field |
+| Same, 8 kHz plus 5 dB noise | 95% (n=21), 100% with keyterms | |
+| Ten-digit phone numbers in noise | **3 of 6** heard whole at 5 dB | The first field noise takes. This is why every number is read back |
+| Speech recognition time | median **0.8 s** per clip | Per clip, on the report card |
+| Reply start time on a live call | **about 3.7 to 6 s**; first filler audio about 1.1 s | A miss: too slow for a natural phone call. Being worked on |
+| Live calls, 8 Nov | Vobiz call to an Indian mobile, A28 booked and moved, A27 cancelled, calendar event created and deleted, WhatsApp templates delivered | Hand-run checks, not a measured rate |
+| Caller Theatre, scripted run | 9 of 9 scenarios, 41 of 41 booking fields | Typed text with a stand-in model. Not a speech or language-model result |
+| Automated tests (`./vakya test`, 8 Nov) | **3152 backend** and **632 frontend** pass | Run against fakes of the outside services |
+
+The noise audio is synthetic speech with simulated noise, so a real caller may score lower. Full tables: [`docs/RESULTS.md`](docs/RESULTS.md), [`docs/STRESS_REPORT.md`](docs/STRESS_REPORT.md). Reproduce: `./vakya stress --conditions all --provider gnani --keyterms`.
+
+## Safety rules
+
+Live now:
+
+- The agent says it is an AI at the start of every call.
+- Read-back, then commit: the booking tool answers "not done" until the day, date, time and number have been read aloud and the caller has said yes. A corrected digit is read back again.
+- Availability is decided by one deterministic engine, not by the model.
+- A cloned voice needs recorded consent; withdrawing consent deletes the voice.
+- Callers can say "forget me"; caller profiles expire after a retention period and never hold ID, card or health details.
+- Every booking keeps a signed receipt over the caller's words, the read-back and the yes ([`docs/RECEIPT_SPEC.md`](docs/RECEIPT_SPEC.md)).
+- The agent can ask for a person but never chooses the number it transfers to.
+
+Being added (rules in progress, not yet confirmed in the repository):
+
+- A confirmation expires after 3 minutes.
+- A cancellation needs at least 60 minutes' notice.
+- At most 3 active bookings per phone number.
+- No double booking of the same slot.
+- An audit log of booking actions at `GET /api/bookings/audit`.
+
+## Architecture
+
+```
+ Caller (phone, Vobiz, 8 kHz)            Owner (browser desk)
+        |  audio                                 |  watch, take over, edit schedule
+        v                                        v
+ +------------------+     text      +-----------------------------+
+ | Gnani Prisma     | ------------> | Turn manager                |
+ | speech to text   |               | read-back then commit,      |
+ +------------------+               | caller memory               |
+        ^                           +--------------+--------------+
+        | audio                                    | prompt, tool calls
+ +------------------+                              v
+ | Gnani Timbre     | <---- reply text --- Hosted language model
+ | voice            |                      tools: check, offer, book, move, cancel
+ +------------------+                              |
+                                                   v
+                              Schedule engine -> bookings -> Google Calendar
+                                                          -> WhatsApp templates
+                                                          -> signed receipt, audit log
+```
+
+Every Gnani request goes through one gateway (one active request, cache, circuit breaker, credit reserve, usage ledger). Longer version: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/GNANI.md`](docs/GNANI.md).
+
+## Limitations
+
+- **Slow replies on calls.** Reply start is about 3.7 to 6 s, with a first filler sound at about 1.1 s. Callers will notice the pause.
+- **Inbound calling is built but not tested live.** The 8 Nov calls were placed by Vakya; a call to your own Vobiz number has not been tried. The missed-call callback has the same status.
+- **Synthetic noise tests.** The report card used synthetic speech; no real caller recordings exist.
+- **Phone numbers are the weak field in noise** (3 of 6 at 5 dB), so the read-back is not optional.
+- **No second speech model.** If Gnani is out of credits or down, the caller hears a short pre-rendered line and a callback offer.
+- **The language model is not Gnani's.** The caller's words and the document passages a turn needs reach its provider, and its rate limits sit in every reply path.
+- **Voice cloning and the realtime Prisma stream** have not been run against the live API.
+- **Hours reader** covers the English, Hindi and Marathi phrases it knows and lists what it did not understand.
+- **Tested on one machine** (Apple M4, 16 GB). Windows and Linux are untested.
+- **Not legal advice.** Consent, labels and deletion follow the direction of India's rules; check what is lawful for your use.
 
 ## Configuration
 
-Everything lives in `backend/.env`; [`backend/.env.example`](backend/.env.example) documents the settings and the root [`.env.example`](.env.example) lists the ones containers need. The ones that matter:
+Settings live in `backend/.env`; [`backend/.env.example`](backend/.env.example) documents them.
 
-| Setting | Purpose | Without it |
-| --- | --- | --- |
-| `GNANI_API_KEY` | Gnani Prisma, Timbre and cloning (header `X-API-Key-ID`) | Nothing can hear or speak |
-| `GNANI_STT_MODEL`, `GNANI_STT_FORMAT`, `GNANI_VOICES`, `GNANI_KEYTERMS` | Prisma model and output format (`codemix` by default), Timbre voice names, extra keyterms. See [`docs/GNANI.md`](docs/GNANI.md) | Defaults |
-| `GNANI_CREDIT_BUDGET`, `GNANI_CREDIT_RESERVE_PCT` | The credit budget and the share kept for live calls | 5000 and 20 |
-| `EMBEDDINGS_API_KEY` | Embeddings embeddings for document search, and Embeddings Flash for replies when it is the reply model | Search falls back to keywords; no Embeddings replies |
-| `EMBEDDINGS_API_KEYS` | Extra Embeddings keys (other Google accounts), separated by commas, spaces or new lines. When one key hits its quota or is invalid, the next takes over at once | Only `EMBEDDINGS_API_KEY` is used |
-| `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls. `./vakya start` opens a tunnel to the phone-only port 8021 | The browser web call still works |
-| `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_FILE` | Sync bookings to a Google Calendar | Bookings stay in Vakya's own list |
-| `CONSENT_MODE` | `tick` (default) or `strict` | n/a |
-| `CALLER_PROFILES`, `CALLER_PROFILE_RETENTION_DAYS` | Remember returning callers, and for how long | n/a |
-| `TOOLS_READBACK` | Read back, then commit only on a yes (default on) | n/a |
+| Setting | Purpose |
+| --- | --- |
+| `GNANI_API_KEY` | Gnani Prisma, Timbre and cloning |
+| `GNANI_CREDIT_BUDGET`, `GNANI_CREDIT_RESERVE_PCT` | Credit budget and the share kept for live calls (5000 and 20) |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Replies from a hosted language model reached through an OpenAI-compatible endpoint; all three are set in `.env` |
+| `EMBEDDINGS_API_KEY`, `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL` | Hosted embeddings for document search; search falls back to keywords without them |
+| `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls; without them only the browser call works |
+| `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_FILE` | Calendar sync |
+| `CONSENT_MODE` | `tick` (default) or `strict` |
+| `CALLER_PROFILES`, `CALLER_PROFILE_RETENTION_DAYS` | Caller memory and how long it is kept |
+| `TOOLS_READBACK` | Read back, then commit on a yes (default on) |
 
 ## Repository map
 
 | Path | What is in it |
 | --- | --- |
-| `backend/` | FastAPI app: `routers/` (phone, web call, conversations, callers, consent, verify, schedules, bookings, templates, usage), `services/` (`gnani*`, `llm`, `retrieval`, `tools`, `availability`, `schedules`, `hours_parser`, `schedule_tools`, `booking_evidence`, `provenance`, `caller_memory`, `telephony/`), `templates/agents/` (the eight front desks), `bench/` (report card, Caller Theatre), `tests/` |
-| `frontend/` | Next.js app: the public site (`src/app/(site)`), the desk (`src/app/(app)/desk`), `/verify`, the report card |
-| `docs/` | [`ARCHITECTURE`](docs/ARCHITECTURE.md), [`GNANI`](docs/GNANI.md), [`PHONE`](docs/PHONE.md), [`WEB_CALL`](docs/WEB_CALL.md), [`SCHEDULES`](docs/SCHEDULES.md), [`CALLER_MEMORY`](docs/CALLER_MEMORY.md), [`THEATRE`](docs/THEATRE.md), [`STRESS_REPORT`](docs/STRESS_REPORT.md), [`RESULTS`](docs/RESULTS.md), [`RECEIPT_SPEC`](docs/RECEIPT_SPEC.md), [`VOICE_VAULT`](docs/VOICE_VAULT.md), [`SUBMISSION`](docs/SUBMISSION.md), [`DEPLOY_DEMO`](docs/DEPLOY_DEMO.md) |
+| `backend/` | FastAPI app: routers, services (Gnani, schedules, tools, caller memory, telephony), eight front desk templates, benchmarks, tests |
+| `frontend/` | Next.js app: public site, the desk, `/verify`, the report card |
+| `docs/` | Architecture, Gnani, phone, schedules, caller memory, results, receipts, status, pitch |
 | `sdk/verify/` | Offline receipt checker (Python and Node) |
-| `deploy/` | A provider-neutral container deployment guide |
-| `vakya`, `vakya.ps1` | One script to set up, start, check and test |
+| `deploy/` | Container deployment guide |
+| `vakya`, `vakya.ps1` | Set up, start, check and test |
 
-The facts the website quotes live in one file, [`frontend/src/components/site/submissionData.ts`](frontend/src/components/site/submissionData.ts); the report card reads [`reportCardResults.json`](frontend/src/components/report/reportCardResults.json).
-
-## Limitations
-
-- **Measured on synthetic calls, not yet on recorded ones.** The report card ran on Gnani Prisma with calls spoken by Timbre; a real caller may score lower.
-- **Synthetic audio, simulated noise.** The report card will show where the cliff is, not what a real caller will score. Repeat it on real recordings.
-- **Caller Theatre ran on a scripted model, text only.** The audio run and a Embeddings Flash run are pending.
-- **Digits are the hard part.** Whether Prisma hears a ten-digit phone number whole is not measured; hence the read-back.
-- **Reasoning is not Gnani's.** Replies come from a hosted language model. The caller's words reach its provider, and its key and rate limits are in the path of every reply.
-- **No second speech model.** If Gnani is out of credits, rate-limited or down, a live caller gets a held line and a callback offer, not an answer.
-- **Missed-call callback, inbound calls on your own number and Google Calendar sync are untested live.** The call logic ran on an earlier trial line; the Vobiz adapter and the callback are tested with fakes.
-- **The agent's scheduling tools have only been tested with a scripted model.** The availability engine is deterministic and tested directly; a real model choosing when to check, offer and book has not been exercised on a real call.
-- **The hours reader is rules first.** It covers the English, Hindi and Marathi phrases it knows, flags guesses and lists what it did not understand.
-- **Tested on one machine:** an Apple M4 with 16 GB. Windows and Linux are untested.
-- **Not legal advice.** Consent, labels and deletion follow the direction of India's rules on synthetic media and personal data; check what is lawful for your use.
+Project state: [`STATUS.md`](STATUS.md).
 
 ## Team
 
 | Name | Role |
 | --- | --- |
-| Ayush Chougula | Phone pipeline, Gnani integration, every integration (Vobiz telephony, WhatsApp confirmations, Google Calendar sync), schedules and booking, caller memory, the noise report card |
-| Atharva | UI: the desk (Today, Bookings, Schedules, Calls, Front desk, Proof), the phone layout and the site |
+| Ayush Chougula | Phone pipeline, Gnani integration, Vobiz, WhatsApp, Google Calendar, schedules and booking, caller memory, the noise report card |
+| Atharva | UI: the desk, the phone layout and the site |
 
 ## Licence
 
-The Vakya source code is released under the [MIT Licence](LICENSE). Educational and research project, not affiliated with Gnani AI. Gnani Prisma, Timbre and voice cloning are used through Gnani's API under Gnani's terms with your own key; Embeddings is used through Google's API under Google's terms; telephony is Vobiz's.
+Source code under the [MIT Licence](LICENSE). Educational and research project, not affiliated with Gnani AI. Gnani services are used through Gnani's API under Gnani's terms with your own key; the language model and telephony are used under their providers' terms. All test data is synthetic.

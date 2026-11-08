@@ -1,5 +1,5 @@
 """The knowledge behind an agent: reading an uploaded file, cutting it into passages, embedding and storing them (local or
-Supabase), the question index, and the search that finds the passages for a question (Embeddings embeddings fused with BM25;
+Supabase), the question index, and the search that finds the passages for a question (hosted embeddings fused with BM25;
 BM25 alone when there is no key or the embedder fails)."""
 
 import asyncio
@@ -79,10 +79,10 @@ async def extract_knowledge_text(file: UploadFile) -> str:
     return full_text
 
 
-# Hosted mode: one model-neutral vector column and match function (migration 023), sized for EMBEDDINGS_EMBED_DIM (768 by
+# Hosted mode: one model-neutral vector column and match function (migration 023), sized for EMBEDDINGS_DIM (768 by
 # default). The older per-dimension columns (`embedding`, `embedding_1024`) belong to the removed local embedder and are
 # not written. Vectors of different sizes are never compared or mixed in a column: to change the dimension follow the
-# note in migration 023 and set EMBEDDINGS_EMBED_DIM to the new size; `cloud_vector_target` refuses any other size.
+# note in migration 023 and set EMBEDDINGS_DIM to the new size; `cloud_vector_target` refuses any other size.
 CLOUD_VECTOR_COLUMN = "embedding_vec"
 CLOUD_MATCH_RPC = "match_document_chunks_vec"
 
@@ -96,7 +96,7 @@ def cloud_vector_target(dim: int) -> tuple:
     target = cloud_vector_targets().get(dim)
     if target is None:
         raise AppError("EMBEDDING_DIM_UNSUPPORTED",
-                       f"Hosted mode stores {retrieval.embedding_dim()}-dimensional embeddings (EMBEDDINGS_EMBED_DIM), not {dim}",
+                       f"Hosted mode stores {retrieval.embedding_dim()}-dimensional embeddings (EMBEDDINGS_DIM), not {dim}",
                        500, {"model": state.EMBEDDING_MODEL, "supported": sorted(cloud_vector_targets())})
     return target
 
@@ -218,7 +218,7 @@ async def ingest_document(agent_id: str, user_id: str, storage_mode: str, filena
     passages = _document_passages(filename, text)
     chunks = [p["content"] for p in passages]
     headers = [p.get("header") or "" for p in passages]
-    # No key, or Embeddings unreachable: the passages are stored without a vector (marked for later) and found by BM25 until
+    # No key, or the embeddings service unreachable: the passages are stored without a vector (marked for later) and found by BM25 until
     # refresh_local_embeddings / the hosted backfill embeds them on a search made after the key is set.
     vectors = await asyncio.to_thread(_try_encode, [chunking.embedding_text(h, c) for h, c in zip(headers, chunks)])
     qi_state = _question_index_state()
@@ -306,13 +306,13 @@ def _embedding_text_of(row: dict) -> str:
 
 _LOCAL_EMBEDDINGS_CLEAN: Dict[str, tuple] = {}   # agent id -> table signature at which its chunks were last found current
 _LOCAL_EMBED_RETRY: Dict[str, tuple] = {}        # agent id -> (signature, time before which embedding is not tried again)
-_EMBED_RETRY_S = 30.0                            # after a failed attempt (no key, Embeddings away) the tables are not re-read
+_EMBED_RETRY_S = 30.0                            # after a failed attempt (no key, the embeddings service away) the tables are not re-read
 
 
 def refresh_local_embeddings(agent_id: str, dim: Optional[int] = None) -> int:
     """Embed an agent's local chunks that have no vector or were indexed with a different embedding model or dimension.
     `dim` is the current model's vector size (the size of the query vector just computed). Returns how many chunks were
-    redone. With no Embeddings key (or Embeddings unreachable) nothing is touched and nothing is wiped: the chunks keep the
+    redone. With no embeddings key (or the embeddings service unreachable) nothing is touched and nothing is wiped: the chunks keep the
     vectors they have and the search finds the rest by BM25; the next search with a key embeds them."""
     # Reading both tables back from disk on every search only to find nothing stale cost ~7 ms for a small knowledge base
     # and grows with it: a table that has not been written since it was last found clean is not read again.
@@ -377,7 +377,7 @@ async def _backfill_cloud_embeddings(agent_id: str, column: str) -> int:
         if not rows:
             break
         vectors = await asyncio.to_thread(_try_encode, [_embedding_text_of(r) for r in rows])
-        if vectors is None:                  # no key, or Embeddings away: BM25 answers meanwhile, try again in a while
+        if vectors is None:                  # no key, or the embeddings service away: BM25 answers meanwhile, try again in a while
             complete = False
             _cloud_backfill_wait[key] = time.monotonic() + _EMBED_RETRY_S
             break
@@ -491,9 +491,9 @@ async def retrieve_context(agent_id: str, query: str, top_k: int = RETRIEVAL_TOP
     level high / medium / low / none, contract 2), `fusion` and `search_mode`.
 
     Returns the passage texts, best first, each as header + newline + passage when the passage has a header
-    (contract 4). Hybrid search (services/retrieval.py rank_rows): Embeddings's dense cosine and BM25 over the
+    (contract 4). Hybrid search (services/retrieval.py rank_rows): The hosted embedder's dense cosine and BM25 over the
     Hinglish/Devanagari normaliser, fused by weighted score fusion; question-index rows stand for their parent passage.
-    When Embeddings embeddings cannot be reached (no key, a quota or network error) the same passages are ranked by BM25
+    When hosted embeddings cannot be reached (no key, a quota or network error) the same passages are ranked by BM25
     alone (`signals["search_mode"]` is then "keyword")."""
     mode = storage_mode or ("local" if state.supabase is None else "cloud")
     if mode == "local":
@@ -505,22 +505,32 @@ async def retrieve_context(agent_id: str, query: str, top_k: int = RETRIEVAL_TOP
     query_vectors = await asyncio.to_thread(_try_encode, [query], "query")
     query_embedding = query_vectors[0] if query_vectors else None
     want = top_k
+    pool = max(top_k, retrieval.FAQ_POOL) if retrieval.faq_strong_enabled() else top_k
 
     try:
         info: dict = {}
         if mode == "local":
             if query_embedding is not None:
                 await asyncio.to_thread(refresh_local_embeddings, agent_id, len(query_embedding))
-            rows = await asyncio.to_thread(state.local_db.match_chunks, agent_id, query_embedding or [], want, query,
+            rows = await asyncio.to_thread(state.local_db.match_chunks, agent_id, query_embedding or [], pool, query,
                                            info=info)
         else:
-            rows = await cloud_match(agent_id, query, query_embedding, want, info=info)
+            rows = await cloud_match(agent_id, query, query_embedding, pool, info=info)
+        strong = retrieval.faq_strong_match(query, rows) if retrieval.faq_strong_enabled() else None
+        if strong is not None:     # the caller asked what a stored FAQ question asks: that entry first, a shorter prompt
+            rows = [rows[strong]] + [r for i, r in enumerate(rows) if i != strong]
+            top_k = min(top_k, retrieval.FAQ_STRONG_KEEP)
         confidence = retrieval.assess_confidence(rows[:top_k], query, info)
+        if strong is not None:
+            confidence = {**confidence, "level": "high", "faq_match": True,
+                          "reason": "FAQ question matches the caller's question"}
         if signals is not None:
             signals.update(summarise_retrieval(rows[:top_k]))
             signals.update({"confidence": confidence, "fusion": info.get("fusion"), "search_mode": info.get("mode"),
                             "signals_used": info.get("signals") or [],
                             "scores": [r.get("score") for r in rows[:top_k]]})
+            if strong is not None:
+                signals["faq_strong"] = True
             if any(r.get("via") == "question" for r in rows[:top_k]):
                 signals["via_question"] = sum(1 for r in rows[:top_k] if r.get("via") == "question")
         return [retrieval.passage_text(row) for row in rows[:top_k]]

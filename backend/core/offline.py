@@ -1,6 +1,6 @@
 """Offline mode: VAKYA_OFFLINE=1 refuses every network path that could carry audio, text or numbers off this machine.
 
-Blocked: Gnani (speech), Embeddings (language model and embeddings), a language-model server that is not on this machine,
+Blocked: Gnani (speech), the hosted language model and embeddings, a language-model server that is not on this machine,
 Supabase, Google Calendar and Vobiz phone calls. The desk, the schedules and keyword search over saved documents keep
 working. `block()` is the one call every outbound path makes."""
 from __future__ import annotations
