@@ -504,9 +504,67 @@ def returning_opening(b: Any, agent: dict, profile: Optional[dict], callback: bo
 
 
 def returning_timeout_s() -> float:
-    """PHONE_RETURNING_GREETING_TIMEOUT_S (default 3): the longest a caller waits for the personal greeting to be spoken;
-    after that the agent's cached greeting plays instead."""
-    return max(0.5, _num("PHONE_RETURNING_GREETING_TIMEOUT_S", 3.0))
+    """PHONE_RETURNING_GREETING_TIMEOUT_S (default 8): the longest a caller waits for the personal greeting to be spoken;
+    after that (or when its voice could not be made at all) the agent's cached greeting plays instead. A personal greeting
+    takes Timbre 2 to 3.5 s to speak, so it is prepared while the phone rings (`schedule_personal`) and is normally ready
+    at pickup; the old limit of 3 s turned a known caller's greeting into the generic one."""
+    return max(0.5, _num("PHONE_RETURNING_GREETING_TIMEOUT_S", 8.0))
+
+
+# The personal greetings made ahead of a call: (agent id, hash of the words) -> (render task, monotonic time it was started).
+_personal: Dict[Tuple[str, str], Tuple["asyncio.Future", float]] = {}
+PERSONAL_TTL_S = 120.0
+
+
+def _personal_key(agent: dict, words: Tuple[str, Optional[str], str]) -> Tuple[str, str]:
+    digest = hashlib.sha1("|".join(str(x) for x in words).encode("utf-8")).hexdigest()[:16]
+    return str(agent.get("id")), digest
+
+
+def _prune_personal() -> None:
+    now = time.monotonic()
+    for k in [k for k, (_f, t) in _personal.items() if now - t > PERSONAL_TTL_S]:
+        _personal.pop(k, None)
+
+
+async def prepare_personal(b: Any, agent: dict, user_id: str, mode: str, number: str, *, callback: bool = False) -> None:
+    """A call to `number` is being placed and the phone rings: look the number up, and when it is a known caller render their
+    personal greeting now, so it is ready at pickup. Never raises; nothing happens for an unknown number."""
+    try:
+        try:
+            from services import caller_profiles  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import caller_profiles  # noqa: PLC0415
+        if not caller_profiles.enabled() or not number:
+            return
+        profile = await asyncio.to_thread(caller_profiles.lookup, user_id, number, mode)
+        if profile is None:
+            return
+        synced = await asyncio.to_thread(caller_profiles.sync_profile, user_id, number, agent.get("id"), mode)
+        words = returning_opening(b, agent, synced or profile, callback=callback)
+        if words is None:
+            return
+        _prune_personal()
+        key = _personal_key(agent, words)
+        if key in _personal:
+            return
+        fut = asyncio.ensure_future(render_returning(b, agent, user_id, mode, pa.PHONE_RATE, words))
+        fut.add_done_callback(lambda f: f.cancelled() or f.exception())    # (never "exception was never retrieved")
+        _personal[key] = (fut, time.monotonic())
+        log.info("personal greeting for a known caller is being made while the phone rings (agent %s)", agent.get("id"))
+        await asyncio.shield(fut)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001 - the call then renders it itself (or plays the agent's own greeting)
+        log.info("personal greeting could not be prepared ahead: %r", e)
+
+
+def schedule_personal(b: Any, agent: dict, user_id: str, mode: str, number: str, *, callback: bool = False
+                      ) -> Optional["asyncio.Task"]:
+    """`prepare_personal` in the background (None when PHONE_PREWARM=off)."""
+    if not _flag("PHONE_PREWARM"):
+        return None
+    return _spawn(prepare_personal(b, agent, user_id, mode, number, callback=callback))
 
 
 async def render_returning(b: Any, agent: dict, user_id: str, mode: str, rate: int,
@@ -520,6 +578,16 @@ async def render_returning(b: Any, agent: dict, user_id: str, mode: str, rate: i
     return g
 
 
+def text_greeting(b: Any, agent: dict, returning: Optional[Tuple[str, Optional[str], str]] = None,
+                  callback: bool = False) -> Greeting:
+    """The words `for_call` would speak, as a Greeting with no audio: the opening of a text-only call (the phone rehearsal,
+    bench/phone_rehearsal.py). The same choice as a call makes: the known caller's own greeting, else the agent's."""
+    language, disclosure, greeting = returning or opening(b, agent, callback)
+    text = " ".join(x for x in (disclosure, greeting) if x)
+    return Greeting(key="text", agent_id=str(agent["id"]), text=text, language=language, discloses=bool(disclosure),
+                    disclosure_s=0.0, engine="text", voice_id=None, clip_id="text", receipt_id=None, sr=0, wav=b"")
+
+
 async def for_call(b: Any, agent: dict, user_id: str, mode: str, rate: int,
                    returning: Optional[Tuple[str, Optional[str], str]] = None,
                    callback: bool = False) -> Tuple[Greeting, bytes, str]:
@@ -529,8 +597,12 @@ async def for_call(b: Any, agent: dict, user_id: str, mode: str, rate: int,
     plays. `callback` is a callback to a missed call: its own opening, cached apart from the agent's greeting."""
     if returning is not None:
         try:
-            g = await asyncio.wait_for(render_returning(b, agent, user_id, mode, rate, returning), returning_timeout_s())
-            return g, g.pcm[rate], "returning"
+            made = _personal.pop(_personal_key(agent, returning), None)   # the one made while the phone rang, when there is one
+            work = made[0] if made is not None else asyncio.ensure_future(render_returning(b, agent, user_id, mode, rate, returning))
+            g = await asyncio.wait_for(asyncio.shield(work), returning_timeout_s())
+            if rate not in g.pcm:
+                g.pcm[rate] = await asyncio.to_thread(_phone_pcm, g, rate)
+            return g, g.pcm[rate], "returning-prepared" if made is not None else "returning"
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - the usual greeting is always there

@@ -320,7 +320,10 @@ class Engine:
         requested = {"start": sch.iso(start, self.tz), "end": sch.iso(end, self.tz)}
 
         def fail(reason: str) -> dict:
-            return self._result(False, reason, requested, self._before(start, day, 1), self._after(start, day, 1))
+            before, after = self._before(start, day, 1), self._after(start, day, 1)
+            if reason == "outside_hours" and before is not None and _dt(before).date() != day:
+                before = None   # asked for a time before the day opens: an earlier day's last free slot is not "near"
+            return self._result(False, reason, requested, before, after)
 
         if start <= self.now:
             return fail("past")

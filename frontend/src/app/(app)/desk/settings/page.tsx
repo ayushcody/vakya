@@ -148,10 +148,10 @@ function SettingsContent() {
                   {phone.data.configured && phone.data.provider_verified === false && <Badge tone="warning">Not yet tried on a real call</Badge>}
                 </span>
               </Row>
-              {!phone.data.configured && phone.data.missing.length > 0 && (
+              {!phone.data.configured && (phone.data.missing?.length ?? 0) > 0 && (
                 <Row label="Missing settings">
                   <span className="flex flex-wrap gap-1.5">
-                    {phone.data.missing.map((m) => <code key={m} className={code}>{m}</code>)}
+                    {(phone.data.missing ?? []).map((m) => <code key={m} className={code}>{m}</code>)}
                   </span>
                 </Row>
               )}
@@ -160,7 +160,7 @@ function SettingsContent() {
                 {phone.data.inbound_ready ? <Status tone="success">Ready</Status> : <Status tone="warning">PUBLIC_BASE_URL not set</Status>}
               </Row>
               <Row label="Numbers it may call">
-                {phone.data.allowed_numbers_set ? phone.data.allowed_numbers.map((n) => n.masked).join(", ") : "None yet"}
+                {phone.data.allowed_numbers_set ? (phone.data.allowed_numbers ?? []).map((n) => n.masked).join(", ") : "None yet"}
               </Row>
               <Row label="Longest call">{Math.round(phone.data.max_call_seconds / 60)} minutes</Row>
             </>

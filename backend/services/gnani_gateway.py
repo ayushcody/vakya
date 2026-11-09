@@ -540,8 +540,8 @@ class Gateway:
                                         "attempts": attempts}, base=e)
 
     # -- a held slot (the realtime stream) ---------------------------------------------------------------------
-    def hold(self, kind: str = "stt_stream", lane: Optional[str] = None) -> "Hold":
-        return Hold(self, kind, lane)
+    def hold(self, kind: str = "stt_stream", lane: Optional[str] = None, holds_slot: bool = True) -> "Hold":
+        return Hold(self, kind, lane, holds_slot=holds_slot)
 
     # -- state ----------------------------------------------------------------------------------------------
     def state(self) -> Dict[str, Any]:
@@ -570,8 +570,9 @@ class Hold:
     """A session that keeps the slot: `with gateway.hold(): ...` or `async with ...`. Records one `stt_stream` line when it
     ends, with the audio seconds the caller added through `add_seconds`."""
 
-    def __init__(self, gw: Gateway, kind: str, lane: Optional[str]):
+    def __init__(self, gw: Gateway, kind: str, lane: Optional[str], holds_slot: bool = True):
         self.gw, self.kind = gw, kind
+        self.holds_slot = holds_slot
         self.lane, self.scope = gw._resolve_lane(lane)
         self.seconds = 0.0
         self.queue_s = 0.0
@@ -582,7 +583,7 @@ class Hold:
         self.seconds += s
 
     def _enter(self) -> "Hold":
-        if os.getenv("GNANI_STREAM_HOLDS_SLOT", "on").strip().lower() in ("off", "0", "false", "no"):
+        if not self.holds_slot or os.getenv("GNANI_STREAM_HOLDS_SLOT", "on").strip().lower() in ("off", "0", "false", "no"):
             self._t0 = _now()
             return self
         breaker = self.gw.breaker_for(self.kind)
@@ -643,8 +644,8 @@ def execute(kind: str, fn: Callable[[], Any], **kw: Any) -> Any:
     return GATEWAY.execute(kind, fn, **kw)
 
 
-def hold(kind: str = "stt_stream", lane: Optional[str] = None) -> Hold:
-    return GATEWAY.hold(kind, lane)
+def hold(kind: str = "stt_stream", lane: Optional[str] = None, holds_slot: bool = True) -> Hold:
+    return GATEWAY.hold(kind, lane, holds_slot=holds_slot)
 
 
 def state() -> Dict[str, Any]:

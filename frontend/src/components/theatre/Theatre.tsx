@@ -1,5 +1,6 @@
 "use client";
 
+import { readonlyDesk, readonlyResponse } from "@/lib/readonlyDesk";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronRight, XCircle } from "lucide-react";
 import { API_URL } from "@/lib/apiBase";
@@ -13,6 +14,7 @@ import type { TheatreRun, TheatreRunRow, TheatreScenario } from "./types";
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "empty" } | { state: "ready"; run: TheatreRun };
 
 async function getJson<T>(path: string): Promise<T> {
+  if (readonlyDesk()) return (await (await readonlyResponse("GET", path)).json()) as T;   // the public demo snapshot
   const r = await fetch(`${API_URL}${path}`, { headers: { Accept: "application/json" } });
   if (!r.ok) throw new Error(`the server answered ${r.status}`);
   return (await r.json()) as T;

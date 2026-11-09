@@ -10,6 +10,17 @@ import type { LiveCall } from "./types";
 interface Line { role: "caller" | "agent"; text: string }
 type Phase = "connecting" | "listening" | "ended" | "error";
 
+/** A caller line that only grows the previous one (an early guess at the sentence, then the whole of it) replaces it, so
+ *  the transcript reads one line per thing said. */
+export function addLine(lines: Line[], next: Line): Line[] {
+  const last = lines[lines.length - 1];
+  const stem = (t: string) => t.replace(/[\s।॥.,!?]+$/u, "").trim();
+  if (last && last.role === "caller" && next.role === "caller" && stem(last.text) && stem(next.text).startsWith(stem(last.text))) {
+    return [...lines.slice(0, -1), next];
+  }
+  return [...lines, next].slice(-200);
+}
+
 /** Listen in on one live call, read it as it goes, and take it over. Closing this panel while you have the call hands it
  *  back to the agent (the server does the same if the connection drops). */
 export function LiveMonitor({ call, player, onClose }: { call: LiveCall; player: PcmPlayer; onClose: () => void }) {
@@ -40,7 +51,7 @@ export function LiveMonitor({ call, player, onClose }: { call: LiveCall; player:
           try { m = JSON.parse(String(ev.data)); } catch { return; }
           if (m.type === "hello") { rate.current = Number(m.rate) || 8000; setHuman(Boolean(m.human)); setPhase("listening"); }
           else if (m.type === "audio") player.play(m.from as Voice, base64ToInt16(String(m.pcm)), Number(m.rate) || rate.current);
-          else if (m.type === "transcript") setLines((l) => [...l, { role: m.role as Line["role"], text: String(m.text) }].slice(-200));
+          else if (m.type === "transcript") setLines((l) => addLine(l, { role: m.role as Line["role"], text: String(m.text) }));
           else if (m.type === "state") {
             setHuman(Boolean(m.human));
             if (!m.human) { mineRef.current = false; setMine(false); stopMic(); }

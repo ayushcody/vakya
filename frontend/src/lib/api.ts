@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase";
 import { API_URL, ApiError, normalizeError } from "@/lib/apiBase";
+import { readonlyDesk, readonlyResponse, READONLY_MESSAGE } from "@/lib/readonlyDesk";
 
 export { API_URL, API_BASE_URL, ApiError, normalizeError } from "@/lib/apiBase";
 
@@ -55,6 +56,7 @@ async function request(
   headers: Record<string, string>,
   opts: RequestOpts = {}
 ): Promise<Response> {
+  if (readonlyDesk()) return readonlyResponse(method, path);   // the public demo: a snapshot, no server (lib/readonlyDesk.ts)
   const maxRetries = opts.retries ?? (method === "GET" ? MAX_RETRIES : 0);
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
   let lastErr: ApiError | undefined;
@@ -129,6 +131,7 @@ export const api = {
       headers: extra,
     }: { onProgress?: (pct: number) => void; signal?: AbortSignal; headers?: Record<string, string> } = {}
   ): Promise<T> {
+    if (readonlyDesk()) return Promise.reject(new ApiError(READONLY_MESSAGE, 403, "read_only"));
     return new Promise<T>((resolve, reject) => {
       baseHeaders().then((base) => {
         const headers = { ...base, ...extra };

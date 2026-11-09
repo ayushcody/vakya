@@ -185,6 +185,21 @@ _INCOMPLETE_END = re.compile(
     r"haan wo|haan woh|और|या|तो|फिर|उसके बाद|इसके बाद|मतलब|हाँ वो|हां वो)\s*$", re.IGNORECASE)
 
 
+# A turn that is only the start of a sentence ("मुझे actually", "I want", "ये मुझे"): the caller paused to think (9 Nov 2026
+# call: "मुझे actually।" was answered as a whole turn and the real request came in the next one).
+_OPENER_WORDS = {"मुझे", "मैं", "मै", "मेरा", "मेरी", "मेरे", "हमें", "हम", "ये", "यह", "वो", "वह", "एक्चुअली", "actually",
+                 "mujhe", "mujhko", "main", "mai", "mera", "meri", "humein", "hume", "ye", "yeh", "wo", "woh", "i", "i'd",
+                 "i'm", "my", "we", "so", "well", "like", "want", "need", "would", "चाहिए", "को", "भी", "basically",
+                 "बेसिकली", "can", "could", "please", "ki", "की", "ka", "का", "ek", "एक", "a", "an", "the", "to", "तो",
+                 "um", "uh", "matlab", "मतलब", "जो", "jo"}
+
+
+def _only_an_opener(bare: str) -> bool:
+    words = [w for w in re.split(r"[\s,]+", bare.lower()) if w]
+    return 0 < len(words) <= 3 and all(w in _OPENER_WORDS for w in words) and not (
+        len(words) == 1 and words[0] in ("चाहिए", "please", "want", "need"))
+
+
 def is_incomplete(transcript: Optional[str], agent_text: Optional[str] = None) -> Optional[str]:
     """Why the caller has probably not finished (a short reason), or None when the answer looks complete.
 
@@ -201,6 +216,8 @@ def is_incomplete(transcript: Optional[str], agent_text: Optional[str] = None) -
     bare = re.sub(r"[.।!]+$", "", text).strip()
     if bare and _INCOMPLETE_END.search(bare):
         return "trailing"
+    if bare and _only_an_opener(bare):
+        return "opener"
     if bare and bare.endswith(("-", "–")):
         return "trailing"
     asked = asked_for(agent_text)

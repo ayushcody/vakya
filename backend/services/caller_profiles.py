@@ -1341,9 +1341,16 @@ def read_call(turns: Sequence[dict], form: Optional[Dict[str, str]], reply_langu
     else:
         outcome = "asked"
     language = (reply_language or "").strip().lower() or None
-    if not language:
-        langs = [str(t.get("language") or "").strip().lower() for t in agent_replies[1:]]
-        language = next((l for l in reversed(langs) if l), None)
+    langs = [l for l in (str(t.get("language") or "").strip().lower() for t in agent_replies[1:]) if l]
+    if langs:
+        # The language the call was mostly held in, not the one of its last words: "thank you, bye" in English at the end
+        # of a Hindi call must not turn the next greeting English. A change the caller asked for (the last two replies
+        # are in the remembered language) still wins; so does a remembered choice that no reply is in.
+        counts = {l: langs.count(l) for l in set(langs)}
+        best = max(counts.values())
+        winners = {l for l, c in counts.items() if c == best}
+        if not language or (language in counts and language not in winners and langs[-2:] != [language, language]):
+            language = next(l for l in reversed(langs) if l in winners)
     name = _clean("name", form.get("name"))
     person = _clean("name", form.get("person"))
     relation = clean_relation(form.get("relation"))

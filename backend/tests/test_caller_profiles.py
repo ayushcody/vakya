@@ -642,3 +642,14 @@ def test_the_list_says_when_profiles_are_off(app_client, monkeypatch):
     r = app_client.get("/api/callers", headers=LOCAL).json()
     assert r["enabled"] is False and r["callers"] == [] and r["total"] == 0
     assert app_client.get("/api/callers/+919876543210", headers=LOCAL).status_code == 404
+
+
+def test_the_goodbye_in_another_language_does_not_change_the_preferred_language():
+    turns = [HELLO, GREETING, turn("user", "समय बताइए"), turn("agent", "सुबह दस बजे।", language="hi"),
+             turn("user", "बुधवार पाँच बजे"), turn("agent", "बुक कर दूँ?", language="hi"),
+             turn("user", "thank you, bye"), turn("agent", "Thank you, goodbye.", language="en")]
+    assert cp.read_call(turns, {}, "en")["preferred_language"] == "hi"        # the policy followed the last words
+    assert cp.read_call(turns, {}, None)["preferred_language"] == "hi"
+    asked = turns[:6] + [turn("user", "please speak English"), turn("agent", "Sure.", language="en"),
+                         turn("user", "ok"), turn("agent", "Anything else?", language="en")]
+    assert cp.read_call(asked, {}, "en")["preferred_language"] == "en"        # a real switch still wins

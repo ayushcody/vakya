@@ -5,7 +5,7 @@ import { Reveal } from "./motion";
 import { SUBMISSION } from "./submissionData";
 
 /**
- * The 60-second demo slot. A server component: it checks at render time whether public/landing/demo.mp4 exists and
+ * The demo slot (a 3-minute walkthrough and a real call). A server component: it checks at render time whether public/landing/demo.mp4 exists and
  * plays it (with public/landing/demo-poster.jpg when that exists too). Until the video is recorded it shows a quiet
  * placeholder frame that says when it lands. Drop the file in, rebuild (`next build`) or reload the dev server, done.
  */
@@ -21,12 +21,12 @@ export function DemoVideo() {
   const hasVideo = exists(SUBMISSION.demoVideoSrc);
   const poster = exists(SUBMISSION.demoVideoPoster) ? SUBMISSION.demoVideoPoster : undefined;
   return (
-    <section id="demo" aria-label="60-second demo" className="s-container mt-12 md:mt-16">
+    <section id="demo" aria-label="3-minute demo" className="s-container mt-12 md:mt-16">
       <Reveal>
         <figure className="mx-auto max-w-[56rem]">
           <div className="relative aspect-video overflow-hidden rounded-2xl border border-[var(--s-line)] bg-[#111]">
             {hasVideo ? (
-              <video className="h-full w-full object-cover" controls playsInline preload="metadata" poster={poster} aria-label="Vakya demo, 60 seconds">
+              <video className="h-full w-full object-cover" controls playsInline preload="metadata" poster={poster} aria-label="Vakya demo, 3 minutes">
                 <source src={SUBMISSION.demoVideoSrc} type="video/mp4" />
               </video>
             ) : (
@@ -44,7 +44,7 @@ export function DemoVideo() {
             )}
           </div>
           <figcaption className="mt-3 text-center text-xs text-[var(--s-mute)]">
-            Synthetic data only: the clinic, the caller and the number are invented.
+            A real call on a real phone line. The clinic and its patients are sample data; the caller is a member of our team.
           </figcaption>
         </figure>
       </Reveal>

@@ -104,7 +104,9 @@ def test_the_filler_lines_alternate_within_a_conversation(rig):
     second = parse(rig.post(a["id"], conv))
     third = parse(rig.post(a["id"], conv))
     texts = [sentences(e)[0]["text"] for e in (first, second, third)]
-    assert texts[0] != texts[1] and texts[1] != texts[2] and texts[0] == texts[2]
+    assert texts[0] != texts[1] and texts[1] != texts[2]      # never the same line twice in a row
+    from services import turn_stream as tf  # noqa: PLC0415
+    assert len(tf.FILLER_TEXTS["hi"]) >= 4 and len(tf.FILLER_TEXTS["en"]) >= 3     # and the lines vary
 
 
 def test_the_filler_is_rendered_once_and_reused(rig):

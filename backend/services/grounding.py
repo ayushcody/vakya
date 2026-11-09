@@ -136,15 +136,22 @@ REFUSAL_MID = {
                 "call karke confirm karegi.",
     "mr": "मला तुम्हाला चुकीची माहिती द्यायची नाही. मी तुमचा संदेश घेऊ का? आमची टीम तुम्हाला परत कॉल करून खात्री करेल.",
 }
-ALL_REFUSALS: FrozenSet[str] = frozenset(v for table in (REFUSAL, REFUSAL_MID) for v in table.values())
+# The same refusal was just spoken: say it differently and ask for what is needed instead.
+REFUSAL_AGAIN = {
+    "en": "I still cannot confirm that. Could you tell me the day and time you want, together?",
+    "hi": "यह मैं अभी भी पक्का नहीं कर पा रही। क्या आप दिन और समय एक साथ बता सकते हैं?",
+    "hinglish": "Yeh main abhi bhi pakka nahi kar paa rahi. Kya aap din aur time ek saath bata sakte hain?",
+    "mr": "हे मी अजूनही नक्की करू शकत नाही. तुम्हाला हवा तो दिवस आणि वेळ एकत्र सांगाल का?",
+}
+ALL_REFUSALS: FrozenSet[str] = frozenset(v for table in (REFUSAL, REFUSAL_MID, REFUSAL_AGAIN) for v in table.values())
 
 
-def refusal_line(language: Optional[str], *, mid_answer: bool = False) -> str:
+def refusal_line(language: Optional[str], *, mid_answer: bool = False, again: bool = False) -> str:
     """The "I don't have that, shall I take a message" line in the reply language (English for a language without
     one)."""
     lang = (language or "en").strip().lower()
     lang = lang if lang in REFUSAL else lang.split("-")[0]
-    table = REFUSAL_MID if mid_answer else REFUSAL
+    table = REFUSAL_AGAIN if again else REFUSAL_MID if mid_answer else REFUSAL
     return table.get(lang) or table["en"]
 
 
@@ -455,6 +462,8 @@ class AnswerGuard:
         texts += [str(agent.get(k) or "") for k in _AGENT_TEXT_FIELDS]
         texts += list(extra)
         self.index = SourceIndex(texts)
+        last_agent = next((str(m.get("content") or "") for m in reversed(list(messages)) if m.get("role") == "assistant"), "")
+        self.repeat = any(r in last_agent for r in ALL_REFUSALS)   # the agent's last reply was already a refusal line
         self._tool_calls = tool_calls or (lambda: [])
         self._tools_seen = 0
         self.language = language
@@ -486,7 +495,7 @@ class AnswerGuard:
         if not bad:
             return None
         self.tripped = bad
-        return refusal_line(self.language, mid_answer=spoken_before)
+        return refusal_line(self.language, mid_answer=spoken_before, again=self.repeat)
 
     def guard_text(self, text: str, split: Callable[[str], List[str]]) -> Tuple[str, bool]:
         """A whole reply (the blocking turn): the sentences before the first ungrounded one, then the callback line.

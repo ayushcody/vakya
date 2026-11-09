@@ -438,14 +438,19 @@ def test_speculation_can_be_switched_off(rig, env, sessions, monkeypatch):
     assert row["speculative"] is False and row["start_ms"] >= 0
 
 
-def test_no_speculation_for_an_agent_with_tools_or_without_a_conversation(rig, env):
+def test_no_speculation_for_an_agent_with_tools_or_without_a_conversation(rig, env, monkeypatch):
     s = px.CallSession(ws=None, claims={"u": "local-user", "m": "local", "a": "x"}, agent={"id": "x", "tools": []})
     ev = pa.VadEvent("pause", audio=b"\x00" * 3200, speech_ms=800)
     assert s._may_speculate(ev) is False             # no conversation yet
     s.conversation_id = "c1"
     assert s._may_speculate(ev) is True
     s.agent = {"id": "x", "tools": ["appointments"]}
-    assert s._may_speculate(ev) is False             # a tool may act (book): never on an unfinished sentence
+    assert s._may_speculate(ev) is True              # an agent with tools replies early too: its writes wait for the gate
+    s.end_wait = px.turn_taking.EndWait(1100, "detail")
+    assert s._may_speculate(ev) is False             # after a request for details the caller pauses between the items
+    s.end_wait = px.turn_taking.EndWait(500, "normal")
+    monkeypatch.setenv("PHONE_SPECULATIVE_TOOLS", "off")
+    assert s._may_speculate(ev) is False             # switched off: a tool may act (book): never on an unfinished sentence
 
 
 # --------------------------------------------------------------------------------- triggers and warm-up
@@ -650,3 +655,47 @@ def test_the_real_app_registers_the_phone_startup_hook(app_client):
     from core.runtime import runtime as backend
     names = [getattr(fn, "__name__", "") for fn in backend.app.router.on_startup]
     assert "_phone_greetings_at_startup" in names
+
+
+# ------------------------------------------------------------------------------------- the text-only rehearsal call
+
+def test_a_text_call_runs_the_phone_path_with_words_in_and_words_out(rig, env, watch):
+    """bench/phone_rehearsal.py: a stream token with the text flag sends the greeting and the replies as text frames; no
+    speech recognition, no synthesis, and the conversation is stored like a call's."""
+    a = make_agent(rig.client)
+    token = px.make_token(a["id"], "local-user", "local", 300, text=True)
+    with rig.client.websocket_connect(f"{px.STREAM_PATH}/{token}") as ws:
+        ws.send_text(start_msg())
+
+        def frame():
+            while True:
+                m = json.loads(ws.receive_text())
+                if m.get("event") == "rehearsal":
+                    return m
+        greeting = frame()
+        assert greeting["type"] == "greeting" and "AI assistant" in greeting["text"] and "Hi, I'm Ria." in greeting["text"]
+        ws.send_text(json.dumps({"event": "rehearsal_text", "text": "When does the clinic open?"}))
+        frames = []
+        while not frames or frames[-1]["type"] != "done":
+            frames.append(frame())
+        stop(ws)
+    done = frames[-1]
+    assert done["heard"] == "When does the clinic open?" and done["text"].startswith("The clinic opens")
+    assert done["first_reply_ms"] is not None and done["total_ms"] >= done["first_reply_ms"]
+    assert watch["asr"] == 0 and rig.spoken == []                      # nothing recognised, nothing synthesized
+    assert wait_until(lambda: env.local_db.select("conversations", lambda r: r.get("agent_id") == a["id"]))
+    conv = env.local_db.select("conversations", lambda r: r.get("agent_id") == a["id"])
+    assert conv[0]["source"] == "phone"
+    assert wait_until(lambda: any(t["text_content"].startswith("The clinic opens")
+                                  for t in conversation_turns(env, conv[0]["id"])))
+    assert any("When does the clinic open?" in t["text_content"] for t in conversation_turns(env, conv[0]["id"]))
+
+
+def test_a_plain_stream_token_ignores_text_frames(rig, env):
+    a = make_agent(rig.client)
+    with rig.client.websocket_connect(f"{px.STREAM_PATH}/{token_for(a)}") as ws:
+        ws.send_text(start_msg())
+        msgs = read_until(ws, is_mark)
+        ws.send_text(json.dumps({"event": "rehearsal_text", "text": "hello"}))
+        stop(ws)
+    assert all(m.get("event") != "rehearsal" for m in msgs)

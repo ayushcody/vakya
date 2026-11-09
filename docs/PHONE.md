@@ -2,7 +2,7 @@
 
 How Vakya's voice receptionist takes and places calls over Vobiz (Vakya's only phone provider; decided 4 November 2026): setup,
 inbound and outbound, the missed-call callback, the instant greeting, barge-in and turn-taking, caller memory, transfer and
-takeover. Status in one line: outbound calls through Vobiz to an Indian mobile were verified live on 8 Nov 2026 (booking created and moved, another cancelled, in Hindi). Inbound calls to our own number and the missed-call callback are built and tested with fakes, not yet live. Reply start time on calls is about 3.7 to 6 s, with the first filler audio at about 1.1 s. Check each item with your own whitelisted phone first. No real caller has used this.
+takeover. Status in one line: outbound calls through Vobiz to an Indian mobile were verified live on 8 Nov 2026 (booking created and moved, another cancelled, in Hindi). Inbound calls to our own number and the missed-call callback are built and tested with fakes, not yet live. Reply start time (the caller's last word to the agent's first real words) was 3.4 to 8 s on 8 Nov 2026 and is 1.4 to 3.8 s after the latency work of 9 Nov 2026 (section "Latency work, 9 Nov 2026"; scripted audio rehearsal, not a real caller). Check each item with your own whitelisted phone first. No real caller has used this.
 
 ## Vobiz
 
@@ -102,6 +102,80 @@ end-of-speech event (a speculative start is negative) and the first audio after 
 Vobiz against the running backend's phone WebSocket (no call is placed, Vobiz is not contacted): it streams a spoken question
 (a Timbre voice) in real time and prints the median start -> first greeting byte and end of speech -> first reply byte.
 Each run is stored as a phone conversation of that agent.
+
+## Latency work, 9 Nov 2026
+
+Measured with `backend/bench/phone_rehearsal.py --audio` (scripted caller lines spoken by Timbre, 8 kHz mu-law, real time; not a
+real caller), time from the caller's last word to the first real words (a filler does not count):
+
+| Turn | Before (median of 2 runs) | After (3 runs) |
+|---|---|---|
+| FAQ question ("what are the timings") | 4.7 s (a filler at 3.3 s in one of the two) | 2.5 to 3.8 s, no filler |
+| Booking request (day and time named, free slot) | 7.6 to 8.2 s, a filler at 3.2 to 3.5 s | 1.4 to 2.4 s, no filler |
+| "Yes" to the read-back (booking made) | 6.8 to 7.8 s, a filler at 2.4 to 2.6 s | 2.1 to 3.2 s, no filler |
+| "Thank you, bye" | 3.5 to 3.7 s | 1.9 to 2.5 s |
+
+What a turn is made of now, and what each part cost in these runs: the caller's last word, then the end silence (500 ms; the reply
+is already running from the 250 ms pause), then speech recognition (about 0.1 s after the pause when the server is quick, about
+0.5 s when it is not), the language model's first words (0.6 to 1.0 s; a model round that decides a tool call 1.5 to 2.3 s), the
+first clause spoken (0.35 to 0.9 s, but 1.6 to 2.4 s for the first sentence of a call, unexplained), and for a booking the calendar
+write (about 1 s). The remaining time is mostly Gnani's, which varies by a factor of two from one minute to the next.
+
+1. **Realtime recognition** (`services/phone_asr.py`, `PHONE_STREAM_ASR`, default on). One Prisma stream per call, opened while the
+   greeting plays (0.1 to 2.3 s to connect), fed with the caller's audio as it arrives. At the pause the segment is committed
+   and the transcript is ready 85 to 150 ms later (about 500 ms in the slow mode of the server; a batch request took 0.6 to 1.3 s
+   after the end of speech, and 7 to 9 s on the 8 Nov call). The server works at real time: audio sent in a burst (an utterance's
+   pre-roll, audio queued while connecting) makes the transcript late by the burst's length, so nothing is queued and the
+   whole call's audio is sent continuously. The stream does not hold the gateway's one slot (a Timbre request ran beside a stream,
+   no 429). The batch request is the fallback (stream down, no transcript in `PHONE_STREAM_ASR_TIMEOUT_S`, a carried piece with no
+   known text). A transcript made on the stream has had none of Prisma's keyterms or the desk's learnt corrections.
+2. **Agents with tools reply early too** (`PHONE_SPECULATIVE_TOOLS`, default on; it was the reason `speculative start` was "no" on
+   every turn). Tools that read run during the pause; the tools that change something (`tools.GATED_TOOLS`) wait for the
+   confirmed end of the sentence (`ToolStream write_gate`) and never run for a turn that was dropped. After a request for details
+   the agent still waits for the whole answer.
+3. **A booking request is answered from the tool results** (`tools.prefetch_reads`, `PHONE_PREFETCH`, `PHONE_READBACK_SHORTCUT`). When
+   the caller's words give a day and a time, the time is checked at once (a read), beside the rest of the turn's setup. When the
+   caller asked to book, the time is free and the name and number are known, the read-back sentence is prepared from the same
+   function the `book` tool uses (nothing is booked) and spoken without a language-model round, in clauses so the first is voiced
+   while the rest is made. A plain yes to a read-back makes the booking (the gate still checks the read-back and the yes) after
+   the end of the sentence is confirmed, and the plain case of a booking made is confirmed from the tool result (`tools.booked_line`:
+   not for a booking for someone else, a stay, a late-running note or a WhatsApp question). Anything else starts the model from the
+   results it would have asked for, one round instead of three.
+4. **The calendar** is read ahead at the start of the call and every 40 s (`PHONE_CALENDAR_WARM`), with up to 2,500 events in one
+   request instead of two pages of 250 (the second `GET` per check on 8 Nov was the second page).
+5. **Filler** (`PHONE_FILLER_AFTER_MS`, default now 1500 after the transcript, was 500): kept for turns that are really slow,
+   skipped when the model has started, five Hindi and four English lines that never repeat back to back, and a line built from
+   what the caller named ("बुधवार शाम 5 बजे... एक सेकंड।") the first time a turn needs one.
+6. **The personal greeting is made while the phone rings** (`phone_greeting.prepare_personal`, called from `dial()`): the number is
+   known at dial time, the profile is looked up and the known caller's greeting is spoken then, and is used at pickup. A known
+   caller no longer falls back to the generic greeting after 3 s: the wait is `PHONE_RETURNING_GREETING_TIMEOUT_S` (default 8). On
+   8 Nov the greeting rendered in 3.0 to 4.5 s and the limit was 3 s. (The rehearsal does not dial, so it renders the greeting at
+   `start`: 1.8 to 4.8 s in the runs above.)
+7. **Gnani connections are not kept alive** (`GNANI_KEEPALIVE_S`, default 0). With the pooled keep-alive connection a short Timbre
+   sentence took 1.0 to 2.0 s in a call; on fresh connections 0.35 to 0.8 s (same text, same minute, several runs; the cause is not
+   known).
+
+Not done, and what still limits it: the language model's first words (0.6 to 1.0 s, no prompt caching on this endpoint; 5,000
+input tokens a turn, a model that is not told to reason answers 0.6 s sooner but did not follow the tool protocol, so it was not
+used); the first sentence of a call is slow to speak (1.6 to 2.4 s, then 0.35 to 0.9 s, cause unknown, a one-word warm-up every
+4 s did not change it); the stream's transcript still takes about 0.5 s after the pause in the slow mode of the server (the server's
+`x-min-silence-ms` header at 150 ms made the final arrive before our commit, about 0.2 s sooner in an isolated test, but the
+server then splits sentences at short pauses; not used in a call); the calendar write of a booking (about
+1 s); an utterance shorter than 400 ms ("haan" alone) is treated as noise by the detector and gets no answer (`min_speech_ms`).
+
+| Setting (backend/.env) | Default | What it does |
+|---|---|---|
+| `PHONE_STREAM_ASR` / `PHONE_STREAM_ASR_TIMEOUT_S` | on / 1.8 | realtime recognition and how long a committed segment may wait for its transcript before the recording is recognised instead |
+| `PHONE_SPECULATIVE_TOOLS` | on | agents with tools reply early (reads run, changes wait) |
+| `PHONE_PREFETCH` / `PHONE_READBACK_SHORTCUT` | on / on | check a named time at once; speak the read-back or the confirmation from the tool result without a model round |
+| `PHONE_CALENDAR_WARM` | on | read the calendar ahead during a call |
+| `PHONE_FILLER_AFTER_MS` | 1500 | how long after the transcript a slow answer waits before a filler |
+| `PHONE_RETURNING_GREETING_TIMEOUT_S` | 8 | the longest a known caller waits for their personal greeting before the agent's own plays |
+| `GNANI_KEEPALIVE_S` | 0 | keep Gnani HTTP connections alive for this many seconds (0: a fresh connection per request) |
+
+`backend/bench/phone_rehearsal.py --audio` is the measuring tool: it speaks the caller's lines (Timbre, 8 kHz mu-law, real time),
+reports per turn the recognition time, the first audio, the first real words and whether a filler played, and with
+`--cancel-created` cancels the bookings it made.
 
 ## Missed-call callback
 
