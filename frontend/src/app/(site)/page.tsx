@@ -5,6 +5,7 @@ import { BuiltOnGnani, CallFlow, Limitations, ReportTeaser, StackStrip, Team, Tr
 import { FinalCta } from "@/components/site/Ending";
 import { ForEveryDesk } from "@/components/site/ForEveryDesk";
 import { WhatVakyaDoes } from "@/components/site/WhatVakyaDoes";
+import { WholeCall } from "@/components/site/WholeCall";
 import { ScheduleVisualiser } from "@/components/site/ScheduleVisualiser";
 import { LegacyHashRedirect } from "@/components/site/LegacyHashRedirect";
 
@@ -46,6 +47,7 @@ export default function HomePage() {
       <Hero />
       <StackStrip />
       <DemoVideo />
+      <WholeCall />
       <CallFlow />
       <WhatVakyaDoes />
       <ScheduleVisualiser />
