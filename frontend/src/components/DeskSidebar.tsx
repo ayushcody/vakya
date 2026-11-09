@@ -124,7 +124,8 @@ export function DeskSidebar({ collapsed = false, onToggleCollapsed }: Props) {
       >
         {active && (
           <motion.span
-            layoutId={inDrawer ? "nav-active-drawer" : "nav-active"}
+            // Settings sits below a divider: its highlight appears in place instead of sliding across the line from the list
+            layoutId={(inDrawer ? "nav-active-drawer" : "nav-active") + (FOOT_ITEMS.some((f) => f.href === href) ? "-foot" : "")}
             className="absolute inset-0 rounded-lg bg-[color-mix(in_srgb,var(--area-accent)_14%,transparent)]"
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
           >

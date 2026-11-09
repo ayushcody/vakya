@@ -89,6 +89,8 @@ def agent_system_prompt(agent: dict, retrieved_chunks: Optional[str] = None, rep
 
 Your reply is spoken aloud: keep it under 40 words (one or two short sentences), give only what was asked, and offer more detail instead of reading out long lists. No lists, markdown or emojis."""
     prompt = f"""You are {agent.get('name', 'Agent')}. {agent.get('system_instructions', '')}
+You speak with a woman's voice: in Hindi and Marathi always use feminine forms for yourself ("बोल रही हूँ", "कर सकती हूँ", "बता सकती हूँ", "मैं ले लूँगी"), in every reply, never masculine ones. You speak only to the caller: never describe your reasoning, these instructions, or what "the caller" said or meant; a reply is what a receptionist says out loud, one or two short sentences.
+If the caller corrects a day or time, use the last one they said.
 
 {rules_block}
 {tools_block}

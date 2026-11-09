@@ -1,6 +1,8 @@
 import type { Viewport } from "next";
+import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
+import { DemoTour } from "@/components/DemoTour";
 import { LayoutWrapper } from "@/components/LayoutWrapper";
 import { APP_FONT_CLASSES } from "@/lib/appFonts";
 import { manrope } from "@/lib/brandFont";
@@ -18,6 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className={`${APP_FONT_CLASSES} ${manrope.variable}`}>
       <AuthProvider>
         <LayoutWrapper>{children}</LayoutWrapper>
+        <Suspense fallback={null}><DemoTour /></Suspense>
       </AuthProvider>
       <Toaster position="top-right" richColors closeButton theme="system" />
     </div>

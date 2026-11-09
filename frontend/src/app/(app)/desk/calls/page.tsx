@@ -95,6 +95,16 @@ function CallsContent() {
     if (selected) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(selected)}"]`)?.focus());
   }, [range, selected]);
   const listen = (id: string) => { setListenTo((l) => ({ id, n: (l?.n ?? 0) + 1 })); document.getElementById("live-now")?.scrollIntoView?.({ block: "nearest" }); };
+  // `?watch=1`: open the live transcript of a call as soon as it starts (for a screen on the front desk).
+  const watch = params?.get("watch") === "1";
+  const watched = useRef<string | null>(null);
+  useEffect(() => {
+    const first = live.data?.calls?.[0]?.conversation_id;
+    let armed = watch;
+    try { armed = armed || sessionStorage.getItem("vk-watch") === "1"; } catch { /* storage blocked: the URL flag alone */ }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the monitor follows a server event (a call started)
+    if (armed && first && watched.current !== first) { watched.current = first; listen(first); }
+  }, [watch, live.data]);
 
   // A link with ?call=<id>: bring that row into view once the list has loaded.
   const scrolled = useRef(false);

@@ -113,8 +113,15 @@ def _client() -> "httpx.Client":
         raise AppError("PROVIDER_UNAVAILABLE", "httpx is not installed.", 503, {"provider": "gnani"})
     with _pool_lock:
         if _pool is None:
-            _pool = httpx.Client(limits=httpx.Limits(max_connections=16, max_keepalive_connections=4,
-                                                     keepalive_expiry=30.0))
+            # A request on a kept-alive connection took 1.0 to 2.0 s for a short Timbre sentence while a request on a fresh
+            # connection took 0.35 to 0.8 s (a phone call, 9 Nov 2026, the same text and minute), so connections are not
+            # kept by default. GNANI_KEEPALIVE_S=30 brings the old pool back.
+            try:
+                keep = float(os.getenv("GNANI_KEEPALIVE_S", "0") or 0)
+            except ValueError:
+                keep = 0.0
+            _pool = httpx.Client(limits=httpx.Limits(max_connections=16, max_keepalive_connections=4 if keep > 0 else 0,
+                                                     keepalive_expiry=max(keep, 0.1)))
         return _pool
 
 
@@ -493,15 +500,20 @@ class StreamingRecognizer:
             async for event in rec.events(): # connected, speech_start, processing, transcript {text, latency, ...}
                 ...
 
-    Sessions last at most 15 minutes: the caller reconnects. NOT YET RUN AGAINST THE REAL SERVER and not wired into the
-    phone path (which transcribes each utterance as a WAV over REST)."""
+    Sessions last at most 15 minutes: the caller reconnects. Run against the real server on 9 Nov 2026: it answers
+    `connected`, `speech_start` and `transcript` (`is_final`, `text`, `detected_language_code`) events; a `commit` makes the final
+    transcript follow in ~100 ms (without one the server waits ~1 s of silence); `language_code` takes one code or
+    `indic-auto` (a list is refused with close code 1008). The phone path uses it through services/phone_asr.py."""
 
     MAX_SESSION_S = 15 * 60
 
     def __init__(self, *, language: str = "indic-auto", model: str = "prisma-v3.0", sample_rate: int = 8000,
                  fmt: str = "codemix", vad_threshold: Optional[float] = None, min_silence_ms: Optional[int] = None,
-                 min_speech_ms: Optional[int] = None, pace: bool = True, connect=None, lane: Optional[str] = None):
+                 min_speech_ms: Optional[int] = None, pace: bool = True, connect=None, lane: Optional[str] = None,
+                 hold_slot: bool = True):
         self.sample_rate = sample_rate
+        self.hold_slot = hold_slot     # False: the session does not take the gateway's one slot (a phone call's stream: a
+        #                                Timbre request and a stream ran together on 9 Nov 2026, no 429); still in the ledger
         self.pace = pace
         self._headers = stream_headers(language=language, model=model, sample_rate=sample_rate, fmt=fmt,
                                        vad_threshold=vad_threshold, min_silence_ms=min_silence_ms,
@@ -514,7 +526,7 @@ class StreamingRecognizer:
     async def __aenter__(self) -> "StreamingRecognizer":
         if configured():
             # the session holds the gateway's one slot until it closes (see services/gnani_gateway.py)
-            self._hold = gateway.hold("stt_stream", self._lane)
+            self._hold = gateway.hold("stt_stream", self._lane, holds_slot=self.hold_slot)
             await self._hold.__aenter__()
         try:
             return await self._open()
@@ -555,6 +567,12 @@ class StreamingRecognizer:
                 self._hold.add_seconds(frame_s)
             if self.pace:
                 await asyncio.sleep(frame_s)
+
+    async def send_frame(self, frame: bytes) -> None:
+        """One 1,024-byte frame, at once (the caller's audio is already real time)."""
+        await self._ws.send(frame)
+        if self._hold is not None:
+            self._hold.add_seconds(len(frame) / 2.0 / self.sample_rate)
 
     async def commit(self) -> None:
         await self._ws.send(json.dumps({"type": "commit"}))

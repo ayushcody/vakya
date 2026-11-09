@@ -534,3 +534,9 @@ def test_a_sentence_starts_with_a_capital_even_when_it_begins_with_a_relative_da
     e = engine(bookings=[booking("2026-11-04T18:00")])
     assert e.check(day=date(2026, 11, 4), at="18:00")["spoken"]["en"].startswith("Tomorrow at 6 pm is already taken.")
     assert engine().check(day=date(2026, 11, 4), at="18:00")["spoken"]["en"] == "Tomorrow at 6 pm is free."
+
+
+def test_a_time_before_opening_is_offered_only_the_same_days_first_time():
+    r = engine().check(day=THURSDAY, at="05:00")
+    assert r["reason"] == "outside_hours" and r["before"] is None          # never the evening of an earlier day
+    assert r["after"]["start"].startswith("2026-11-05")

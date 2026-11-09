@@ -351,7 +351,7 @@ def test_the_desk_answers_for_unknown_cancelled_and_unmovable_bookings(app_clien
     app_client.delete("/api/bookings/A10", headers=LOCAL)
     r = app_client.patch("/api/bookings/A10", json={"start": f"{THURSDAY}T16:00"}, headers=LOCAL)
     assert r.status_code == 409 and r.json()["code"] == "ALREADY_CANCELLED"
-    ap.book_appointment(name="Old Style", phone="9876543210", date="2026-11-09", time="10:30")
+    ap.book_appointment(name="Old Style", phone="9876543210", date=(__import__("datetime").date.today()+__import__("datetime").timedelta(days=2)).isoformat(), time="10:30")
     r = app_client.patch("/api/bookings/A11", json={"start": f"{THURSDAY}T16:00"}, headers=LOCAL)
     assert r.status_code == 422 and r.json()["code"] == "NOT_MOVABLE"
 

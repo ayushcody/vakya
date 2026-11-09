@@ -664,6 +664,8 @@ def test_the_extra_wait_ends_and_the_turn_starts_when_the_caller_stays_quiet(rig
 
 
 def test_a_turn_that_asked_for_nothing_is_not_looked_at_and_keeps_its_latency_line(rig, env, sessions, asr, monkeypatch):
+    monkeypatch.setenv("PHONE_SPECULATIVE_TOOLS", "off")    # (an agent with tools starts early by default)
+
     async def no_tools(run):
         return 0.0
 

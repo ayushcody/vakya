@@ -259,7 +259,7 @@ def _read_window(first: date, last: date, tzname: Optional[str]) -> Dict[date, L
     token = None
     for _page in range(6):
         params = {"timeMin": _rfc3339(lo), "timeMax": _rfc3339(hi), "singleEvents": "true", "orderBy": "startTime",
-                  "maxResults": 250, "timeZone": zone.key}
+                  "maxResults": 2500, "timeZone": zone.key}
         if token:
             params["pageToken"] = token
         body = _call("GET", f"/calendars/{_quote(calendar_id())}/events", params=params, timeout=BUSY_TIMEOUT_S)

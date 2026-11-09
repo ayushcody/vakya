@@ -379,6 +379,7 @@ def resolve_time(text: str, opening: Any = None) -> Resolved:
 
     A run of five or more spoken digits (a phone number) is not a time; "चार लोग", "char log" and "for four people" are a
     party size, not an hour; a number word on its own ("ek", "one") is not a time without baje, am/pm or a time of day."""
+    raw = str(text or "")
     text = _clean(text)
     out = Resolved()
     if not text:
@@ -399,7 +400,13 @@ def resolve_time(text: str, opening: Any = None) -> Resolved:
     if explicit_24h:
         out.time = time(hour, minute)
         return out
-    hour, assumed, note = _meridiem(hour, minute, text, opening)
+    # The morning/evening word that goes with this time is in its own clause: "वो शाम की booking नहीं चाहिए। गुरुवार सुबह
+    # ग्यारह बजे" is 11 am, not 11 pm (9 Nov 2026 demo take).
+    clauses = [_clean(c) for c in re.split(r"[।॥!?]+|\.(?!\d)", raw) if _clean(c)]
+    scope = next((c for c in reversed(clauses) if _clock_reading(c) is not None), text) if len(clauses) > 1 else text
+    if scope is not text and not (_AMPM.search(scope) or any(_word_in(w, scope) for w in (_NIGHT, _EVENING, _NOONISH, _MORNING))):
+        scope = text   # "शाम को। 9 बजे": the time's own clause has no time of day, the sentence's still counts
+    hour, assumed, note = _meridiem(hour, minute, scope, opening)
     out.assumed_meridiem = assumed
     if note:
         out.notes.append(note)
@@ -598,3 +605,98 @@ def resolve_request(text: str, now: Optional[datetime] = None, opening: Any = No
     out.date, out.time, out.assumed_meridiem = day.date, t.time, t.assumed_meridiem
     out.notes = day.notes + t.notes
     return out
+
+
+# ---------------------------------------------------------------------------------------- "an hour later" (moving a booking)
+
+_SHIFT_NUMS = {"ek": 1, "एक": 1, "one": 1, "a": 1, "an": 1, "do": 2, "दो": 2, "two": 2, "teen": 3, "तीन": 3, "three": 3,
+               "char": 4, "chaar": 4, "चार": 4, "four": 4, "paanch": 5, "panch": 5, "पांच": 5, "पाँच": 5, "five": 5}
+_SHIFT_NUM_ALT = "|".join(sorted(map(re.escape, _SHIFT_NUMS), key=len, reverse=True))
+_SHIFT_UNIT = r"(?:घंटे|घंटा|घण्टे|घण्टा|ghante|ghanta|ghantey|hours?|hrs?|मिनट|minutes?|mins?|minute)"
+_SHIFT_AFTER = r"(?:बाद|later|after|baad|bad|aage|आगे)"
+_SHIFT_BEFORE = r"(?:पहले|पहिले|earlier|before|pehle|pahle|peeche)"
+_SHIFT_AMOUNT = re.compile(
+    _B + r"(?:(?P<half>आधा|आधे|half|adha|aadha)|(?P<dedh>डेढ़|डेढ|dedh|derh)|(?P<n>\d{1,3}|" + _SHIFT_NUM_ALT + r"))\s*"
+    r"(?:an?\s+)?(?P<unit>" + _SHIFT_UNIT + r")?\s*(?:an?\s+)?(?P<unit2>" + _SHIFT_UNIT + r")?\s*(?:से\s*)?"
+    r"(?P<dir>" + _SHIFT_AFTER + "|" + _SHIFT_BEFORE + r")" + _E, re.IGNORECASE)
+_SHIFT_BIT = re.compile(_B + r"(?:थोड़ा|थोडा|thoda|thora|a\s+(?:bit|little)|slightly|little)\s*(?P<dir>" + _SHIFT_AFTER + "|" +
+                        _SHIFT_BEFORE + r")" + _E, re.IGNORECASE)
+_SAME_DAY = re.compile(_B + r"(?:same\s+day|usi\s+din|उसी\s+दिन|उसी\s+दिन\s+ही|aaj\s+hi|same\s+date)" + _E, re.IGNORECASE)
+
+
+def shift_minutes(text: str) -> Optional[int]:
+    """How far the caller asks to move a booking: "एक घंटे बाद" +60, "आधा घंटा पहले" -30, "one hour later" +60, "15 minutes
+    earlier" -15, "थोड़ा बाद" +30. None when the words ask for no such shift. Positive is later."""
+    t = unicodedata.normalize("NFC", str(text or "")).translate(_DEVANAGARI_DIGITS)
+    m = _SHIFT_BIT.search(t)
+    if m:
+        return 30 if re.fullmatch(_SHIFT_AFTER, m.group("dir"), re.IGNORECASE) else -30
+    m = _SHIFT_AMOUNT.search(t)
+    if not m:
+        return None
+    unit = m.group("unit") or m.group("unit2") or ""
+    minutes = bool(re.match(r"(?:मिनट|min)", unit, re.IGNORECASE))
+    if m.group("half"):
+        amount = 30
+    elif m.group("dedh"):
+        amount = 90
+    else:
+        raw = m.group("n")
+        n = int(raw) if raw.isdigit() else _SHIFT_NUMS.get(raw.lower(), _SHIFT_NUMS.get(raw))
+        if n is None or not unit:
+            return None
+        amount = n if minutes else n * 60
+    if not unit and not (m.group("half") or m.group("dedh")):
+        return None
+    return amount if re.fullmatch(_SHIFT_AFTER, m.group("dir"), re.IGNORECASE) else -amount
+
+
+def says_same_day(text: str) -> bool:
+    """"same day", "उसी दिन": a new time on the booking's own day."""
+    return bool(_SAME_DAY.search(unicodedata.normalize("NFC", str(text or ""))))
+
+
+_MOVE_WORDS = re.compile(
+    _B + r"(?:move|shift|reschedul\w*|postpone|prepone|बदल\w*|बदलना|शिफ्ट|मूव|रीशेड्यूल|रिशेड्यूल|आगे\s+कर|पीछे\s+कर|आगे\s*-?\s*पीछे|"
+    r"badal\w*|aage\s+kar|peeche\s+kar|hata\w*|खिसका\w*)", re.IGNORECASE)
+
+
+# "मेरी शुक्रवार वाली booking शनिवार शाम 6 बजे कर दो": no move word, but "<day> वाली booking ... कर दो" names an existing
+# booking and asks to set it to something else (9 Nov 2026 sweep: it was booked as a new appointment).
+_NAMED_BOOKING_SET = re.compile(
+    r"(?:वाली|वाला|वाले|wali|wala|wale)\s+(?:booking|appointment|बुकिंग|अपॉइंटमेंट|appointment\w*)\b.*"
+    r"(?:कर\s*(?:दो|दीजिए|दीजिये|देना|दें|दे)|kar\s*(?:do|dijiye|dijie|dena|de)|karo|करो)", re.IGNORECASE)
+
+
+# "बुधवार नहीं, गुरुवार सुबह 11 बजे कर दो" right after a booking in this call: a correction of that booking, not a second
+# one (9 Nov 2026 demo rehearsal booked it twice). Callers check this only when the call already made a booking.
+_CORRECTION_SET = re.compile(
+    r"(?:नहीं|नही|\bnahi\b|\bnahin\b|\bnot\b).*?(?:कर\s*(?:दो|दीजिए|दीजिये|देना|दें|दे)|रख\s*(?:दो|दीजिए|दें)|करो|"
+    r"kar\s*(?:do|dijiye|dijie|dena|de)|karo|rakh\s*(?:do|dijiye)|make\s+it|change\s+it|"
+    r"कर\s*सकत\w*|kar\s*sakt\w*|की\s*जगह|उसकी\s*जगह|jagah|instead|करिए|करिये|कीजिए|कीजिये|kariye|kijiye|रखिए|रखिये|rakhiye)", re.IGNORECASE)
+
+
+_ANOTHER = re.compile(r"\b(?:another|one more|new booking|second|also for|aur ek|ek aur|doosri|dusri|nayi|bhi)\b|"
+                      r"और\s*एक|एक\s*और|दूसरी|दूसरा|नई|नया|भी", re.IGNORECASE)
+
+
+def changes_booking_in_call(text: str) -> bool:
+    """Right after a booking in this call, a new day or time with no "another / एक और / भी" is a change of that booking
+    ("सो गुरुवार को ग्यारह बजे करना है, वो schedule": 9 Nov 2026 demo take booked it twice). The read-back still asks
+    "क्या मैं बदल दूँ?", so a caller who meant a second booking can say so."""
+    t = unicodedata.normalize("NFC", str(text or ""))
+    if not t or _ANOTHER.search(t):
+        return False
+    r = resolve(t)
+    return r.date is not None or r.time is not None
+
+
+def says_correction(text: str) -> bool:
+    return bool(text) and bool(_CORRECTION_SET.search(unicodedata.normalize("NFC", text)))
+
+
+def says_move(text: str) -> bool:
+    """The caller's words ask to change an existing booking: "move", "बदल", "shift", "reschedule", "आगे कर दो", or
+    "<day> वाली booking <new day/time> कर दो"."""
+    t = unicodedata.normalize("NFC", str(text or ""))
+    return bool(_MOVE_WORDS.search(t) or _NAMED_BOOKING_SET.search(t))

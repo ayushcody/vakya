@@ -70,3 +70,28 @@ def test_the_turn_loop_replaces_a_claimed_booking(monkeypatch, native):
     scripted_chat(monkeypatch, [call("book_appointment", name="P", phone="9876543210")],
                   "Great, you are booked for Monday at 10:30. See you then!")
     assert tools.run_tool_turn(MESSAGES, [BOOK]).text == "Great, you are booked for Monday at 10:30. See you then!"
+
+
+def test_restating_a_booking_made_earlier_in_the_call_is_not_a_new_claim():
+    """"thank you, bye" after a booking: the agent may say again that it is booked (an id from a tool was said earlier)."""
+    text = "Your Wednesday 11 November 5 PM appointment is booked. Thank you, goodbye!"
+    assert tools.guard_sentence(text.split(". ")[0] + ".", [], "Booking ID A30 for Wednesday 11 November at 5 PM") is None
+    assert tools.guard_sentence(text.split(". ")[0] + ".", [], "Shall I book it? yes") == tools.UNCONFIRMED_LINE   # no id said: caught
+
+
+def test_bracketed_tool_narration_is_never_spoken():
+    from services.turn_stream import strip_directions
+    assert strip_directions("[Calling book now with the caller's details] बुधवार 11 नवंबर शाम 5 बजे. क्या मैं बुक कर दूँ?") \
+        == "बुधवार 11 नवंबर शाम 5 बजे. क्या मैं बुक कर दूँ?"
+    assert strip_directions("[Calling the booking tool]") == ""
+    assert strip_directions("Dr. Kulkarni sees patients on Tuesdays.") == "Dr. Kulkarni sees patients on Tuesdays."
+
+
+def test_a_pending_readback_is_added_when_the_reply_lacks_it():
+    args = {"date": "2026-11-11", "time": "17:00", "name": "Ayush Chaugule", "phone": "8788996295"}
+    pending = tools.ToolCall("book", args, False, "failed: NOT DONE: first read this back to the caller; x", 1)
+    line = tools.pending_readback_line([pending], "hi", "अब मैं आपकी बुकिंग कर देती हूँ।")
+    assert line and line.rstrip().endswith("?") and "6 2 9 5" in line
+    assert tools.pending_readback_line([pending], "hi", line) is None            # already said
+    assert tools.pending_readback_line([OK_BOOK], "hi", "x") is None             # nothing pending
+    assert tools.pending_readback_line([pending], "en", "ok").endswith("?")

@@ -78,7 +78,7 @@ try:
     from core.errors import AppError
     from services import call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail
     from services import phone_audio as pa
-    from services import phone_greeting, turn_taking
+    from services import language_policy, phone_asr, phone_greeting, turn_taking
     from services.auth import get_current_user_id
     from services.telephony import base as tbase
     from services.telephony import registry
@@ -91,7 +91,7 @@ except ImportError:  # pragma: no cover - imported as backend.routers.phone
         call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail,
     )
     from backend.services import phone_audio as pa
-    from backend.services import phone_greeting, turn_taking
+    from backend.services import language_policy, phone_asr, phone_greeting, turn_taking
     from backend.services.auth import get_current_user_id
     from backend.services.telephony import base as tbase
     from backend.services.telephony import registry
@@ -302,16 +302,22 @@ def _mac(payload: str) -> str:
 
 
 def make_token(agent_id: str, user_id: str, mode: str, ttl: int, now: Optional[float] = None,
-               kind: Optional[str] = None, origin: Optional[str] = None) -> str:
+               kind: Optional[str] = None, origin: Optional[str] = None, text: bool = False,
+               report: bool = False) -> str:
     """A signed, expiring token naming the agent. `kind="ans"` makes it an answer-document token, which opens no stream;
     `kind="missed"` makes it the missed-call link, which opens nothing but the missed-call route. `origin="missed_call"`
-    marks a stream token of a callback (its conversation is stored with source "missed_call"). A plain stream token carries
-    none of these."""
+    marks a stream token of a callback (its conversation is stored with source "missed_call"). `text=True` makes a
+    text-only stream (bench/phone_rehearsal.py): the caller's words arrive as `rehearsal_text` frames and the replies go
+    back as text, with no speech recognition or synthesis. A plain stream token carries none of these."""
     claims = {"a": agent_id, "u": user_id, "m": mode, "x": int((now if now is not None else time.time()) + ttl)}
     if kind:
         claims["k"] = kind
     if origin:
         claims["o"] = origin
+    if text:
+        claims["tx"] = 1
+    if report:
+        claims["rp"] = 1   # an audio rehearsal (bench/phone_rehearsal.py --audio): each sentence and the end of a turn are also reported as `rehearsal` frames
     payload = _b64(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
     return f"{payload}.{_mac(payload)}"
 
@@ -411,6 +417,7 @@ class _Speculation:
     heard: Optional[str] = None
     extended: bool = False
     deferred: bool = False
+    asr_task: Optional["asyncio.Task"] = None
 
 
 @dataclasses.dataclass
@@ -425,6 +432,7 @@ class _Inflight:
     done: bool = False
     noise: bool = False
     heard: bool = False
+    asr_task: Optional["asyncio.Task"] = None   # the recognition of `pieces` (stream or recording), for the next turn's prefix
 
     @property
     def stored(self) -> bool:
@@ -462,6 +470,14 @@ def speculative_mode() -> str:
     return "asr" if v == "asr" else "on"
 
 
+def _tool_summary(call: Any) -> dict:
+    """What a text-only call reports of one tool call: its name, whether it worked, the status it returned and its time."""
+    value = getattr(call, "value", None)
+    status = value.get("status") if isinstance(value, dict) else None
+    return {"name": getattr(call, "name", ""), "ok": getattr(call, "ok", None), "status": status,
+            "ms": getattr(call, "ms", None), "args": {k: v for k, v in (getattr(call, "arguments", None) or {}).items()}}
+
+
 class CallSession:
     """One phone call. `ws` is the socket Vobiz opened; `claims` say which agent answers. The carrier's WebSocket dialect
     is `codec` (services/telephony/vobiz.py)."""
@@ -472,6 +488,10 @@ class CallSession:
                  codec: Optional["tbase.StreamCodec"] = None):
         self.ws = ws
         self.claims = claims
+        self.text_mode = bool(claims.get("tx"))        # a text-only rehearsal call (see make_token)
+        self.report = bool(claims.get("rp"))           # an audio rehearsal: report sentences and turn ends
+        self._text_t0 = 0.0
+        self._text_first_ms: Optional[int] = None
         self.codec = codec if codec is not None else _vobiz.VobizCodec()
         self.agent = agent
         self.b = _b()
@@ -510,6 +530,12 @@ class CallSession:
         self._wait_label = ""              # the end wait of the turn that is running, for its latency line
         self._wait_ms = 0
         self._carry: List[bytes] = []      # caller audio of cancelled, never-stored turns, for the next turn
+        self._carry_asr: Optional[asyncio.Task] = None   # the recognition of those pieces (text for the next turn's prefix)
+        self._warm_calendar_task: Optional[asyncio.Task] = None
+        self.rec: Optional["phone_asr.CallRecognizer"] = None   # the realtime recognition stream (services/phone_asr.py)
+        self._rec_active = False           # an utterance is being streamed
+        self._rec_paused = False           # its pause was committed: nothing more is sent until the caller resumes
+        self._utt_fut: Optional["asyncio.Future"] = None   # the commit of the utterance in progress (text so far)
         self._inflight: Optional[_Inflight] = None
         self._defer_task: Optional[asyncio.Task] = None
         self._pre: Optional[_Precheck] = None
@@ -633,6 +659,9 @@ class CallSession:
             profile = await self._known_caller()   # inbound: the caller's number; outbound and callbacks: the number dialled
             returning = (phone_greeting.returning_opening(self.b, self.agent, profile, callback=callback)
                          if profile else None)
+            if self.text_mode:
+                await self._greet_text(returning, callback, t0)
+                return
             g, pcm, source = await phone_greeting.for_call(self.b, self.agent, self.claims["u"], self.claims["m"],
                                                            self.rate, returning=returning,
                                                            **({"callback": True} if callback else {}))
@@ -661,6 +690,29 @@ class CallSession:
 
         await self.send_pcm(pcm, on_first=first_out)
         await self._send(self.codec.mark("turn-1-end", self.stream_sid))
+
+    async def _greet_text(self, returning: Optional[tuple], callback: bool, t0: float) -> None:
+        """The opening of a text-only call: the same words (known caller's greeting or the agent's), sent as text."""
+        g = phone_greeting.text_greeting(self.b, self.agent, returning, callback=callback)
+        self.greeting = g
+        self.last_agent_text = g.text
+        self._apply_end_wait()
+        ms = int((time.monotonic() - t0) * 1000)
+        self.log.append({"event": "greeting", "source": "returning" if returning else "agent", "clip_id": None,
+                         "receipt_id": None, "accept_to_start_ms": 0, "start_to_first_byte_ms": ms})
+        await self._send({"event": "rehearsal", "type": "greeting", "text": g.text, "language": g.language, "ms": ms,
+                          "personal": returning is not None})
+        self._spawn(self._record_greeting(g, time.monotonic(), ms))
+
+    async def on_text(self, text: str) -> None:
+        """A text-only call: the caller's words as a turn, with no speech recognition (`rehearsal_text` frame)."""
+        text = " ".join(str(text or "").split())
+        if not text:
+            return
+        await self.stop_turn()
+        self._text_t0 = time.monotonic()
+        self._text_first_ms = None
+        self.start_turn(b"", text=text)
 
     # --------------------------------------------------------------------------------------- the known caller
     def _party_number(self, ev: "tbase.Event") -> Optional[str]:
@@ -768,7 +820,8 @@ class CallSession:
         return (running and self.turn_audio) or self.pacer.playing
 
     def start_turn(self, wav: bytes, *, speculative: bool = False, end: Optional[float] = None,
-                   pieces: Optional[List[bytes]] = None, asr_pre: Optional["asyncio.Future"] = None) -> None:
+                   pieces: Optional[List[bytes]] = None, asr_pre: Optional["asyncio.Future"] = None,
+                   text: Optional[str] = None) -> None:
         """Start a turn on `wav` (the caller's audio for speech recognition). `pieces` are the PCM pieces that make
         it up (see _Inflight): kept so that the turn, when it is cancelled before it is stored, hands them on."""
         self.turn_audio = False
@@ -782,12 +835,13 @@ class CallSession:
             self._note_wait()
         turn_id = str(uuid.uuid4())
         inflight = _Inflight(None, self.turns, list(pieces or []))
+        inflight.asr_task = asr_pre if isinstance(asr_pre, asyncio.Task) else None
         self._inflight = inflight
         self.turn_task = inflight.task = asyncio.create_task(self._turn(wav, self.turns, gate, turn_id, inflight,
-                                                                        asr_pre))
+                                                                        asr_pre, text=text))
         if speculative:
             self.spec = _Speculation(self.turn_task, gate, turn_id, self.turns, time.monotonic(),
-                                     pieces=list(pieces or []))
+                                     pieces=list(pieces or []), asr_task=inflight.asr_task)
             self.spec_stats["started"] += 1
 
     def _note_wait(self, extra_ms: int = 0, reason: str = "") -> None:
@@ -834,6 +888,7 @@ class CallSession:
                 or not turn_taking.carry_enabled() or not inflight.pieces):
             return False
         self._carry = inflight.pieces[-CARRY_MAX_PIECES:]
+        self._carry_asr = inflight.asr_task
         ms = int(sum(pa.pcm_seconds(len(x), self.rate) for x in self._carry) * 1000)
         log.info("phone turn %d: carried unanswered caller audio (%d ms%s) into the next turn", inflight.n, ms,
                  ", already transcribed" if inflight.heard else "")
@@ -846,6 +901,7 @@ class CallSession:
         if (inflight is not None and self._inflight is inflight and not inflight.stored and not inflight.noise
                 and turn_taking.carry_enabled() and inflight.pieces):
             self._carry = inflight.pieces[-CARRY_MAX_PIECES:]
+            self._carry_asr = inflight.asr_task
             self.log.append({"event": "carried", "turn": inflight.n, "pieces": len(self._carry), "after": "failure"})
 
     async def stop_turn_keeping_words(self) -> None:
@@ -883,7 +939,7 @@ class CallSession:
 
     async def _turn(self, wav: bytes, n: int, gate: asyncio.Event, turn_id: str,
                     inflight: Optional[_Inflight] = None, asr_pre: Optional["asyncio.Future"] = None,
-                    held: bool = False) -> None:
+                    held: bool = False, text: Optional[str] = None) -> None:
         """One reply. `gate` is set for a normal turn; a speculative turn's audio (and, with PHONE_SPECULATIVE=asr,
         everything after speech recognition) waits for it.
 
@@ -901,6 +957,8 @@ class CallSession:
                 pass
             run = await b.turn_begin(None, self.agent["id"], self.agent["user_id"], storage_mode=self.claims["m"],
                                       agent=self.agent, source="phone")
+            if self.text_mode and text is not None:   # a rehearsal: the words are given, nothing is spoken
+                run.text_input, run.text_only = text, True
             run.commit_gate = gate   # for backend.turn_event_stream: store nothing before the turn is confirmed
             run.asr_previous_agent_text = self.last_agent_text   # what Prisma's previous_text hint follows
             run.asr_previous_user_text = self.last_user_text     # for Gnani's previous_text hint
@@ -917,9 +975,17 @@ class CallSession:
                 name, data = parts
                 if name == "sentence":
                     self._mark("sentence")
+                    if self.text_mode:
+                        if self._text_first_ms is None and not data.get("filler"):
+                            self._text_first_ms = int((time.monotonic() - self._text_t0) * 1000)
+                        await self._send({"event": "rehearsal", "type": "sentence", "text": data.get("text", ""),
+                                          "ms": int((time.monotonic() - self._text_t0) * 1000)})
                     pcm = await self._sentence_pcm(str(data.get("audio_url") or ""))
                     if pcm:
                         await gate.wait()   # a speculative turn speaks only once the caller has really finished
+                        if self.report:
+                            await self._send({"event": "rehearsal", "type": "sentence", "text": data.get("text", ""),
+                                              "filler": bool(data.get("filler")), "turn": n})
                         await self.send_pcm(pcm)
                 elif name == "transcript":
                     self._mark("heard")
@@ -952,13 +1018,20 @@ class CallSession:
                     if inflight is not None:
                         inflight.done = True
                         if self._inflight is inflight:
-                            self._carry = []          # its words are in the history now: nothing to carry
+                            self._carry, self._carry_asr = [], None   # its words are in the history now: nothing to carry
                     self.last_agent_text = str(data.get("agent_text") or "")
                     self._apply_end_wait()
                     timings = data.get("timings") or {}
                     self.log.append({"event": "said", "text": data.get("agent_text", ""), "ms": timings.get("total_ms")})
                     if data.get("agent_text"):
                         self.tap({"type": "transcript", "role": "agent", "text": data["agent_text"]})
+                    if self.text_mode or self.report:
+                        await self._send({"event": "rehearsal", "type": "done", "turn": n, "text": data.get("agent_text", ""),
+                                          "heard": run.user_text, "language": getattr(run, "language", None),
+                                          "first_reply_ms": self._text_first_ms,
+                                          "total_ms": int((time.monotonic() - self._text_t0) * 1000),
+                                          "timings": {k: v for k, v in timings.items() if isinstance(v, (int, float))},
+                                          "tools": [_tool_summary(c) for c in run.tool_objs]})
                     log.info("phone turn %d pipeline (ms): %s | model %s/%s", n,
                              ", ".join(f"{k.removesuffix('_ms')}={v}" for k, v in timings.items()
                                        if k.endswith("_ms") and isinstance(v, (int, float))),
@@ -969,7 +1042,7 @@ class CallSession:
                         if inflight is not None:
                             inflight.noise = True
                             if self._inflight is inflight:
-                                self._carry = []      # nothing but noise in it: nothing to carry
+                                self._carry, self._carry_asr = [], None   # nothing but noise in it: nothing to carry
                         break   # the caller coughed: say nothing
                     self._keep_unanswered(inflight)   # any other error: the caller was not answered, nothing was stored
                     details = data.get("details") or {}
@@ -995,7 +1068,7 @@ class CallSession:
                     break
             if retry:
                 await asyncio.sleep(min(retry_after, 2.0))
-                await self._turn(wav, n, gate, str(uuid.uuid4()), inflight, None, held=True)
+                await self._turn(wav, n, gate, str(uuid.uuid4()), inflight, None, held=True, text=text)
                 return
             await gate.wait()
             await self._send(self.codec.mark(f"turn-{n}-end", self.stream_sid))
@@ -1075,17 +1148,157 @@ class CallSession:
 
         return await asyncio.to_thread(convert)
 
+    # ------------------------------------------------------------------------------- realtime recognition
+    def _stream_audio(self, pcm: bytes) -> None:
+        """Feed the caller's audio to the realtime recognition stream (services/phone_asr.py) as it arrives, all of it: the
+        server works at real time, so an utterance sent later in one piece would be recognised late."""
+        rec = self.rec
+        if rec is None:
+            return
+        rec.feed(pcm)
+        if not self._rec_active and self.detector is not None and self.detector.speaking:    # an utterance has just started
+            rec.begin()
+            self._utt_fut = None
+            self._rec_active, self._rec_paused = True, False
+
+    async def _keep_calendar_warm(self) -> None:
+        """An agent with schedules reads the owner's Google Calendar for a free time (0.3 to 1.2 s a read, remembered for 60 s):
+        the next days are read at the start of the call and again every 40 s, so a caller's question about a time finds them
+        in memory. Never raises."""
+        try:
+            try:
+                from services import gcal  # noqa: PLC0415
+            except ImportError:  # pragma: no cover
+                from backend.services import gcal  # noqa: PLC0415
+            if not gcal.configured() or os.getenv("PHONE_CALENDAR_WARM", "on").strip().lower() in ("off", "0", "false", "no"):
+                return
+            while True:
+                try:
+                    t0 = time.monotonic()
+                    await asyncio.to_thread(gcal.day_busy, datetime.now(gcal.tz()).date())
+                    log.info("phone: calendar read ahead in %d ms", int((time.monotonic() - t0) * 1000))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001 - a read that failed is simply tried again later
+                    log.info("phone: calendar read ahead failed (%s)", type(e).__name__)
+                await asyncio.sleep(40.0)
+        except asyncio.CancelledError:
+            raise
+
+    def _stream_pause(self) -> None:
+        """The caller paused: close the streamed segment now; its transcript follows in ~100 ms."""
+        rec = self.rec
+        if rec is None or not self._rec_active or self._rec_paused or not rec.has_audio():
+            return
+        self._rec_paused = True
+        self._utt_fut = rec.commit()
+
+    def _stream_resume(self) -> None:
+        self._rec_paused = False
+        self._utt_fut = None
+
+    def _stream_end(self, noise: bool = False) -> Optional["asyncio.Future"]:
+        """The utterance is over. Returns the future of its text (committing now when no pause did), None when there is no
+        stream for it. A noise is committed quietly and its result ignored."""
+        rec = self.rec
+        if rec is None or not self._rec_active:
+            return None
+        self._rec_active = False
+        if noise:
+            if not self._rec_paused:
+                rec.commit(quiet=True)
+            rec.end()
+            self._utt_fut = None
+            return None
+        if not self._rec_paused or self._utt_fut is None:
+            self._utt_fut = rec.commit()
+        fut, self._utt_fut = self._utt_fut, None
+        rec.end()
+        return fut
+
+    def _utterance_future(self) -> Optional["asyncio.Future"]:
+        """The text of the utterance in progress (committed at its pause, else now), without ending it."""
+        rec = self.rec
+        if rec is None or not self._rec_active:
+            return None
+        if self._utt_fut is None and not self._rec_paused:
+            self._rec_paused = True
+            self._utt_fut = rec.commit()
+        return self._utt_fut
+
+    def _asr_task(self, fut: Optional["asyncio.Future"], wav: bytes, pieces: List[bytes]) -> Optional["asyncio.Task"]:
+        """The recognition of `pieces` as a task of (text, hints), from the stream's future `fut` (the new utterance) with
+        the text of carried pieces in front; None when the stream cannot give the whole text (a carry whose text is not
+        known, or a carry trimmed to fit): the turn then recognises `wav` itself, as before."""
+        if fut is None or self.rec is None:
+            return None
+        carried = list(self._carry) if turn_taking.carry_enabled() else []
+        prefix_task = self._carry_asr if carried else None
+        if carried and (prefix_task is None or len(pieces) != len(carried) + 1):
+            return None
+        run = types.SimpleNamespace(agent=self.agent, user_id=self.claims["u"], storage_mode=self.claims["m"],
+                                    asr_previous_agent_text=self.last_agent_text,
+                                    asr_previous_user_text=self.last_user_text,
+                                    asr_conversation_id=self.conversation_id)
+        task = asyncio.ensure_future(self._stream_text(run, fut, wav, prefix_task))
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())
+        return task
+
+    async def _stream_text(self, run: Any, fut: "asyncio.Future", wav: bytes, prefix_task: Optional["asyncio.Task"]):
+        b = self.b
+        t0 = time.monotonic()
+        try:
+            prefix = ""
+            if prefix_task is not None:
+                prefix = (await asyncio.shield(prefix_task))[0]
+            text, language = await asyncio.shield(fut)
+            t1 = time.monotonic()
+            full = " ".join(x for x in (prefix, text) if x).strip()
+            fixed = language_policy.to_devanagari(full, self.agent.get("supported_languages"))
+            if fixed != full:
+                full, language = fixed, "hi-IN"
+            if not full:
+                raise ValueError("empty transcript")
+            out = await b.asr_from_stream(run, full, language)
+            ms = int((time.monotonic() - t0) * 1000)
+            self.log.append({"event": "asr_stream", "ms": ms})
+            log.info("phone: realtime recognition ready %d ms after the pause (stream %d ms, hints %d ms)", ms,
+                     int((t1 - t0) * 1000), int((time.monotonic() - t1) * 1000))
+            return out
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - recognise the recording instead
+            log.info("phone: realtime recognition gave nothing (%s): recognising the recording", type(e).__name__)
+            self.log.append({"event": "asr_stream_fallback", "why": type(e).__name__})
+            return await b.asr_for_turn(run, wav)
+
     # --------------------------------------------------------------------------------------- speculation
     def _may_speculate(self, ev: "pa.VadEvent") -> bool:
         if self.spec_mode == "off" or self.spec is not None:
             return False
-        if self.agent.get("tools"):
-            return False   # a tool call (a booking) is an action: it must never run on a sentence that was not finished
+        if self.agent.get("tools") and not (self._tools_may_speculate() and self.end_wait.kind == "normal"):
+            return False   # a tool call (a booking) is an action: it must never run on a sentence that was not finished.
+            #                (Reads and the read-back run early; after a request for details the caller pauses between the
+            #                items, so such an agent waits for the whole answer, see _precheck_wanted.)
         if not self.conversation_id:
             return False   # the turn would create the conversation, and a cancelled one would leave it behind
         if self._ignorable(ev.speech_ms):
             return False   # "hello?" while the agent thinks: ignored at the end of the utterance anyway
         return True
+
+    @staticmethod
+    def _tools_may_speculate() -> bool:
+        """An agent with tools replies early too: its tools that only read (is a time free) run during the pause, and the ones
+        that change something wait for the confirmed end of the sentence (tools.GATED_TOOLS, ToolStream `write_gate`).
+        Only with the streaming JSON tool loop; PHONE_SPECULATIVE_TOOLS=off keeps tool agents from starting early."""
+        if os.getenv("PHONE_SPECULATIVE_TOOLS", "on").strip().lower() in ("off", "0", "false", "no"):
+            return False
+        try:
+            from services import tools as tools_mod  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import tools as tools_mod  # noqa: PLC0415
+        return (tools_mod.tool_protocol() != "native"
+                and os.getenv("VAKYA_TOOL_STREAM", "on").strip().lower() not in ("off", "0", "false"))
 
     def _ignorable(self, speech_ms: int) -> bool:
         """A short utterance while the agent is still thinking is "hello?", not a new question. Not when the agent has
@@ -1095,7 +1308,8 @@ class CallSession:
     async def _speculate(self, ev: "pa.VadEvent") -> None:
         await self.stop_turn_keeping_words()
         pieces = self._pieces_for(ev.audio)
-        self.start_turn(self._clip_for(pieces), speculative=True, pieces=pieces)
+        wav = self._clip_for(pieces)
+        self.start_turn(wav, speculative=True, pieces=pieces, asr_pre=self._asr_task(self._utterance_future(), wav, pieces))
         self.log.append({"event": "speculative_start", "ms": ev.speech_ms})
 
     # ------------------------------------------------------------------- an unfinished answer, without speculation
@@ -1104,12 +1318,12 @@ class CallSession:
         return (turn_taking.adaptive_enabled() and turn_taking.incomplete_extra_ms() > 0
                 and self.end_wait.kind != "normal")
 
-    def _start_precheck(self, pieces: List[bytes], wav: bytes) -> _Precheck:
+    def _start_precheck(self, pieces: List[bytes], wav: bytes, fut: Optional["asyncio.Future"] = None) -> _Precheck:
         run = types.SimpleNamespace(agent=self.agent, user_id=self.claims["u"], storage_mode=self.claims["m"],
                                     asr_previous_agent_text=self.last_agent_text,
                                     asr_previous_user_text=self.last_user_text,
                                     asr_conversation_id=self.conversation_id)
-        task = asyncio.ensure_future(self.b.asr_for_turn(run, wav))
+        task = self._asr_task(fut or self._utterance_future(), wav, pieces) or asyncio.ensure_future(self.b.asr_for_turn(run, wav))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())   # (never "exception was never retrieved")
         self._pre = _Precheck(list(pieces), wav, task, time.monotonic())
         self.log.append({"event": "precheck_start", "ms": int(sum(pa.pcm_seconds(len(x), self.rate) for x in pieces) * 1000)})
@@ -1128,6 +1342,7 @@ class CallSession:
         if not turn_taking.carry_enabled() or not pre.pieces:
             return
         self._carry = pre.pieces[-CARRY_MAX_PIECES:]
+        self._carry_asr = pre.task
         ms = int(sum(pa.pcm_seconds(len(x), self.rate) for x in self._carry) * 1000)
         log.info("phone turn %d: carried unanswered caller audio (%d ms%s) into the next turn", self.turns + 1, ms,
                  ", already transcribed" if pre.task.done() else "")
@@ -1258,6 +1473,7 @@ class CallSession:
         if not turn_taking.carry_enabled() or not spec.pieces:
             return
         self._carry = spec.pieces[-CARRY_MAX_PIECES:]
+        self._carry_asr = spec.asr_task
         ms = int(sum(pa.pcm_seconds(len(x), self.rate) for x in self._carry) * 1000)
         log.info("phone turn %d: carried unanswered caller audio (%d ms%s) into the next turn", spec.n, ms,
                  ", already transcribed" if spec.heard is not None else "")
@@ -1277,8 +1493,13 @@ class CallSession:
         self.party = self._party_number(ev) if caller_profiles.enabled() else None
         if self.party:
             self._profile_task = asyncio.ensure_future(self._lookup_profile())
+        if not self.text_mode and self.rec is None and phone_asr.enabled():
+            self.rec = phone_asr.CallRecognizer(self.rate)
+            self.rec.start()     # connects while the greeting plays
         self._greeting_task = self.turn_task = asyncio.create_task(self._greet())
         self._spawn(self._open_conversation())
+        if not self.text_mode and self.agent.get("tools"):
+            self._warm_calendar_task = asyncio.ensure_future(self._keep_calendar_warm())
         self.log.append({"event": "start", "rate": self.rate})
         phone_greeting.schedule_call_warm(self.b)   # the embedder warm, in the background (PHONE_PREWARM)
         direction = "outbound" if (self.call_sid in _known_calls or (call_records.get(self.call_sid or "") or {})
@@ -1293,7 +1514,9 @@ class CallSession:
         early = int(_env("PHONE_EARLY_SILENCE_MS", "250") or 250) if self.spec_mode != "off" else 0
         cfg = pa.DetectorConfig(end_silence_ms=self.end_silence_ms,
                                 early_silence_ms=early if 0 < early < self.end_silence_ms else 0,
-                                barge_rms=float(_env("PHONE_BARGE_RMS", "0.02") or 0.02))
+                                barge_rms=float(_env("PHONE_BARGE_RMS", "0.02") or 0.02),
+                                # a bare "हाँ" / "ji" / "ok" is often 200-350 ms of voiced audio: 400 dropped it as noise
+                                min_speech_ms=int(_env("PHONE_MIN_SPEECH_MS", "200") or 200))
         # built off the event loop: the greeting is already going out
         self.detector = await asyncio.to_thread(pa.UtteranceDetector, self.rate, None, cfg)
         self.detector.set_end_silence(self.end_wait.ms)   # the greeting may already have asked for something
@@ -1355,13 +1578,16 @@ class CallSession:
         self._tap_audio("caller", pcm)
         if self.human_active:
             return          # a person has the call: the agent neither listens nor answers
-        for vad_event in self.detector.feed(pcm):
+        vad_events = self.detector.feed(pcm)
+        self._stream_audio(pcm)
+        for vad_event in vad_events:
             if vad_event.kind == "barge":
                 if self.speaking:   # talking over audio the caller can hear: stop it. While the agent is only thinking
                     self.barges += 1  # there is nothing to stop, and cancelling would throw the work away
                     await self.stop_turn_keeping_words()   # (a reply that was not stored yet: its words are carried)
                     await self.clear()
             elif vad_event.kind == "pause":
+                self._stream_pause()      # the streamed segment ends here: its transcript comes within ~100 ms
                 if self.spec is not None and self.spec.deferred:   # the caller went on after the extra wait
                     self._keep_spec_words(self.spec)
                     await self._cancel_speculation()
@@ -1375,10 +1601,14 @@ class CallSession:
                     pieces = self._pieces_for(vad_event.audio)
                     self._start_precheck(pieces, self._clip_for(pieces))   # recognise it now, say nothing yet
             elif vad_event.kind == "resume":
+                self._stream_resume()
                 await self._cancel_speculation()
                 self._drop_pre()
+            elif vad_event.kind == "noise":
+                self._stream_end(noise=True)
             elif vad_event.kind == "utterance":
                 now = time.monotonic()
+                utt_fut = self._stream_end()      # the utterance's streamed text (committed now when no pause did)
                 spec = self.spec
                 if self._pre is not None and self._pre.deciding:
                     self._keep_pre_words(self._pre)       # the caller went on while their answer was being waited for
@@ -1414,19 +1644,20 @@ class CallSession:
                     pre = self._pre
                     if pre is None or pre.wav != wav:
                         self._drop_pre()
-                        pre = self._start_precheck(pieces, wav)
+                        pre = self._start_precheck(pieces, wav, utt_fut)
                     pre.at = now
                     self._note_wait()
                     self._decide_precheck(pre)
                     continue
-                self.start_turn(wav, end=now, pieces=pieces)
+                self.start_turn(wav, end=now, pieces=pieces, asr_pre=self._asr_task(utt_fut, wav, pieces))
 
     async def _api_hangup(self) -> None:
         """Vobiz keeps the call up after the stream closes (keepCallAlive), so it is hung up through its API when the agent
         ended the call: the agent said goodbye, an answering machine, the time limit, a promised callback
         (DELETE .../Call/{uuid}/, https://www.vobiz.ai/docs/call/hangup-call.md). Best effort, never raises."""
-        if self.end_reason not in ("ended_by_agent", "voicemail", "time_limit", "callback_promised") or not self.call_sid:
-            return
+        if self.end_reason not in ("ended_by_agent", "voicemail", "time_limit", "callback_promised") or not self.call_sid \
+                or getattr(self, "text_mode", False):
+            return   # (a text-only rehearsal has no carrier call)
         try:
             provider = registry.provider(self.provider_name)
             if not provider.api_hangup:
@@ -1448,6 +1679,12 @@ class CallSession:
                     log.info("phone call hit the %ss limit", max_s)
                     self.end_reason = "time_limit"
                     break
+                if self.text_mode and '"rehearsal_text"' in raw:
+                    try:
+                        await self.on_text(json.loads(raw).get("text"))
+                    except (ValueError, AttributeError):
+                        pass
+                    continue
                 ev = self.codec.parse(raw)
                 if ev is None:
                     continue
@@ -1470,6 +1707,10 @@ class CallSession:
                 await self._cancel_speculation()
             self._drop_pre()
             await self.stop_turn()
+            if self.rec is not None:
+                await self.rec.aclose()
+            if self._warm_calendar_task is not None:
+                self._warm_calendar_task.cancel()
             await self._api_hangup()
             g = self.greeting
             self.tap({"type": "ended"})
@@ -1776,6 +2017,9 @@ async def dial(b, agent: dict, user_id: str, mode: str, to: str, origin: Optiona
     # While Vobiz dials and the phone rings: render the greeting and warm up the first reply, in the background.
     phone_greeting.schedule_prepare(b, agent, user_id, mode, warm=True,
                                     **({"callback": True} if origin == "missed_call" else {}))
+    # a number we have met has its own greeting (name, last booking): made now, ready when the phone is answered
+    phone_greeting.schedule_personal(b, agent, user_id, mode, normalise_number(to) or "",
+                                     **({"callback": True} if origin == "missed_call" else {}))
     prov = registry.provider()
     account = prov.account()
     if account is None:

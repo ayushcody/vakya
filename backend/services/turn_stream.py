@@ -36,6 +36,11 @@ except ImportError:  # pragma: no cover
 
 log = logging.getLogger("vakya")
 
+def presynth_on() -> bool:
+    """PHONE_PRESYNTH=on|off (default on): start each sentence's speech as soon as it is written."""
+    return (os.getenv("PHONE_PRESYNTH", "on") or "on").strip().lower() not in ("off", "0", "false", "no")
+
+
 SENTENCE_GAP_S = 0.08  # silence between sentences in the stitched full reply
 HINGLISH_GRACE_S = 0.5  # how long the speech task waits for a background Devanagari rendering of a later sentence
 _STREAM_TURN_OWNERS: "collections.OrderedDict[str, str]" = collections.OrderedDict()  # turn id -> user id
@@ -46,14 +51,15 @@ _DISCLOSURE_CLIPS: Dict[tuple, Tuple[np.ndarray, int]] = {}  # (engine, language
 # renders each once per language (the voice follows the language) and the audio is kept in memory. Hinglish is spoken by
 # the Hindi voices, so it uses the Hindi fillers.
 FILLER_TEXTS: Dict[str, List[str]] = {
-    "en": ["One moment.", "Let me check."],
-    "hi": ["एक सेकंड।", "देखती हूँ।"],
+    "en": ["One moment.", "Let me check.", "Just a second.", "Bear with me a moment."],
+    "hi": ["एक सेकंड।", "देखती हूँ।", "जी, एक पल।", "बस एक क्षण।", "जी, देखती हूँ।"],
 }
 
 
 CLIP_CACHE_MAX = 64
 _FILLER_CLIPS: Dict[tuple, Tuple[np.ndarray, int]] = {}  # (engine, tts language, text) -> audio
 FILLER_PREPARE_S = 0.12  # how long before its deadline the filler's audio is prepared (the WAV takes ~30 ms)
+FILLER_CONTEXT_PREPARE_S = 0.9  # a filler with the caller's day and time in it is spoken fresh (Timbre ~0.5 to 0.9 s): made ahead
 _FILLER_LAST: "collections.OrderedDict[str, int]" = collections.OrderedDict()  # conversation id -> last filler index
 
 
@@ -63,13 +69,41 @@ def _filler_enabled() -> bool:
 
 def filler_after_s(source: Optional[str] = None) -> float:
     """How long after the transcript the answer may take before a filler plays: FILLER_AFTER_MS (default 900), or for a
-    phone call (`source` "phone") PHONE_FILLER_AFTER_MS (default 500): a caller on the line hears silence as a dropped
-    call far sooner than a person at a screen does."""
-    name, default = ("PHONE_FILLER_AFTER_MS", "500") if source == "phone" else ("FILLER_AFTER_MS", "900")
+    phone call (`source` "phone") PHONE_FILLER_AFTER_MS (default 1500). A phone turn's real words normally start 1.5 to 2.5 s
+    after the transcript, and a filler that is a second long only delays them when they are already on their way (a
+    filler is skipped once the model has started), so it is kept for the turns that are really slow."""
+    name, default = ("PHONE_FILLER_AFTER_MS", "1500") if source == "phone" else ("FILLER_AFTER_MS", "900")
     try:
         return max(0.0, float(os.getenv(name, default))) / 1000.0
     except ValueError:
         return float(default) / 1000.0
+
+
+_FILLER_CONTEXTUAL: "collections.OrderedDict[str, bool]" = collections.OrderedDict()   # conversation id -> the last filler was contextual
+
+
+def contextual_filler(run: TurnRun, conversation_id: Optional[str]) -> Optional[str]:
+    """A filler that shows the caller was understood, built from the day and time they just named ("बुधवार शाम 5 बजे... एक
+    सेकंड।"), or None: nothing was named this turn, the language has no template, or the last filler of the call was one
+    too (the next is then a plain one: never two alike in a row)."""
+    found = getattr(run, "caller_found", None) or {}
+    form = getattr(run, "caller_form", None) or {}
+    if not (found.get("date") or found.get("time")) or _FILLER_CONTEXTUAL.get(conversation_id or "", False):
+        return None
+    lang = {"hi": "hi", "hinglish": "hi", "mr": "mr", "en": "en"}.get(run.language)
+    if lang is None:
+        return None
+    try:
+        from services import readback  # noqa: PLC0415
+        day = readback._date(form.get("date")) if found.get("date") or form.get("date") else None
+        at = readback._time(form.get("time")) if form.get("time") else None
+    except Exception:  # noqa: BLE001
+        return None
+    words = readback.when_words(day, at, lang)
+    if not words:
+        return None
+    tail = {"en": "one moment.", "hi": "एक सेकंड।", "mr": "एक क्षण."}[lang]
+    return f"{words}... {tail}"
 
 
 def pick_filler(language: str, conversation_id: Optional[str]) -> Optional[str]:
@@ -147,6 +181,15 @@ def prune_sentence_clips() -> None:
         pass
 
 
+_DIRECTION_RE = re.compile(r"\[[^\]\n]{0,200}\]\s*")
+
+
+def strip_directions(text: str) -> str:
+    """`text` without [square bracket] stage directions ("[Calling book now with the caller's details]"): a reply is spoken
+    aloud, so nothing in brackets is ever meant for the caller."""
+    return _DIRECTION_RE.sub("", text or "").strip()
+
+
 async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Optional[str], turn_id: str):
     """The streaming turn as server-sent events: transcript, sentence (one per spoken sentence), then done or error.
 
@@ -178,10 +221,12 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
         The clip is prepared a little ahead of the deadline (voice plan, WAV), so it leaves at the deadline
         instead of one preparation later; the guards are checked again after that, with no await before the event."""
         try:
-            lead = min(FILLER_PREPARE_S, max(0.0, deadline - time.time() - 0.05))
+            await asyncio.sleep(max(0.0, deadline - FILLER_CONTEXT_PREPARE_S - 0.1 - time.time()))   # (the caller's words are read by now)
+            context_text = contextual_filler(run, conversation_id or run.conversation_id)
+            lead = min(FILLER_CONTEXT_PREPARE_S if context_text else FILLER_PREPARE_S, max(0.0, deadline - time.time() - 0.05))
             await asyncio.sleep(max(0.0, deadline - lead - time.time()))
-            if not gnani.configured():
-                return   # no Gnani key: no voice to speak a filler with
+            if not gnani.configured() or run.text_only:
+                return   # no Gnani key (or a text-only rehearsal): no voice to speak a filler with
             if fstate["claimed"] or fstate["closed"] or fstate["answer_started"]:
                 return
             discloses_now = fstate["discloses"]
@@ -189,9 +234,14 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                 discloses_now = run.agent.get("disclose_ai") is not False and not conversation_id
             if discloses_now or run.agent.get("voice_id"):
                 return  # (a cloned voice: its turns get no filler)
-            text = pick_filler(run.language, conversation_id or run.conversation_id)
+            text = context_text or pick_filler(run.language, conversation_id or run.conversation_id)
             if text is None:
                 return
+            key_c = conversation_id or run.conversation_id or ""
+            _FILLER_CONTEXTUAL[key_c] = bool(context_text)
+            _FILLER_CONTEXTUAL.move_to_end(key_c)
+            while len(_FILLER_CONTEXTUAL) > 512:
+                _FILLER_CONTEXTUAL.popitem(last=False)
             spoken, tts_language = await turn_pipeline.turn_spoken(run.language, text, False, use_llm=False)
             plan = await turn_pipeline.turn_voice(run, tts_language, True)  # the fast preset path, like the canned fallback line
             key = (plan.engine_key, plan.tts_language, spoken)
@@ -233,6 +283,38 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
         if _filler_enabled():
             tasks.append(asyncio.create_task(filler_watch(time.time() + filler_after_s(run.source))))
 
+        def write_gate() -> bool:
+            """A speculative phone turn (routers/phone.py sets run.commit_gate) may read (check a time) while the caller's
+            pause is still being confirmed, but a tool that changes something waits here until the caller has really finished;
+            False when the turn was dropped meanwhile (the caller went on talking)."""
+            gate = getattr(run, "commit_gate", None)
+            if gate is None:
+                return True
+            while not gate.is_set():
+                if cancel.is_set():
+                    return False
+                time.sleep(0.02)
+            return not cancel.is_set()
+
+        prefetch_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="prefetch")
+
+        def start_prefetch() -> None:
+            """A booking request that names a day and a time: check the time now, beside the rest of the setup, so the language
+            model starts from the answer (tools.prefetch_reads). PHONE_PREFETCH=off turns it off."""
+            if (os.getenv("PHONE_PREFETCH", "on").strip().lower() in ("off", "0", "false", "no") or not run.tool_specs
+                    or run.canned is not None or not run.user_text or tools_mod.tool_protocol() == "native"
+                    or os.getenv("VAKYA_TOOL_STREAM", "on").strip().lower() in ("off", "0", "false")):
+                return   # (the streamed JSON tool loop is what starts from prefetched results)
+            previous = next((h["text_content"] for h in reversed(run.history) if h["role"] == "agent"),
+                            None) if run.history_known else None
+            last = run.history[-1] if run.history_known and run.history else None
+            last_calls = (last.get("tool_calls") or None) if last and last.get("role") == "agent" else None
+            kwargs = dict(form=getattr(run, "caller_form", None), found=getattr(run, "caller_found", None),
+                          book_intent=turn_pipeline.booking_request(run.user_text), previous_agent_text=previous,
+                          caller_text=run.user_text, known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())),
+                          last_agent_calls=last_calls, write_gate=write_gate, history=run.history)
+            run.prefetch_future = prefetch_pool.submit(lambda: tools_mod.prefetch_reads(run.tool_specs, **kwargs))
+
         async def setup() -> int:
             await turn_pipeline.turn_context(run, conversation_id, t)
             await turn_pipeline.turn_caller_memory(run)
@@ -245,6 +327,7 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                 return 0
             waited = time.time()
             await tools_task
+            start_prefetch()
             return int((time.time() - waited) * 1000)  # only the wait that the tools added counts as tools time
 
         # Conversation, retrieval and tools run in a task, so a filler can reach the caller while they are slow.
@@ -291,6 +374,7 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
             stream = None
             stopped = False
             sent = 0
+            said: List[str] = []
             answer_guard = grounding.guard_for_run(run, messages)  # ANSWER_GUARD (None when off)
 
             def emit(s: str) -> None:
@@ -300,6 +384,10 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                 nonlocal stopped, sent
                 if stopped:
                     return
+                s = strip_directions(s)   # "[Calling book now ...]": the model narrating a tool call is never spoken
+                if not s:
+                    return
+                said.append(s)
                 if run.tool_specs:
                     safe = tools_mod.guard_sentence(s, run.tool_objs, known_text)
                     if safe:
@@ -348,14 +436,44 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                     put(("llm_done", llm.StreamResult(tt.text, tt.provider or "", tt.model or "", llm_state["ms"], {},
                                                       llm_state["first_token_ms"])))
                     return
+                pre: List[Any] = []
+                prefetch = getattr(run, "prefetch_future", None)
+                if run.tool_specs and prefetch is not None:
+                    try:
+                        pre = prefetch.result(timeout=10.0) or []
+                    except Exception as e:  # noqa: BLE001 - no head start: the model asks for the tools itself
+                        log.warning("tool prefetch skipped: %r", e)
+                        pre = []
+                    for c in pre:
+                        run.emit_tool_start(c.name, c.arguments)
+                        run.tool_objs.append(c)
+                    line = ((tools_mod.pending_readback_line(pre, run.language, "") or tools_mod.booked_line(pre, run.language)
+                             or tools_mod.which_booking_line(pre, run.language))
+                            if pre else None)
+                    if line and os.getenv("PHONE_READBACK_SHORTCUT", "on").strip().lower() not in ("off", "0", "false", "no"):
+                        # A free time the caller asked to book, with their name and number known: the booking's read-back is
+                        # exactly what the model is told to say, so it is said without a model round (the same sentence the
+                        # tool gives; the caller's yes then passes the booking gate on the next turn).
+                        log.info("the booking read-back or confirmation is spoken from the tool result (no model round)")
+                        run.timings["guard"] = "readback_shortcut"
+                        llm_state["first_token_ms"] = 0
+                        fstate["answer_started"] = True
+                        said.append(line)
+                        again = sentences_mod.turn_splitter()    # in clauses: the first one is voiced while the rest is made
+                        for piece in [*again.feed(line), *again.flush()]:
+                            put(("sentence", piece))
+                        llm_state["ms"] = 0
+                        llm_state["done"] = True
+                        put(("llm_done", llm.StreamResult(line, "", "", 0, {}, 0)))
+                        return
                 if run.tool_specs:
                     previous = next((h["text_content"] for h in reversed(run.history) if h["role"] == "agent"),
                                     None) if run.history_known else None
-                    stream = tools_mod.ToolStream(messages, run.tool_specs, previous_agent_text=previous,
+                    stream = tools_mod.ToolStream(messages, run.tool_specs, previous_agent_text=previous, prefetched=pre,
                                                   known_text=known_text, timeout=stall_timeout,
                                                   total_timeout=llm_timeout, calls=run.tool_objs,
-                                                  known_slots=tools_mod.known_slots(run.history),
-                                                  caller_text=run.user_text)
+                                                  known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())),
+                                                  caller_text=run.user_text, write_gate=write_gate)
                 else:
                     stream = llm.chat_stream(messages, temperature=llm.answer_temperature(), max_tokens=160,
                                              timeout=stall_timeout, total_timeout=llm_timeout)
@@ -397,6 +515,13 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                     again = sentences_mod.turn_splitter(first_phrase=False)
                     for s in [*again.feed(fixed), *again.flush()]:
                         emit(s)
+                if run.tool_specs and not stopped:
+                    # A booking or move that was answered "read it back first" must be read back in what the caller hears,
+                    # whatever the model wrote: the caller's yes then passes the gate on the first try.
+                    line = tools_mod.pending_readback_line(run.tool_objs, run.language, " ".join(said))
+                    if line:
+                        log.info("the reply lacked the read-back; the tool's read-back sentence is spoken")
+                        emit(line)
                 llm_state["ms"] = int((time.time() - llm_started) * 1000)
                 llm_state["done"] = True
                 result = stream.result or llm.StreamResult("", getattr(stream, "provider", None) or "",
@@ -438,6 +563,35 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
             interrupted: Optional[BaseException] = None
             summary = None
             canned_cached: List[bool] = []  # per sentence of a canned reply: its audio came from the cache
+            # Each sentence's audio is started as soon as the model writes the sentence, not when the one before it has
+            # been made: a short first clause ("ठीक है।") used to play, then the line went quiet while the next sentence
+            # was synthesized (9 Nov 2026 demo call: "choppy, gaps between"). They are still played in order.
+            presynth: Dict[str, Tuple[str, "asyncio.Task"]] = {}
+            ordered: asyncio.Queue = asyncio.Queue()
+            feed: Optional["asyncio.Task"] = None
+
+            async def _presynth(text: str, spoken: str):
+                nonlocal main_plan
+                if main_plan is None:
+                    main_plan = await turn_pipeline.turn_voice(run, (await turn_pipeline.turn_spoken(
+                        run.language, text, False, use_llm=False, converted=None))[1], False)
+                return await speaking.turn_synth(main_plan, spoken)
+
+            async def feeder() -> None:
+                while True:
+                    item = await sentences.get()
+                    if item[0] == "sentence" and not run.text_only and run.canned is None and presynth_on():
+                        text = item[1]
+                        if text not in presynth and text not in conv_futures:   # a Hinglish sentence waits for its rendering
+                            try:
+                                spoken, _lang = await turn_pipeline.turn_spoken(run.language, text, False, use_llm=False,
+                                                                                converted=None)
+                                presynth[text] = (spoken, asyncio.ensure_future(_presynth(text, spoken)))
+                            except Exception:  # noqa: BLE001 - the sentence is made the usual way when its turn comes
+                                pass
+                    ordered.put_nowait(item)
+                    if item[0] != "sentence":
+                        return
 
             async def speak(text: str, *, disclosure: bool = False, as_fallback: bool = False) -> None:
                 nonlocal tts_ms, first_audio_ms, first_answer_audio_ms, main_plan, fb_plan, clip_sr, canned_cached
@@ -468,10 +622,10 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                 # caller hears it as soon as speech recognition is done (it is labelled afresh each turn).
                 cache_key = (plan.engine_key, plan.tts_language, plan.voice_id if plan.clone_required else None,
                              spoken)
-                cached = _DISCLOSURE_CLIPS.get(cache_key) if disclosure else None
+                cached = _DISCLOSURE_CLIPS.get(cache_key) if (disclosure and not run.text_only) else None
                 if cached is not None:
                     wav, sr = cached
-                elif run.canned is not None and not disclosure and not as_fallback:
+                elif run.canned is not None and not disclosure and not as_fallback and not run.text_only:
                     # A canned reply is the same words every time: its sentences are rendered once per voice
                     # (services/canned_reply.cached_audio) and used as it is below, like every other clip.
                     async def render(plan=plan, spoken=spoken):
@@ -480,7 +634,21 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                     canned_cached.append(was_cached)
                 else:
                     try:
-                        wav, sr = await speaking.turn_synth(plan, spoken)
+                        if run.text_only:   # a rehearsal: nothing is spoken, the sentence goes out as text
+                            raise AppError("PROVIDER_NOT_CONFIGURED", "Text-only turn: no speech synthesis.", 503)
+                        early = presynth.pop(text, None) if not disclosure and not as_fallback else None
+                        wav = None
+                        if early is not None and early[0] == spoken:
+                            try:
+                                wav, sr = await early[1]
+                            except AppError:
+                                raise
+                            except Exception:  # noqa: BLE001 - made again below
+                                wav = None
+                        elif early is not None:
+                            early[1].cancel()
+                        if wav is None:
+                            wav, sr = await speaking.turn_synth(plan, spoken)
                     except AppError as e:
                         if e.code != "PROVIDER_NOT_CONFIGURED" or run.text_input is None:
                             raise
@@ -526,8 +694,9 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                 if discloses:
                     await speak(agent_prompt.ai_disclosure(run.language), disclosure=True)
                 spoke_answer = False
+                feed = asyncio.ensure_future(feeder())
                 while True:
-                    kind, payload = await sentences.get()
+                    kind, payload = await ordered.get()
                     if kind == "sentence":
                         await speak(payload)
                         spoke_answer = True
@@ -638,6 +807,10 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                                                                                   "turn"}))
             finally:
                 fstate["closed"] = True
+                if feed is not None and not feed.done():
+                    feed.cancel()
+                for _spoken, early in presynth.values():   # sentences made ahead that were never played (barge-in)
+                    early.cancel()
                 out.put_nowait(None)
 
         tasks.append(asyncio.create_task(speech_task()))
@@ -672,3 +845,6 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
         pool = locals().get("conv_pool")
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
+        pf = locals().get("prefetch_pool")
+        if pf is not None:
+            pf.shutdown(wait=False, cancel_futures=True)

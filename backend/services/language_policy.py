@@ -98,6 +98,16 @@ def supported_codes(supported: Optional[Sequence[str]]) -> List[str]:
     return codes or ["en"]
 
 
+def _marathi_markers(text: str) -> bool:
+    """Devanagari that carries Marathi-only function words (मला, आहे, वाजता, हो ...) and more of them than Hindi ones."""
+    try:
+        from services import call_events  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - package-style imports
+        from backend.services import call_events  # noqa: PLC0415
+    label, sure = call_events.devanagari_language(text)
+    return bool(sure and label == "mr")
+
+
 def detect_language(user_text: str, supported: Optional[Sequence[str]] = None) -> str:
     """The language of one caller turn: "hi" (Devanagari), another Indian script's code, "hinglish" (Roman Hindi), "en".
     A turn with no letters falls back to the agent's first language."""
@@ -107,6 +117,8 @@ def detect_language(user_text: str, supported: Optional[Sequence[str]] = None) -
     if indic:
         lang = max(indic, key=indic.get)
         if lang == "hi" and "mr" in codes and "hi" not in codes:
+            lang = "mr"
+        elif lang == "hi" and "mr" in codes and _marathi_markers(user_text):
             lang = "mr"
         return lang
     other = {c: n for c, n in counts.items() if c not in INDIC_CODES and c != "latin" and c in codes}
@@ -337,7 +349,7 @@ def decide(user_text: str, supported: Optional[Sequence[str]] = None, sticky: Op
         # The call has a language already (the agent's last reply). A turn changes it only when it is a clear sentence in
         # another language; a short or ambiguous one ("yeah", "या", "ok", "हाँ", a phone number) keeps the call's language.
         prev = detect_language(previous_agent_text, codes)
-        if prev != base and (_is_ultra_short(user_text) and base in ("en", codes[0])
+        if prev != base and (_is_ultra_short(user_text)
                              or not is_clear_language_turn(user_text, base)):
             return LanguageDecision(prev, None, False, req, unsupported, "inherit")
     return LanguageDecision(base, None, False, req, unsupported, "script" if (user_text or "").strip() else "default")
@@ -503,3 +515,34 @@ def regen_messages(messages: List[dict], target_name: str, draft: Optional[str] 
         msgs += [{"role": "assistant", "content": draft},
                  {"role": "user", "content": f"Say exactly that again, in {target_name} only."}]
     return msgs
+
+
+# ------------------------------------------------------------------------------------------------ phone transcripts
+
+# Indian scripts share one layout (the ISCII order), so a letter of Kannada, Malayalam, Gujarati, Punjabi, Bengali, Telugu
+# or Odia sits at the same offset in its block as the Devanagari letter with that sound. On a noisy 8 kHz line Prisma's
+# automatic language guess sometimes writes a Hindi "हाँ" as "ಹಾಂ" or "ആ" (9 Nov 2026 demo takes); this puts such a turn back
+# into Devanagari when the agent does not speak that language, so yes/no and times are understood and the reply stays Hindi.
+_ISCII_BLOCKS = {"bn": 0x0980, "pa": 0x0A00, "gu": 0x0A80, "or": 0x0B00, "ta": 0x0B80, "te": 0x0C00, "kn": 0x0C80,
+                 "ml": 0x0D00}
+
+
+_OTHER_INDIC = re.compile("[\u0980-\u0DFF]")
+
+
+def to_devanagari(text: str, supported: Optional[Sequence[str]] = None) -> str:
+    """`text` with the letters of an Indian script the agent does not speak mapped to Devanagari (unchanged otherwise)."""
+    if not text or not _OTHER_INDIC.search(text):
+        return text
+    codes = set(supported_codes(supported)) if supported else {"hi", "mr", "en"}
+    if not ({"hi", "mr"} & codes):
+        return text
+    out = []
+    for ch in text:
+        cp = ord(ch)
+        base = next((b for code, b in _ISCII_BLOCKS.items() if b <= cp < b + 0x80 and code not in codes), None)
+        if base is not None:
+            mapped = 0x0900 + (cp - base)
+            ch = chr(mapped) if unicodedata.category(chr(mapped)) != "Cn" else ch
+        out.append(ch)
+    return unicodedata.normalize("NFC", "".join(out))

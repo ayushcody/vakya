@@ -73,6 +73,16 @@ def send_delay_s() -> float:
     return _float("WHATSAPP_SEND_DELAY_S", 30.0)
 
 
+def instant_s() -> float:
+    """WHATSAPP_INSTANT_S (default 1): with consent given, a change is sent this long after the agent acts, while the call is
+    still on, instead of after the hang-up. Set WHATSAPP_INSTANT=off to go back to one message after the call."""
+    return _float("WHATSAPP_INSTANT_S", 1.0)
+
+
+def instant_on() -> bool:
+    return os.getenv("WHATSAPP_INSTANT", "on").strip().lower() not in ("off", "0", "false", "no")
+
+
 def backstop_s() -> float:
     return _float("WHATSAPP_BACKSTOP_S", 300.0)
 
@@ -492,7 +502,10 @@ def _booking_changed(kind: str, booking: dict, previous: Optional[dict], source:
         item["business"] = (agent or {}).get("name") or booking.get("schedule_name") or "Vakya"
         item["changed_at"] = _now()
         ended = cid is not None and cid in _ended
-        item["send_at"] = _now() + (send_delay_s() if (staff or ended) else backstop_s())
+        if instant_on() and consent and consent.get("agreed"):
+            item["send_at"] = _now() + instant_s()      # sent while the caller is still on the line
+        else:
+            item["send_at"] = _now() + (send_delay_s() if (staff or ended) else backstop_s())
         data["items"][iid] = item
         ask = False
         if not consent and not staff:
@@ -536,7 +549,15 @@ def _record_consent(agreed: bool) -> dict:
                     if t:
                         t.cancel()
                     _log(data, it, "skipped", reason="the caller said no to WhatsApp")
+        rearm = []
+        if agreed and instant_on():
+            for iid, it in data["items"].items():
+                if it.get("phone") == phone and not it.get("sent"):
+                    it["send_at"] = min(float(it.get("send_at") or 1e18), _now() + instant_s())
+                    rearm.append((iid, it["send_at"]))
         _save(data)
+        for iid, at in rearm:
+            _arm(iid, at)
         return {"status": "recorded", "agreed": agreed, "number_ending": phone[-4:]}
 
 

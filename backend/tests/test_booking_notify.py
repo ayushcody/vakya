@@ -28,6 +28,7 @@ def wa(monkeypatch):
     monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", TOKEN)
     monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "100200300")
     monkeypatch.setenv("WHATSAPP_SEND_DELAY_S", "30")
+    monkeypatch.setenv("WHATSAPP_INSTANT", "off")      # these tests cover the one-message-after-the-call mode
     class Sent(list):
         fail = {"error": None}
     sent = Sent()
@@ -347,3 +348,17 @@ def test_a_scheduling_tool_on_a_call_is_bound_to_that_call():
     before = bn.current_call_id()
     tp._observed(spec, run).runner("book", {})
     assert seen == ["conv-7"] and bn.current_call_id() == before
+
+
+def test_instant_mode_sends_while_the_call_is_on(wa, monkeypatch):
+    """WHATSAPP_INSTANT on (the default): once the number agreed, each change goes ~1 s after the agent acts, before the
+    hang-up; a later cancel on the same call is its own message."""
+    monkeypatch.setenv("WHATSAPP_INSTANT", "on")
+    monkeypatch.setenv("WHATSAPP_INSTANT_S", "1")
+    agree_first(wa)
+    wa.clear()
+    bn.bind_call("live-1")
+    assert bn.booking_changed("booked", booking(booking_id="B9")) == {"status": "queued"}
+    assert bn.flush_due(time.time() + 2) == 1 and len(wa) == 1          # no call_ended() needed
+    assert bn.booking_changed("cancelled", booking(booking_id="B9", version=2), booking(booking_id="B9")) == {"status": "queued"}
+    assert bn.flush_due(time.time() + 2) == 1 and len(wa) == 2

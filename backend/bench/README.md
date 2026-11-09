@@ -22,6 +22,7 @@ a tiny version for checking that it runs; quick numbers mean nothing and are fla
 | Script | What it measures | Full run |
 | --- | --- | --- |
 | `latency.py` | Spoken-turn latency: a spoken question in, the full reply audio ready (`--stream`: time to first audio) | `backend/.venv/bin/python backend/bench/latency.py` |
+| `phone_rehearsal.py` | A whole phone call driven through the real phone code: with `--audio` the caller's lines are spoken by Timbre, degraded to 8 kHz mu-law and streamed as Vobiz media frames in real time (recognition, end of speech, speculative start, tools and speech synthesis all run), and each turn is timed from the end of the caller's speech to the first audio and to the first real words (not a filler); without it the lines go in as text. `--cancel-created` cancels the bookings the call made | `backend/.venv/bin/python backend/bench/phone_rehearsal.py --agent <id> --caller +91... --audio --cancel-created` |
 | `phone_latency.py` | The phone WebSocket, without a phone call: start to greeting, end of speech to first reply byte | `backend/.venv/bin/python backend/bench/phone_latency.py --agent <id>` |
 | `soak.py` | Stability: 45 minutes of mixed requests, memory trend, crashes | `backend/.venv/bin/python backend/bench/soak.py` |
 | `leak_hunt.py` | The API process under a mixed load with the Gnani calls and the language model faked (no credits spent): RSS and unique-set-size slope, `--tracemalloc` shows what grew | `backend/.venv/bin/python backend/bench/leak_hunt.py --minutes 12` |

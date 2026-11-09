@@ -69,6 +69,7 @@ class TurnRun:
         self.is_test = False              # a simulated "Test call" by the owner: kept out of Analytics
         self.source: Optional[str] = None  # where the call came from, stored on a new conversation ("web", "phone")
         self.text_input: Optional[str] = None  # what the caller said, when it is already text (a typed question): no ASR
+        self.text_only = False            # no speech synthesis at all: replies stay text (the phone rehearsal, bench/phone_rehearsal.py)
         self.reply_audio: Optional[bytes] = None  # the labelled reply audio (WAV) of a blocking turn (empty for a text-only reply)
         self.agent: dict = {}
         self.user_text = ""
@@ -200,6 +201,25 @@ async def asr_for_turn(run: Any, file_bytes: bytes) -> Tuple[str, dict]:
     return user_text, hints
 
 
+async def asr_from_stream(run: Any, text: str, language_code: Optional[str]) -> Tuple[str, dict]:
+    """The speech recognition of a phone turn that the call's realtime stream already made (services/phone_asr.py):
+    (text, hints) as `asr_for_turn` returns them, without a request. The hints are the turn's own (for the confidence
+    step, the learnt names and the events); Prisma was not given them, which is the price of the stream (it cannot carry
+    keyterms or the desk's corrections)."""
+    qu = asr.qu_module()
+    hints = qu.turn_asr_hints(run.agent, run.user_id, run.storage_mode)
+    gnani_turn_hints(run, hints, qu)
+    fixed = gnani.collapse_spelled_acronyms(text or "")
+    hints["detected_language"] = gnani.two_letter(language_code)
+    hints["detected_language_code"] = language_code
+    hints["prompt_used"] = False
+    hints["segments"] = None
+    hints["provider"] = "gnani"
+    hints["streamed"] = True
+    hearing.after_transcript(hints, fixed)
+    return fixed, hints
+
+
 def _clean_heard(run: Any, text: str) -> str:
     """What the caller said, without identity numbers (Aadhaar, PAN, card, OTP: services/id_redact.py). Everything after
     this (the stored turn, the events, the kept utterance, the caller details, the logs and the model) sees the cleaned
@@ -230,7 +250,7 @@ async def turn_asr(run: TurnRun, file_bytes: bytes) -> float:
         # A phone call already sent this very recording to speech recognition (to see whether the caller had finished
         # giving details, routers/phone.py): its result is this turn's, with the hints it was made under.
         try:
-            user_text, hints = await pre
+            user_text, hints = await (asyncio.shield(pre) if isinstance(pre, asyncio.Future) else pre)
             h = (hints or {}).get("_hearing")
             if isinstance(h, dict) and not callable(h.get("emit")) and callable(getattr(run, "emit", None)):
                 h["emit"] = run.emit        # made before the turn began: its "Listening for" event goes out now
@@ -437,6 +457,11 @@ _INFO_QUESTION = re.compile(
     re.IGNORECASE)
 _BOOK_INTENT = re.compile(r"\b(?:book|booking|appointment|appointments|slot|schedule|reschedule|cancel|postpone)\b|बुक|अपॉइंटमेंट|अपॉइन्टमेंट|एपॉइंटमेंट",
                          re.IGNORECASE)
+def booking_request(user_text: str) -> bool:
+    """Does the caller ask to book something ("appointment", "book", "बुक", "अपॉइंटमेंट")?"""
+    return bool(_BOOK_INTENT.search(user_text or ""))
+
+
 MAX_STEP_WORDS = 8
 _BOOKING_STATUS = re.compile(r"\b(?:did you (?:do|book|make|confirm|finish)|is it (?:done|booked|confirmed)|have you (?:done|booked|confirmed)|"
                              r"(?:it|that|booking) (?:is|got) (?:done|booked|confirmed))\b", re.IGNORECASE)
@@ -583,7 +608,7 @@ def tool_turn(run: TurnRun, messages: List[dict], timeout: float) -> "tools_mod.
     known = " ".join(h["text_content"] for h in run.history) + " " + run.user_text
     return tools_mod.run_tool_turn(messages, run.tool_specs, previous_agent_text=previous, known_text=known,
                                    timeout=timeout, calls=run.tool_objs,
-                                   known_slots=tools_mod.known_slots(run.history), caller_text=run.user_text)
+                                   known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())), caller_text=run.user_text)
 
 
 def tool_records(run: TurnRun) -> List[dict]:
@@ -605,7 +630,7 @@ def turn_slots(run: TurnRun) -> Dict[str, str]:
     tools is told, by the tool loop, and only what its tool calls had."""
     if not caller_memory.enabled():
         return {}
-    return caller_memory.prompt_slots(getattr(run, "caller_form", None), tools_mod.known_slots(run.history),
+    return caller_memory.prompt_slots(getattr(run, "caller_form", None), tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())),
                                       caller_memory.schema_for(getattr(run, "agent", None)))
 
 
@@ -627,6 +652,10 @@ async def turn_caller_memory(run: TurnRun) -> None:
         found = caller_memory.extract(run.user_text, previous, schema=caller_memory.schema_for(getattr(run, "agent", None)))
         run.caller_found = dict(found)   # which details this very utterance supplied (booking evidence)
         run.caller_form = caller_memory.merge(stored, found)
+        if found.get("date") and not found.get("time") and tools_mod.last_check_refused(run.history):
+            # a new day after a time that was not free: that time does not come along (it was the reason for the offer)
+            run.caller_form.pop("time", None)
+            run.dropped_slots = ("time",)
         if found:
             log.info("caller details: read %s from the caller's words (conversation %s)", ", ".join(sorted(found)),
                      run.conversation_id)

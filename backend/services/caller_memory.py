@@ -587,6 +587,9 @@ def _extract_when(text: str, asked: "turn_taking.Asked", now: datetime) -> Dict[
     if time_cue or ("time" in asked.kinds and len(t_time.split()) <= 4):
         res = when.resolve_time(t_time)
         if res.time is not None:
+            whole = when.resolve_time(text).time   # with its sentence breaks: "शाम की booking नहीं। सुबह ग्यारह बजे" is 11 am
+            if whole is not None and whole.minute == res.time.minute and abs(whole.hour - res.time.hour) == 12:
+                res.time = whole
             out["time"] = res.time.strftime("%H:%M")
     t_nodate = _RELATIVE.sub(" ", t)
     res_d = when.resolve_date(t_nodate, now)

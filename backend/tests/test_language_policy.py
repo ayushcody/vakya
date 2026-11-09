@@ -32,7 +32,11 @@ def test_detect_language_of_a_caller_turn(text, expected):
 
 def test_devanagari_is_marathi_only_for_a_marathi_agent():
     assert lp.detect_language("आज किती वाजता उघडते", ["mr", "en"]) == "mr"
-    assert lp.detect_language("आज किती वाजता उघडते", ["mr", "hi"]) == "hi"
+    # an agent with both: Marathi function words make it Marathi, Hindi (or no marker) stays Hindi
+    assert lp.detect_language("आज किती वाजता उघडते", ["mr", "hi"]) == "mr"
+    assert lp.detect_language("मला शुक्रवारी संध्याकाळी पाच वाजता appointment हवी आहे", EN_HI + ["mr"]) == "mr"
+    assert lp.detect_language("आज कितने बजे खुलता है", ["mr", "hi"]) == "hi"
+    assert lp.detect_language("मुझे शुक्रवार शाम पाँच बजे चाहिए", EN_HI + ["mr"]) == "hi"
 
 
 def test_other_scripts_only_count_when_the_agent_supports_them():

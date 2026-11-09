@@ -227,10 +227,10 @@ _YES = re.compile(
     r"haan|han|haa|haanji|hanji|ha ji|haan ji|ji haan|ji|ha|hn|hmm haan|theek hai|thik hai|theek|thik|sahi hai|sahi|"
     r"chalega|chalegi|chalta hai|kar do|kar dijiye|kar dijie|kardo|kar de|karo|pakka|bilkul|"
     r"ho|hoy|hoye|ho chalel|chalel|thik aahe|theek aahe|barobar|bara|"
-    r"हाँ|हां|हा|हाँ जी|हां जी|जी|जी हाँ|जी हां|ठीक है|ठीक|सही है|सही|चलेगा|चलेगी|चलता है|कर दो|कर दीजिए|कर दीजिये|करो|"
+    r"हाँ|हां|हा|हँ|हं|हूँ|हाँजी|हांजी|यस|येस|ओके|ओक|हाँ जी|हां जी|जी|जी हाँ|जी हां|ठीक है|ठीक|सही है|सही|चलेगा|चलेगी|चलता है|कर दो|कर दीजिए|कर दीजिये|करो|"
     r"बुक करो|बुक कर दो|बुक कर दीजिए|पक्का|बिल्कुल|बिलकुल|हो|होय|होये|हो चालेल|चालेल|ठीक आहे|बरोबर|बरं|बर|"
     r"go ahead|go on|please do|do it|book it|book kar do|book karo|that works|sounds good|that's right|thats right|"
-    r"that is right|that's correct|thats correct|that is correct|looks good|all good|all right|alright)(?=\s|$)")
+    r"that is right|that's correct|thats correct|that is correct|looks good|all good|all right|alright)(?=[\s।॥,.!?]|$)")
 _NO = re.compile(
     r"(?:^|\s)(?:no|nope|nah|not|don't|dont|do not|never|wait|stop|hold on|cancel|change|wrong|incorrect|instead|actually|"
     r"but|however|rather|different|another|other|"
@@ -304,6 +304,18 @@ _MONTHS = {"en": ("January", "February", "March", "April", "May", "June", "July"
                   "नोव्हेंबर", "डिसेंबर")}
 
 
+def when_words(day: Optional[Date], t: Optional[Time], lang: str) -> str:
+    """"बुधवार शाम 5 बजे" / "Wednesday 5 pm": the day and time a caller named, as they are said aloud (a filler that shows the
+    caller was understood: services/turn_stream.py). Empty when neither is given."""
+    lang = lang if lang in _WEEKDAYS else "en"
+    parts: List[str] = []
+    if day:
+        parts.append(_WEEKDAYS[lang][day.weekday()])
+    if t:
+        parts.append(_time_words(t, lang))
+    return " ".join(parts)
+
+
 def _time_words(t: Time, lang: str) -> str:
     h12 = t.hour % 12 or 12
     clock = f"{h12}:{t.minute:02d}" if t.minute else f"{h12}"
@@ -318,6 +330,36 @@ def _time_words(t: Time, lang: str) -> str:
 
 _WHATSAPP_CLAUSE = {"en": "and I'll send the confirmation on WhatsApp", "hi": "और मैं WhatsApp पर कन्फ़र्मेशन भेज दूँगी",
                     "mr": "आणि मी WhatsApp वर कन्फर्मेशन पाठवेन"}
+
+
+_BOOKED = {
+    "en": ("Booked.", "Your booking ID is {id}, {when}.", "Your token number is {token}.",
+           "The confirmation will be sent on WhatsApp."),
+    "hi": ("बुकिंग हो गई है।", "बुकिंग आईडी {id} है, {when}।", "आपका टोकन नंबर {token} है।",
+           "पुष्टि का संदेश WhatsApp पर भेजा जाएगा।"),
+    "mr": ("बुकिंग झाली आहे.", "बुकिंग आयडी {id} आहे, {when}.", "तुमचा टोकन नंबर {token} आहे.",
+           "पुष्टीचा संदेश WhatsApp वर पाठवला जाईल."),
+}
+
+
+def booked_sentence(lang: str, booking_id: str, day: Optional[Date], t: Optional[Time], token: Any = None,
+                    whatsapp: bool = False) -> str:
+    """What the caller hears when a booking has been made, in English, Hindi or Marathi: that it is booked, its id with the day,
+    date and time, the token number when the schedule gives one, and that the confirmation goes out on WhatsApp. The same
+    facts the language model is given by the tool; services/tools.py `booked_line` says when this may stand in for it."""
+    lang = lang if lang in _BOOKED else "en"
+    head, ident, tok, wa = _BOOKED[lang]
+    parts: List[str] = []
+    if day:
+        parts.append(f"{_WEEKDAYS[lang][day.weekday()]} {day.day} {_MONTHS[lang][day.month - 1]}")
+    if t:
+        parts.append(_time_words(t, lang))
+    out = [head, ident.format(id=booking_id, when=", ".join(parts))]
+    if token:
+        out.append(tok.format(token=token))
+    if whatsapp:
+        out.append(wa)
+    return " ".join(out)
 
 
 def sentences(args: Dict[str, Any], action: str = "book", whatsapp: bool = False) -> Dict[str, str]:
@@ -355,6 +397,23 @@ def sentences(args: Dict[str, Any], action: str = "book", whatsapp: bool = False
         bits = [x for x in (head, who, number) if x] + ([_WHATSAPP_CLAUSE[lang]] if whatsapp else [])
         out[lang] = ", ".join(bits) + ". " + ask
     return out
+
+
+def which_booking_sentence(lang: str, rows: List[Dict[str, Any]]) -> str:
+    """"You have two bookings: Tuesday 10 November at 6 pm and Thursday 12 November at 5 pm. Which one?" for a caller who asks to
+    change a booking and has more than one."""
+    heads = []
+    for r in rows[:4]:
+        d, t = _date(r.get("date")), _time(r.get("time"))
+        if d is None or t is None:
+            continue
+        heads.append(f"{_WEEKDAYS[lang][d.weekday()]} {d.day} {_MONTHS[lang][d.month - 1]} " + ("at " if lang == "en" else "") + _time_words(t, lang))
+    if len(heads) < 2:
+        return ""
+    listed = ", ".join(heads[:-1]) + {"en": " and ", "hi": " और ", "mr": " आणि "}[lang] + heads[-1]
+    return {"en": f"You have {len(heads)} bookings: {listed}. Which one should I change?",
+            "hi": f"आपकी {len(heads)} बुकिंग हैं: {listed}। कौन सी बदलनी है?",
+            "mr": f"तुमच्या {len(heads)} बुकिंग आहेत: {listed}. कोणती बदलू?"}[lang]
 
 
 def cancel_sentences(booking_id: str, day: Optional[Date], t: Optional[Time]) -> Dict[str, str]:

@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadonlyBanner } from "@/components/ReadonlyBanner";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { DeskSidebar } from "@/components/DeskSidebar";
@@ -86,6 +87,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
             <kbd className="font-sans text-[11px] opacity-70">{isMac ? "\u2318K" : "Ctrl K"}</kbd>
           </button>
           <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+          <ReadonlyBanner />
           <BookingAlerts />
           <MobileTabBar />
         </>
