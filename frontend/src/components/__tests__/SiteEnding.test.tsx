@@ -36,7 +36,7 @@ describe("landing ending", () => {
     render(<Footer />);
     const nav = screen.getByRole("navigation", { name: "Footer" });
     const hrefs = within(nav).getAllByRole("link").map((a) => a.getAttribute("href"));
-    for (const h of ["/home", "/how-it-works", "/report-card", "/run-it", "/faq", "/desk", "/desk/try", "/desk/calls", "/desk/report-card", "/verify"]) expect(hrefs).toContain(h);
+    for (const h of ["/", "/how-it-works", "/report-card", "/run-it", "/faq", "/desk", "/desk/try", "/desk/calls", "/desk/report-card", "/verify"]) expect(hrefs).toContain(h);
     expect(hrefs.filter((h) => h?.includes("github.com"))).toEqual([]);
     expect(within(nav).getByRole("link", { name: "Run it" })).toHaveAttribute("href", "/run-it");
   });

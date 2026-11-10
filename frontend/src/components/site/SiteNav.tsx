@@ -97,7 +97,7 @@ export function SiteNav() {
         className="s-container flex h-16 items-center gap-4 xl:gap-8"
         aria-label="Main"
       >
-        <Link href="/home" className="flex items-center" aria-label="Vakya home" aria-current={pathname === "/home" ? "page" : undefined}>
+        <Link href="/" className="flex items-center" aria-label="Vakya home" aria-current={pathname === "/" ? "page" : undefined}>
           <Logo size={30} />
         </Link>
         <LayoutGroup id="site-nav">

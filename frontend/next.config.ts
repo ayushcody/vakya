@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
       // The desk replaced the dashboard; the report card replaced the proof page.
       { source: "/dashboard", destination: "/desk", permanent: true },
       { source: "/proof", destination: "/report-card", permanent: true },
+      // The landing page was briefly at /home while the demo film had "/"; the film is now at /demo.
+      { source: "/home", destination: "/", permanent: false },
     ];
   },
 };

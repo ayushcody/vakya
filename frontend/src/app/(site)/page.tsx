@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     // replaces the file-based image that the root layout would otherwise have passed down.
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Vakya: call once, it's booked" }],
   },
-  alternates: { canonical: "/home" },
+  alternates: { canonical: "/" },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/opengraph-image"] },
 };
 

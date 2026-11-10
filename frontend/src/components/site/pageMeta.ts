@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 const SITE_NAME = "Vakya";
 
 /** Metadata for one marketing page: a unique title and description, a canonical path and matching social cards.
- *  The title is "<page> | Vakya"; Home keeps its own exact title in app/(site)/home/page.tsx. */
+ *  The title is "<page> | Vakya"; Home keeps its own exact title in app/(site)/page.tsx. */
 export function pageMetadata({ title, description, path }: { title: string; description: string; path: string }): Metadata {
   const full = `${title} | ${SITE_NAME}`;
   return {

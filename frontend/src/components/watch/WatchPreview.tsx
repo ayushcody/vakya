@@ -297,10 +297,10 @@ export function WatchPreview() {
       <style>{WATCH_CSS}</style>
 
       <header className="watch-gutter absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between sm:h-20">
-        <Link href="/home" aria-label="Vakya home" className="flex items-center">
+        <Link href="/" aria-label="Vakya home" className="flex items-center">
           <Image src="/brand/vakya-lockup-dark.svg" alt="Vakya" width={112} height={32} priority className="h-7 w-auto sm:h-8" />
         </Link>
-        <Link href="/home" className="watch-ghost inline-flex h-10 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium text-white">
+        <Link href="/" className="watch-ghost inline-flex h-10 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium text-white">
           Visit the site <ArrowRight className="size-4" aria-hidden />
         </Link>
       </header>
@@ -398,7 +398,7 @@ export function WatchPreview() {
               >
                 <Play className="size-4 fill-current" aria-hidden /> Watch the film
               </button>
-              <Link href="/home" className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-white px-5 text-sm font-semibold text-black hover:border-black/40">
+              <Link href="/" className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-white px-5 text-sm font-semibold text-black hover:border-black/40">
                 Visit the site <ArrowRight className="size-4" aria-hidden />
               </Link>
             </div>

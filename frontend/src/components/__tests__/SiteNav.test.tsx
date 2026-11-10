@@ -15,7 +15,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  mockPath = "/home";
+  mockPath = "/";
 });
 
 const ROUTES: Array<[string, string]> = [
@@ -33,7 +33,7 @@ describe("SiteNav", () => {
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
     expect(hrefs.filter((h) => h?.startsWith("#"))).toEqual([]);
     expect(bar.getByRole("link", { name: /open the desk/i })).toHaveAttribute("href", "/desk");
-    expect(bar.getByRole("link", { name: "Vakya home" })).toHaveAttribute("href", "/home");
+    expect(bar.getByRole("link", { name: "Vakya home" })).toHaveAttribute("href", "/");
   });
 
   it.each(ROUTES)("marks only %s as the current page", (href, label) => {
