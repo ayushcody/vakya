@@ -109,7 +109,9 @@ def test_a_yes_is_a_yes(said):
                                   "haan par 6 baje", "what time do you close", "is 8 pm free", "kal kar do", "hmm", "", "ok cancel",
                                   "no no not that", "नहीं रुको", "haan lekin dusra time", "yes my name is Anita and I want to change it"])
 def test_a_no_a_change_or_a_new_request_is_not(said):
-    assert not rb.is_affirmative(said, D, T), said
+    import datetime as _dt
+    day = D if D != _dt.date.today() + _dt.timedelta(days=1) else D + _dt.timedelta(days=7)   # "kal" must not be D itself
+    assert not rb.is_affirmative(said, day, T), said
 
 
 # ---------------------------------------------------------------------------------------------- in the tool loop
