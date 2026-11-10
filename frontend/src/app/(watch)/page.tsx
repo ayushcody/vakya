@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     images: [{ url: "/preview/poster.jpg", width: 1920, height: 1080, alt: "Vakya, an AI front desk that talks like your receptionist" }],
-    videos: [{ url: "/preview/vakya-demo.mp4", type: "video/mp4", width: 1920, height: 1080 }],
+    videos: [{ url: "/landing/demo.mp4", type: "video/mp4", width: 1920, height: 1080 }],
   },
   alternates: { canonical: "/" },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/preview/poster.jpg"] },
