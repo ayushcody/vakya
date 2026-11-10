@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { WatchPreview } from "@/components/watch/WatchPreview";
-import { FILM, MOMENTS, clock } from "@/components/watch/moments";
+import { FILM, MOMENTS, MORE_FILMS, clock } from "@/components/watch/moments";
 
 jest.mock("next/image", () => ({
   __esModule: true,
@@ -58,4 +58,30 @@ test("where a visitor stopped comes back as Resume", () => {
   render(<WatchPreview />);
   expect(screen.getByRole("button", { name: "Resume from 0:40" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /From the start/ })).toBeInTheDocument();
+});
+
+test("More films opens the animated real case and the short film in the same player, without touching the demo's resume", () => {
+  render(<WatchPreview />);
+  expect(screen.getByRole("heading", { name: "More films" })).toBeInTheDocument();
+  for (const f of MORE_FILMS) {
+    fireEvent.click(screen.getByRole("button", { name: `Play ${f.title}, ${clock(f.seconds)}` }));
+    const player = screen.getByRole("dialog", { name: f.label });
+    const v = player.querySelector("video")!;
+    expect(v).toHaveAttribute("src", f.src);
+    expect(v).toHaveAttribute("poster", f.poster);
+    expect(v.currentTime).toBe(0);
+    v.currentTime = 30;
+    fireEvent.pause(v);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  }
+  expect(localStorage.getItem("vakya-demo-position")).toBeNull();
+  expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+});
+
+test("the films' listed lengths are the files' own, and their ids are unique", () => {
+  expect(MORE_FILMS.map((f) => clock(f.seconds))).toEqual(["2:12", "0:59"]);
+  expect(new Set([FILM.id, ...MORE_FILMS.map((f) => f.id)]).size).toBe(1 + MORE_FILMS.length);
 });
