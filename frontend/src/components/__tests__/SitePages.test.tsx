@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import SiteLayout from "@/app/(site)/layout";
-import HomePage, { metadata as homeMeta } from "@/app/(site)/page";
+import HomePage, { metadata as homeMeta } from "@/app/(site)/home/page";
 import HowItWorksPage, { metadata as howMeta } from "@/app/(site)/how-it-works/page";
 import ReportCardPage, { metadata as reportMeta } from "@/app/(site)/report-card/page";
 import RunItPage, { metadata as runMeta } from "@/app/(site)/run-it/page";
@@ -48,7 +48,7 @@ beforeAll(() => {
 type Case = { path: string; page: () => ReactNode; h1: RegExp | string; navLabel: string | null; meta: { title?: unknown; description?: unknown } };
 
 const CASES: Case[] = [
-  { path: "/", page: () => <HomePage />, h1: /Call\s+once,\s*it's\s+booked\./, navLabel: null, meta: homeMeta },
+  { path: "/home", page: () => <HomePage />, h1: /Call\s+once,\s*it's\s+booked\./, navLabel: null, meta: homeMeta },
   { path: "/how-it-works", page: () => <HowItWorksPage />, h1: "From a ringing phone to a signed receipt.", navLabel: "How it works", meta: howMeta },
   { path: "/report-card", page: () => <ReportCardPage />, h1: "How it will hear a booking on a bad line.", navLabel: "Report card", meta: reportMeta },
   { path: "/run-it", page: () => <RunItPage />, h1: "Run it yourself.", navLabel: "Run it", meta: runMeta },
@@ -86,7 +86,7 @@ describe.each(CASES)("page $path", ({ path, page, h1, navLabel }) => {
 
 describe("page content", () => {
   it("Home reads as a submission page: hero, stack strip, demo slot, call flow, front desks, Gnani, report card, trust, limits, try-it, team", () => {
-    const { container } = renderAt("/", () => <HomePage />);
+    const { container } = renderAt("/home", () => <HomePage />);
     const ids = ["top", "demo", "call", "desks", "gnani", "measured", "trust", "limits", "start", "team"];
     for (const id of ids) expect(container.querySelector(`#${id}`)).not.toBeNull();
     // the sections come in reading order
@@ -139,7 +139,7 @@ describe("page content", () => {
     const { container } = renderAt("/faq", () => <FaqPage />);
     expect(container.querySelectorAll("details.faq-item").length).toBeGreaterThanOrEqual(8);
     expect(container.querySelector("section#start")).not.toBeNull();
-    expect(within(screen.getByRole("navigation", { name: "Next page" })).getByRole("link")).toHaveAttribute("href", "/");
+    expect(within(screen.getByRole("navigation", { name: "Next page" })).getByRole("link")).toHaveAttribute("href", "/home");
   });
 });
 
@@ -172,7 +172,7 @@ describe("routes, sitemap and robots", () => {
     for (const p of ALL_SITE_PAGES) expect(isSitePath(p.href)).toBe(true);
     expect(isSitePath("/faq/")).toBe(true);
     for (const p of ["/desk", "/desk/calls", "/verify", "/login", "/register", "/proof", "/channels", "/nope"]) expect(isSitePath(p)).toBe(false);
-    expect(nextPage("/")?.href).toBe("/how-it-works");
+    expect(nextPage("/home")?.href).toBe("/how-it-works");
     expect(nextPage("/run-it")?.href).toBe("/faq");
     expect(nextPage("/faq")).toBeUndefined();
   });
