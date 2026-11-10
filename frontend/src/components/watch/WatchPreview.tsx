@@ -3,13 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Info, Maximize, Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
-import { FILM, MOMENTS, MORE_FILMS, clock, type Film, type Moment, type MoreFilm } from "./moments";
+import { ArrowLeft, ArrowRight, Info, Maximize, Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
+import { FILM, MORE_FILMS, clock, type Film, type MoreFilm } from "./films";
 
 /**
  * The demo, presented like a title page: a silent teaser fills the top of the screen behind the film's name, Play opens the
- * full 3-minute film with sound, the Moments row jumps straight to any part of it, and More films opens the animated real
- * case and the short film in the same player. Vakya's own look throughout
+ * full 3-minute film with sound, and More films opens the animated real case and the short film in the same player.
+ * Vakya's own look throughout
  * (Gambarino titles, Inter text, black and off-white, the violet accent, 8 px buttons, #e6e6e6 lines); nothing from any
  * streaming service's brand. Where a visitor stopped is kept in this browser only, so Play can offer to resume.
  */
@@ -231,80 +231,25 @@ function Theatre({ film = FILM, start, onClose }: { film?: Film; start: number; 
   );
 }
 
-/* ------------------------------------------------------------------------------------------------ the moments row */
+/* ------------------------------------------------------------------------------------------------ more films */
 
-function MomentCard({ m, onPlay }: { m: Moment; onPlay: (at: number) => void }) {
+function FilmCard({ f, onPlay }: { f: MoreFilm; onPlay: (f: MoreFilm) => void }) {
   return (
     <li className="watch-card w-[15.5rem] shrink-0 snap-start sm:w-[18rem]">
-      <button type="button" onClick={() => onPlay(m.at)} className="group block w-full text-left" aria-label={`Play from ${clock(m.at)}: ${m.title}`}>
+      <button type="button" onClick={() => onPlay(f)} className="group block w-full text-left" aria-label={`Play ${f.title}, ${clock(f.seconds)}`}>
         <span className="relative block aspect-video overflow-hidden rounded-lg border border-[var(--s-night-line)] bg-black">
-          <Image src={m.still} alt="" fill sizes="(min-width: 640px) 18rem, 15.5rem" className="watch-still object-cover" />
+          <Image src={f.poster} alt="" fill sizes="(min-width: 640px) 18rem, 15.5rem" className="watch-still object-cover" />
           <span aria-hidden className="watch-play absolute inset-0 grid place-items-center">
             <span className="grid size-11 place-items-center rounded-full bg-white text-black">
               <Play className="size-4 translate-x-px fill-current" />
             </span>
           </span>
           <span className="absolute bottom-2 left-2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
-            {clock(m.at)}
-          </span>
-        </span>
-        <span className="mt-3 block text-[15px] font-semibold leading-snug text-white">{m.title}</span>
-        <span className="mt-1 block text-sm leading-snug text-[var(--s-night-mute)]">{m.line}</span>
-      </button>
-    </li>
-  );
-}
-
-function Moments({ onPlay }: { onPlay: (at: number) => void }) {
-  const row = useRef<HTMLUListElement>(null);
-  const scroll = (dir: number) => row.current?.scrollBy({ left: dir * row.current.clientWidth * 0.8, behavior: "smooth" });
-  return (
-    <section id="moments" aria-labelledby="moments-title" className="relative z-10 pb-16 md:-mt-36">
-      <div className="watch-gutter flex items-end justify-between gap-4">
-        <div>
-          <h2 id="moments-title" className="font-[family-name:var(--s-font-display)] text-[1.75rem] leading-tight text-white sm:text-[2rem]">
-            Moments
-          </h2>
-          <p className="mt-1 text-sm text-[var(--s-night-mute)]">Jump straight to any part of the film.</p>
-        </div>
-        <div className="hidden gap-2 sm:flex">
-          <button type="button" onClick={() => scroll(-1)} aria-label="Earlier moments" className="watch-ghost grid size-10 place-items-center rounded-lg text-white">
-            <ChevronLeft className="size-5" aria-hidden />
-          </button>
-          <button type="button" onClick={() => scroll(1)} aria-label="Later moments" className="watch-ghost grid size-10 place-items-center rounded-lg text-white">
-            <ChevronRight className="size-5" aria-hidden />
-          </button>
-        </div>
-      </div>
-      <ul ref={row} className="watch-row watch-gutter mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
-        {MOMENTS.map((m) => (
-          <MomentCard key={m.id} m={m} onPlay={onPlay} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------------------------------------ more films */
-
-function FilmCard({ f, onPlay }: { f: MoreFilm; onPlay: (f: MoreFilm) => void }) {
-  return (
-    <li className="watch-card min-w-0">
-      <button type="button" onClick={() => onPlay(f)} className="group block w-full text-left" aria-label={`Play ${f.title}, ${clock(f.seconds)}`}>
-        <span className="relative block aspect-video overflow-hidden rounded-lg border border-[var(--s-night-line)] bg-black">
-          <Image src={f.poster} alt="" fill sizes="(min-width: 768px) 40vw, 100vw" className="watch-still object-cover" />
-          <span aria-hidden className="watch-play absolute inset-0 grid place-items-center">
-            <span className="grid size-12 place-items-center rounded-full bg-white text-black">
-              <Play className="size-5 translate-x-px fill-current" />
-            </span>
-          </span>
-          <span className="absolute bottom-2 left-2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
             {clock(f.seconds)}
           </span>
         </span>
-        <span className="mt-3 block text-xs font-medium uppercase tracking-[0.12em] text-[var(--s-night-mute)]">{f.kicker}</span>
-        <span className="mt-1 block font-[family-name:var(--s-font-display)] text-[1.5rem] leading-tight text-white">{f.title}</span>
-        <span className="mt-1 block max-w-[34rem] text-sm leading-snug text-[var(--s-night-mute)]">{f.line}</span>
+        <span className="mt-3 block text-[15px] font-semibold leading-snug text-white">{f.title}</span>
+        <span className="mt-1 block text-sm leading-snug text-[var(--s-night-mute)]">{f.line}</span>
       </button>
     </li>
   );
@@ -312,18 +257,18 @@ function FilmCard({ f, onPlay }: { f: MoreFilm; onPlay: (f: MoreFilm) => void })
 
 function MoreFilms({ onPlay }: { onPlay: (f: MoreFilm) => void }) {
   return (
-    <section id="more-films" aria-labelledby="more-films-title" className="relative z-10 pb-20">
+    <section id="more-films" aria-labelledby="more-films-title" className="relative z-10 pb-16 md:-mt-36">
       <div className="watch-gutter">
         <h2 id="more-films-title" className="font-[family-name:var(--s-font-display)] text-[1.75rem] leading-tight text-white sm:text-[2rem]">
           More films
         </h2>
         <p className="mt-1 text-sm text-[var(--s-night-mute)]">The same real call, told two more ways.</p>
-        <ul className="mt-5 grid gap-6 md:grid-cols-2">
-          {MORE_FILMS.map((f) => (
-            <FilmCard key={f.id} f={f} onPlay={onPlay} />
-          ))}
-        </ul>
       </div>
+      <ul className="watch-row watch-gutter mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
+        {MORE_FILMS.map((f) => (
+          <FilmCard key={f.id} f={f} onPlay={onPlay} />
+        ))}
+      </ul>
     </section>
   );
 }
@@ -431,8 +376,6 @@ export function WatchPreview() {
           </div>
         </div>
       </section>
-
-      <Moments onPlay={open} />
 
       <MoreFilms onPlay={openFilm} />
 
