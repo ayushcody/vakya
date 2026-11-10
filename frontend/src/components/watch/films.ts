@@ -11,7 +11,7 @@ export interface Film {
 
 export const FILM = {
   id: "demo",
-  src: "/preview/vakya-demo.mp4",
+  src: "/landing/demo.mp4",   // the same film as the landing demo slot (one file, 15 MB)
   teaser: "/preview/teaser.mp4",
   poster: "/preview/poster.jpg",
   teaserPoster: "/preview/teaser-poster.jpg",

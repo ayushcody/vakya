@@ -166,7 +166,7 @@ function Theatre({ film = FILM, start, onClose }: { film?: Film; start: number; 
         src={film.src}
         poster={film.poster}
         playsInline
-        preload="auto"
+        preload="metadata"   // the film loads when someone plays it, not when the page opens (mobile data)
         onClick={toggle}
         onPlay={() => { setPaused(false); wake(); }}
         onPause={(e) => { setPaused(true); setShown(true); if (isDemo) writeResume(e.currentTarget.currentTime); }}
