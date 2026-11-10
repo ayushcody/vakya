@@ -25,7 +25,7 @@ test("clock reads seconds as a clock time", () => {
 test("the title page offers Play, the two films and the site, with no chapters, and Play opens the whole film from the start", () => {
   render(<WatchPreview />);
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Call once,\s*it’s booked\./);
-  expect(screen.getAllByRole("link", { name: /Visit the site/ })[0]).toHaveAttribute("href", "/home");
+  expect(screen.getAllByRole("link", { name: /Visit the site/ })[0]).toHaveAttribute("href", "/");
   expect(screen.queryByRole("heading", { name: "Moments" })).toBeNull();
   expect(screen.queryAllByRole("button", { name: /^Play from / })).toHaveLength(0);
   expect(screen.getAllByRole("button", { name: /^Play .+, \d+:\d\d$/ })).toHaveLength(MORE_FILMS.length);

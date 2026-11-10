@@ -84,11 +84,12 @@ describe("ReportCard with a run", () => {
 });
 
 describe("next.config redirects", () => {
-  it("sends /dashboard to the desk and /proof to the report card, and nothing else", async () => {
+  it("sends /dashboard to the desk, /proof to the report card and /home to the landing page, and nothing else", async () => {
     const redirects = await nextConfig.redirects!();
     expect(redirects).toEqual([
       { source: "/dashboard", destination: "/desk", permanent: true },
       { source: "/proof", destination: "/report-card", permanent: true },
+      { source: "/home", destination: "/", permanent: false },
     ]);
   });
 });

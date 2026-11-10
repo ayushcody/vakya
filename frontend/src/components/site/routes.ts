@@ -13,7 +13,7 @@ export interface SitePage {
 }
 
 export const HOME: SitePage = {
-  href: "/home",
+  href: "/",
   nav: "Home",
   title: "Vakya",
   blurb: "Call once, it's booked: a voice front desk for clinics, hotels and small businesses that reads every number back and leaves a signed receipt.",
