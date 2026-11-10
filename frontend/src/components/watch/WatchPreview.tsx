@@ -4,11 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Info, Maximize, Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
-import { FILM, MOMENTS, clock, type Moment } from "./moments";
+import { FILM, MOMENTS, MORE_FILMS, clock, type Film, type Moment, type MoreFilm } from "./moments";
 
 /**
  * The demo, presented like a title page: a silent teaser fills the top of the screen behind the film's name, Play opens the
- * full 3-minute film with sound, and the Moments row jumps straight to any part of it. Vakya's own look throughout
+ * full 3-minute film with sound, the Moments row jumps straight to any part of it, and More films opens the animated real
+ * case and the short film in the same player. Vakya's own look throughout
  * (Gambarino titles, Inter text, black and off-white, the violet accent, 8 px buttons, #e6e6e6 lines); nothing from any
  * streaming service's brand. Where a visitor stopped is kept in this browser only, so Play can offer to resume.
  */
@@ -55,7 +56,7 @@ const useReducedMotion = () =>
 /** The film player: Vakya's own controls, so the progress line is the violet accent (browsers do not let their built-in
  *  video controls be recoloured). Space or K plays and pauses, the arrows skip 10 s, M mutes, F goes full screen, Esc
  *  closes. The controls fade while the film plays and come back on any movement, tap or key. */
-function Theatre({ start, onClose }: { start: number; onClose: (at: number) => void }) {
+function Theatre({ film = FILM, start, onClose }: { film?: Film; start: number; onClose: (at: number) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const back = useRef<HTMLButtonElement>(null);
@@ -64,7 +65,7 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
   const [muted, setMuted] = useState(false);
   const [time, setTime] = useState(start);
   const [buffered, setBuffered] = useState(0);
-  const [duration, setDuration] = useState<number>(FILM.seconds);
+  const [duration, setDuration] = useState<number>(film.seconds);
   const [shown, setShown] = useState(true);
   const close = useCallback(() => onClose(video.current?.currentTime ?? start), [onClose, start]);
 
@@ -86,10 +87,10 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
   const seek = useCallback((to: number) => {
     const v = video.current;
     if (!v) return;
-    v.currentTime = Math.max(0, Math.min(to, (v.duration || FILM.seconds) - 0.1));
+    v.currentTime = Math.max(0, Math.min(to, (v.duration || film.seconds) - 0.1));
     setTime(v.currentTime);
     wake();
-  }, [wake]);
+  }, [wake, film.seconds]);
   const toggleMute = useCallback(() => {
     const v = video.current;
     if (!v) return;
@@ -144,7 +145,8 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
     };
   }, [start, close, toggle, seek, toggleMute, fullscreen, wake]);
 
-  const total = duration || FILM.seconds;
+  const total = duration || film.seconds;
+  const isDemo = film.id === FILM.id;
   const played = Math.min(100, (time / total) * 100);
   const loaded = Math.min(100, (buffered / total) * 100);
 
@@ -153,7 +155,7 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
       ref={shell}
       role="dialog"
       aria-modal="true"
-      aria-label="Vakya demo film"
+      aria-label={film.label}
       className={`watch-theatre fixed inset-0 z-[80] bg-black ${shown ? "" : "is-idle"}`}
       onMouseMove={wake}
       onTouchStart={wake}
@@ -161,13 +163,13 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
       <video
         ref={video}
         className="absolute inset-0 h-full w-full object-contain"
-        src={FILM.src}
-        poster={FILM.poster}
+        src={film.src}
+        poster={film.poster}
         playsInline
         preload="auto"
         onClick={toggle}
         onPlay={() => { setPaused(false); wake(); }}
-        onPause={(e) => { setPaused(true); setShown(true); writeResume(e.currentTarget.currentTime); }}
+        onPause={(e) => { setPaused(true); setShown(true); if (isDemo) writeResume(e.currentTarget.currentTime); }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onProgress={(e) => {
@@ -175,14 +177,14 @@ function Theatre({ start, onClose }: { start: number; onClose: (at: number) => v
           if (b.length) setBuffered(b.end(b.length - 1));
         }}
         onEnded={() => onClose(0)}
-        aria-label="Vakya demo film, 3 minutes"
+        aria-label={`${film.label}, ${clock(film.seconds)}`}
       />
 
       <div className="watch-chrome watch-top absolute inset-x-0 top-0 flex items-center gap-3 px-4 pb-10 pt-4 sm:px-6">
         <button ref={back} type="button" onClick={close} className="watch-ghost inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-white">
           <ArrowLeft className="size-4" aria-hidden /> Back
         </button>
-        <p className="min-w-0 truncate font-[family-name:var(--s-font-display)] text-lg text-white">{FILM.title}</p>
+        <p className="min-w-0 truncate font-[family-name:var(--s-font-display)] text-lg text-white">{film.title}</p>
       </div>
 
       <div className="watch-chrome watch-bottom absolute inset-x-0 bottom-0 px-4 pb-4 pt-14 sm:px-6 sm:pb-5">
@@ -283,20 +285,67 @@ function Moments({ onPlay }: { onPlay: (at: number) => void }) {
   );
 }
 
+/* ------------------------------------------------------------------------------------------------ more films */
+
+function FilmCard({ f, onPlay }: { f: MoreFilm; onPlay: (f: MoreFilm) => void }) {
+  return (
+    <li className="watch-card min-w-0">
+      <button type="button" onClick={() => onPlay(f)} className="group block w-full text-left" aria-label={`Play ${f.title}, ${clock(f.seconds)}`}>
+        <span className="relative block aspect-video overflow-hidden rounded-lg border border-[var(--s-night-line)] bg-black">
+          <Image src={f.poster} alt="" fill sizes="(min-width: 768px) 40vw, 100vw" className="watch-still object-cover" />
+          <span aria-hidden className="watch-play absolute inset-0 grid place-items-center">
+            <span className="grid size-12 place-items-center rounded-full bg-white text-black">
+              <Play className="size-5 translate-x-px fill-current" />
+            </span>
+          </span>
+          <span className="absolute bottom-2 left-2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
+            {clock(f.seconds)}
+          </span>
+        </span>
+        <span className="mt-3 block text-xs font-medium uppercase tracking-[0.12em] text-[var(--s-night-mute)]">{f.kicker}</span>
+        <span className="mt-1 block font-[family-name:var(--s-font-display)] text-[1.5rem] leading-tight text-white">{f.title}</span>
+        <span className="mt-1 block max-w-[34rem] text-sm leading-snug text-[var(--s-night-mute)]">{f.line}</span>
+      </button>
+    </li>
+  );
+}
+
+function MoreFilms({ onPlay }: { onPlay: (f: MoreFilm) => void }) {
+  return (
+    <section id="more-films" aria-labelledby="more-films-title" className="relative z-10 pb-20">
+      <div className="watch-gutter">
+        <h2 id="more-films-title" className="font-[family-name:var(--s-font-display)] text-[1.75rem] leading-tight text-white sm:text-[2rem]">
+          More films
+        </h2>
+        <p className="mt-1 text-sm text-[var(--s-night-mute)]">The same real call, told two more ways.</p>
+        <ul className="mt-5 grid gap-6 md:grid-cols-2">
+          {MORE_FILMS.map((f) => (
+            <FilmCard key={f.id} f={f} onPlay={onPlay} />
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------------------------------------ the page */
 
 export function WatchPreview() {
   const reduce = useReducedMotion();
-  const [playing, setPlaying] = useState<number | null>(null);
+  const [playing, setPlaying] = useState<{ film: Film; at: number } | null>(null);
   const resume = useSyncExternalStore(subscribeResume, readResume, () => 0);
   const playButton = useRef<HTMLButtonElement>(null);
 
-  const open = (at: number) => setPlaying(at);
-  const close = useCallback((at: number) => {
-    writeResume(at);
-    setPlaying(null);
-    requestAnimationFrame(() => playButton.current?.focus());
-  }, []);
+  const open = (at: number) => setPlaying({ film: FILM, at });
+  const openFilm = (film: Film) => setPlaying({ film, at: 0 });
+  const close = useCallback(
+    (at: number) => {
+      if (playing?.film.id === FILM.id) writeResume(at);
+      setPlaying(null);
+      requestAnimationFrame(() => playButton.current?.focus());
+    },
+    [playing],
+  );
 
   return (
     <div className="watch min-h-screen bg-[var(--s-night)] text-white">
@@ -385,6 +434,8 @@ export function WatchPreview() {
 
       <Moments onPlay={open} />
 
+      <MoreFilms onPlay={openFilm} />
+
       <section id="about" aria-labelledby="about-title" className="bg-[var(--s-offwhite)] text-black">
         <div className="watch-gutter mx-auto grid max-w-[72rem] gap-10 py-16 sm:py-20 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <div>
@@ -429,7 +480,7 @@ export function WatchPreview() {
         </p>
       </section>
 
-      {playing !== null && <Theatre start={playing} onClose={close} />}
+      {playing !== null && <Theatre key={playing.film.id} film={playing.film} start={playing.at} onClose={close} />}
     </div>
   );
 }

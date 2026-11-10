@@ -11,14 +11,60 @@ export interface Moment {
   still: string;
 }
 
+/** A film the player can open: the demo, or one of the shorter films under it. */
+export interface Film {
+  id: string;
+  src: string;
+  poster: string;
+  seconds: number;
+  title: string;
+  /** The player's accessible name. */
+  label: string;
+}
+
 export const FILM = {
+  id: "demo",
   src: "/preview/vakya-demo.mp4",
   teaser: "/preview/teaser.mp4",
   poster: "/preview/poster.jpg",
   teaserPoster: "/preview/teaser-poster.jpg",
   seconds: 184,
   title: "Call once, it's booked.",
+  label: "Vakya demo film",
 };
+
+/**
+ * Two more films, built from the same real call and screen recording as the demo. "A real case" is animated: the
+ * receptionist, Ayush and the clinic are drawn; their dialogue is the recorded call, and the clinic's real screen runs
+ * beside it. The short film is the minute-long version. Lengths are the files' own (132.5 s and 59.0 s).
+ */
+export interface MoreFilm extends Film {
+  kicker: string;
+  line: string;
+}
+
+export const MORE_FILMS: MoreFilm[] = [
+  {
+    id: "real-case",
+    src: "/preview/real-case.mp4",
+    poster: "/preview/real-case-poster.jpg",
+    seconds: 132,
+    title: "A real case",
+    label: "A real case, animated film",
+    kicker: "Animated · the real call",
+    line: "A busy clinic and a returning patient, drawn. The dialogue is the recorded call, with the clinic's real screen beside it.",
+  },
+  {
+    id: "ad",
+    src: "/preview/vakya-ad.mp4",
+    poster: "/preview/vakya-ad-poster.jpg",
+    seconds: 59,
+    title: "Vakya in a minute",
+    label: "Vakya in a minute, short film",
+    kicker: "Short film",
+    line: "The real call, the WhatsApp messages, the booking's proof and the setup, in under a minute.",
+  },
+];
 
 const still = (n: number) => `/preview/moment-${String(n).padStart(2, "0")}.jpg`;
 
