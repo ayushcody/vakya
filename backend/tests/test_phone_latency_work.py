@@ -471,7 +471,23 @@ UP1 = [{"booking_id": "A28", "date": "2026-11-10", "time": "18:00", "status": "b
 UP2 = UP1 + [{"booking_id": "A56", "date": "2026-11-12", "time": "17:00", "status": "booked"}]
 
 
+def _freeze_clock(monkeypatch):
+    """The bookings above are on 10 and 12 Nov 2026, so the call happens on Monday 9 Nov."""
+    import datetime as _dt
+    import services.when as when_mod
+
+    class _Frozen(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 9, 11, 0, tzinfo=tz)
+
+    monkeypatch.setattr(when_mod, "datetime", _Frozen)
+    if hasattr(tools_mod, "datetime"):
+        monkeypatch.setattr(tools_mod, "datetime", _Frozen)
+
+
 def _fake_hub_execute(monkeypatch, rows, seen):
+    _freeze_clock(monkeypatch)
     def fake_execute(spec, arguments, **kw):
         seen.append((spec.tool, dict(arguments)))
         if spec.tool == "find_booking":

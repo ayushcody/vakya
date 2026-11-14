@@ -29,7 +29,7 @@ log = logging.getLogger("vakya.usage")
 LANES = ("live", "desk", "bench")
 KINDS = ("stt", "stt_stream", "tts", "clone", "hold_line")
 
-# credits per unit. UNVERIFIED defaults taken from estimates (docs/GNANI.md);
+# credits per unit. UNVERIFIED default estimates;
 # replace them with the values this account measures (docs/GNANI.md, "Measuring the rates").
 RATE_DEFAULTS: Dict[str, float] = {
     "stt_rest_per_s": 0.0097,        # Prisma REST: credits per second of audio

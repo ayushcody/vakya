@@ -14,7 +14,7 @@ Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech: **Gnani Pri
 | --- | --- |
 | Demo video (3 min, a real call on 9 Nov) | [vakya.ayushchougula.in/demo](https://vakya.ayushchougula.in/demo) |
 | X post | [x.com/ChougulaAyush](https://x.com/ChougulaAyush/status/2119868624106361281) |
-| One-page pitch | [PDF](https://vakya.ayushchougula.in/vakya-pitch.pdf) · [`docs/PITCH.md`](docs/PITCH.md) |
+| One-page pitch | [`Pitch.pdf`](Pitch.pdf) · [online](https://vakya.ayushchougula.in/vakya-pitch.pdf) · [`docs/PITCH.md`](docs/PITCH.md) |
 | All documentation | [`docs/README.md`](docs/README.md) |
 
 **Contents:** [What it does](#what-it-does-in-30-seconds) · [Try it](#try-it) · [Results](#measured-results) · [Safety](#safety-rules) · [Architecture](#architecture) · [Limitations](#limitations) · [Configuration](#configuration) · [Repository map](#repository-map) · [Team](#team)
