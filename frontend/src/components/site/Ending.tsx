@@ -362,6 +362,9 @@ export function FinalCta() {
                 Try a call
                 <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
               </Link></Magnetic>
+              <Magnetic strength={0.2}><a href="/vakya-pitch.pdf" className={`${ctaBase} s-btn--ghost-light`}>
+                One-page pitch (PDF)
+              </a></Magnetic>
               <Magnetic strength={0.2}><Link href="/verify" className={`${ctaBase} s-btn--ghost-light`}>
                 Verify a clip
               </Link></Magnetic>
@@ -402,6 +405,7 @@ const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
       { label: "Report card", href: "/desk/report-card" },
       { label: "Caller Theatre", href: "/desk/theatre" },
       { label: "Check a receipt", href: "/verify" },
+      { label: "One-page pitch (PDF)", href: "/vakya-pitch.pdf", external: true },
     ],
   },
   {

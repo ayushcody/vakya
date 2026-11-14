@@ -8,12 +8,16 @@
 
 Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech: **Gnani Prisma** (speech to text) and **Timbre** (voice). Replies: a hosted language model. Telephony: **Vobiz**.
 
+**[Live site](https://vakya.ayushchougula.in)** · **[Demo video](https://vakya.ayushchougula.in/demo)** · **[One-page pitch (PDF)](https://vakya.ayushchougula.in/vakya-pitch.pdf)** · **[Read-only desk](https://vakya.ayushchougula.in/desk)**
+
 | Deliverable | Link |
 | --- | --- |
-| Demo video | _link to be added_ |
-| LinkedIn post | _link to be added_ |
-| X post | _link to be added_ |
-| One-page pitch | [`docs/PITCH.md`](docs/PITCH.md) |
+| Demo video (3 min, a real call on 9 Nov) | [vakya.ayushchougula.in/demo](https://vakya.ayushchougula.in/demo) |
+| X post | [x.com/ChougulaAyush](https://x.com/ChougulaAyush/status/2119868624106361281) |
+| One-page pitch | [PDF](https://vakya.ayushchougula.in/vakya-pitch.pdf) · [`docs/PITCH.md`](docs/PITCH.md) |
+| All documentation | [`docs/README.md`](docs/README.md) |
+
+**Contents:** [What it does](#what-it-does-in-30-seconds) · [Try it](#try-it) · [Results](#measured-results) · [Safety](#safety-rules) · [Architecture](#architecture) · [Limitations](#limitations) · [Configuration](#configuration) · [Repository map](#repository-map) · [Team](#team)
 
 ## What it does in 30 seconds
 
@@ -139,7 +143,7 @@ Settings live in `backend/.env`; [`backend/.env.example`](backend/.env.example) 
 | --- | --- |
 | `backend/` | FastAPI app: routers, services (Gnani, schedules, tools, caller memory, telephony), eight front desk templates, benchmarks, tests |
 | `frontend/` | Next.js app: public site, the desk, `/verify`, the report card |
-| `docs/` | Architecture, Gnani, phone, schedules, caller memory, results, receipts, status, pitch |
+| `docs/` | Design notes and results; start at [`docs/README.md`](docs/README.md) |
 | `sdk/verify/` | Offline receipt checker (Python and Node) |
 | `deploy/` | Container deployment guide |
 | `vakya`, `vakya.ps1` | Set up, start, check and test |
