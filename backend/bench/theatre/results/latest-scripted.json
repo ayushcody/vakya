@@ -1,7 +1,7 @@
 {
  "schema": 2,
- "run_id": "20261104-052003",
- "created_at": "2026-11-04T05:20:04+05:30",
+ "run_id": "20261108-175340",
+ "created_at": "2026-11-08T17:53:49+05:30",
  "mode": "scripted",
  "input": "text",
  "input_label": "text run (audio run pending)",
@@ -14,8 +14,8 @@
   "line": "not applied in a text run"
  },
  "host": {
-  "platform": "macOS-15.8.1-arm64-arm-64bit",
-  "python": "3.12.13"
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.13.3"
  },
  "scenarios": [
   {
@@ -37,33 +37,33 @@
     "snr_db": null
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. गुरुवारी सकाळी 11 वाजता वेळ मिळेल का?",
-      "spoken": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. गुरुवारी सकाळी अकरा वाजता वेळ मिळेल का?",
+      "text": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. सोमवारी सकाळी 11 वाजता वेळ मिळेल का?",
+      "spoken": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. सोमवारी सकाळी अकरा वाजता वेळ मिळेल का?",
       "repeat": false
      },
-     "heard": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. गुरुवारी सकाळी 11 वाजता वेळ मिळेल का?",
+     "heard": "नमस्कार, मला डॉक्टरांना भेटायचं आहे. सोमवारी सकाळी 11 वाजता वेळ मिळेल का?",
      "heard_language": "hi",
      "agent": {
-      "text": "यह एक AI सहायक है। गुरुवार 5 नोव्हेंबर सकाळी 11 वाजता ची वेळ मोकळी आहे. कृपया तुमचे नाव आणि फोन नंबर सांगा.",
+      "text": "यह एक AI सहायक है। सोमवार 9 नोव्हेंबर सकाळी 11 वाजता ची वेळ मोकळी आहे. कृपया तुमचे नाव आणि फोन नंबर सांगा.",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "11:00"
         },
         "ok": true,
-        "result": "11:00 on 2026-11-05 is free"
+        "result": "11:00 on 2026-11-09 is free"
        }
       ],
       "language": "hi",
@@ -74,13 +74,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 122,
+      "first_answer_ms": 149,
       "asr_ms": 0,
       "llm_first_token_ms": null,
-      "tts_ms": 3,
+      "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 128
+     "wall_ms": 161
     },
     {
      "i": 2,
@@ -93,14 +93,14 @@
      "heard": "माझं नाव Sunita Kulkarni. माझा फोन नंबर 98765 01234.",
      "heard_language": "hi",
      "agent": {
-      "text": "मी वाचून दाखवते: गुरुवार 5 नोव्हेंबर सकाळी 11 वाजता, Sunita Kulkarni यांच्या नावाने, फोन 98765 01234. मी बुक करू का?",
+      "text": "सोमवार 9 नोव्हेंबर सकाळी 11 वाजता, Sunita Kulkarni यांच्या नावाने, फोन नंबर 9 8 7 6 5, 0 1 2 3 4. मी बुक करू का?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "11:00",
          "name": "Sunita Kulkarni",
          "phone": "9876501234"
@@ -117,13 +117,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 43,
+      "first_answer_ms": 219,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 46
+     "wall_ms": 234
     },
     {
      "i": 3,
@@ -136,20 +136,20 @@
      "heard": "हो, चालेल. बुक करा.",
      "heard_language": "hi",
      "agent": {
-      "text": "झाले. बुकिंग A59 गुरुवार 5 नोव्हेंबर सकाळी 11 वाजता साठी निश्चित झाली आहे. आणखी काही मदत हवी आहे का?",
+      "text": "झाले. बुकिंग A28 सोमवार 9 नोव्हेंबर सकाळी 11 वाजता साठी निश्चित झाली आहे. आणखी काही मदत हवी आहे का?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "11:00",
          "name": "Sunita Kulkarni",
          "phone": "9876501234"
         },
         "ok": true,
-        "result": "booking A59 on Thursday 2026-11-05 11:00"
+        "result": "booking A28 on Monday 2026-11-09 11:00"
        }
       ],
       "language": "hi",
@@ -160,13 +160,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 9,
+      "first_answer_ms": 85,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 19
+     "wall_ms": 128
     }
    ],
    "setup": [],
@@ -193,17 +193,17 @@
     ],
     "stop_after": "booking"
    },
-   "agent_id": "62e5aaab-2124-462c-8ea9-96198155f973",
-   "conversation_id": "6ebe9952-1735-40cc-ab80-7bbf7187e91f",
+   "agent_id": "5d757e01-d637-4338-b3d8-fd135fb33904",
+   "conversation_id": "c46c91c7-be4c-4c61-9cfa-5cc77dc80b22",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A59",
+     "id": "A28",
      "name": "Sunita Kulkarni",
      "phone": "••••1234",
      "schedule_name": "Doctor consultations",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "11:00",
      "nights": null,
      "party": null,
@@ -221,14 +221,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked doctor consultations on 2026-11-05 11:00 in 3 turns; every check passed.",
+    "reason": "Booked doctor consultations on 2026-11-09 11:00 in 3 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A59 on 2026-11-05 11:00"
+      "detail": "booking A28 on 2026-11-09 11:00"
      },
      {
       "id": "schedule",
@@ -242,7 +242,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -288,11 +288,11 @@
      "caller_turns": 3,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 122,
-     "total_ms": 193
+     "first_reply_ms": 149,
+     "total_ms": 523
     }
    },
-   "seconds": 0.4
+   "seconds": 0.9
   },
   {
    "id": "rushed-hinglish-salon",
@@ -313,38 +313,38 @@
     "snr_db": 20
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-10",
+    "other": "2026-11-11"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "Hello, mera naam Neha Joshi hai, mujhe Thursday ko shaam 5 baje haircut aur facial ke liye appointment chahiye, mera number 98200 11223 hai.",
-      "spoken": "हेलो, मेरा नाम नेहा जोशी है, मुझे गुरुवार को शाम पाँच बजे हेयरकट और फेशियल के लिए अपॉइंटमेंट चाहिए, मेरा नंबर नौ आठ दो शून्य शून्य एक एक दो दो तीन है।",
+      "text": "Hello, mera naam Neha Joshi hai, mujhe Tuesday ko shaam 5 baje haircut aur facial ke liye appointment chahiye, mera number 98200 11223 hai.",
+      "spoken": "हेलो, मेरा नाम नेहा जोशी है, मुझे मंगलवार को शाम पाँच बजे हेयरकट और फेशियल के लिए अपॉइंटमेंट चाहिए, मेरा नंबर नौ आठ दो शून्य शून्य एक एक दो दो तीन है।",
       "repeat": false
      },
-     "heard": "Hello, mera naam Neha Joshi hai, mujhe Thursday ko shaam 5 baje haircut aur facial ke liye appointment chahiye, mera number 98200 11223 hai.",
+     "heard": "Hello, mera naam Neha Joshi hai, mujhe Tuesday ko shaam 5 baje haircut aur facial ke liye appointment chahiye, mera number 98200 11223 hai.",
      "heard_language": "hinglish",
      "agent": {
-      "text": "Yeh ek AI assistant hai. Main padhkar batati hoon: Thursday 5 November ko 5 pm, Neha Joshi ke naam se, phone 98200 11223. Kya main book karoon?",
+      "text": "Yeh ek AI assistant hai. Main padhkar batati hoon: Tuesday 10 November ko 5 pm, Neha Joshi ke naam se, phone 98200 11223. Kya main book karoon?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-10",
          "time": "17:00"
         },
         "ok": true,
-        "result": "17:00 on 2026-11-05 is free"
+        "result": "17:00 on 2026-11-10 is free"
        },
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-10",
          "time": "17:00",
          "name": "Neha Joshi",
          "phone": "9820011223"
@@ -361,13 +361,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 11,
+      "first_answer_ms": 131,
       "asr_ms": 0,
       "llm_first_token_ms": null,
-      "tts_ms": 0,
+      "tts_ms": 2,
       "total_ms": null
      },
-     "wall_ms": 13
+     "wall_ms": 146
     },
     {
      "i": 2,
@@ -380,20 +380,20 @@
      "heard": "Haan, book kar dijiye.",
      "heard_language": "hinglish",
      "agent": {
-      "text": "Ho gaya. Booking A60 Thursday 5 November ko 5 pm ke liye pakki ho gayi hai. Aur kuch madad chahiye?",
+      "text": "Ho gaya. Booking A29 Tuesday 10 November ko 5 pm ke liye pakki ho gayi hai. Aur kuch madad chahiye?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-10",
          "time": "17:00",
          "name": "Neha Joshi",
          "phone": "9820011223"
         },
         "ok": true,
-        "result": "booking A60 on Thursday 2026-11-05 17:00"
+        "result": "booking A29 on Tuesday 2026-11-10 17:00"
        }
       ],
       "language": "hinglish",
@@ -404,13 +404,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 8,
+      "first_answer_ms": 89,
       "asr_ms": 0,
       "llm_first_token_ms": null,
-      "tts_ms": 0,
+      "tts_ms": 2,
       "total_ms": null
      },
-     "wall_ms": 13
+     "wall_ms": 134
     }
    ],
    "setup": [],
@@ -436,17 +436,17 @@
     ],
     "stop_after": "booking"
    },
-   "agent_id": "0e30ae18-ec94-461a-853e-d46c2c6b06d3",
-   "conversation_id": "b44e1244-5114-4fe4-9e95-9b1d3483b4ed",
+   "agent_id": "11b131ee-17f8-4c53-a239-f77b3867f128",
+   "conversation_id": "33cd4644-043f-45fd-8493-f071a12a23db",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A60",
+     "id": "A29",
      "name": "Neha Joshi",
      "phone": "••••1223",
      "schedule_name": "Appointments",
-     "date": "2026-11-05",
+     "date": "2026-11-10",
      "time": "17:00",
      "nights": null,
      "party": null,
@@ -464,14 +464,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked appointments on 2026-11-05 17:00 in 2 turns; every check passed.",
+    "reason": "Booked appointments on 2026-11-10 17:00 in 2 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A60 on 2026-11-05 17:00"
+      "detail": "booking A29 on 2026-11-10 17:00"
      },
      {
       "id": "schedule",
@@ -485,7 +485,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-10, wanted 2026-11-10"
      },
      {
       "id": "time",
@@ -531,11 +531,11 @@
      "caller_turns": 2,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 11,
-     "total_ms": 26
+     "first_reply_ms": 131,
+     "total_ms": 280
     }
    },
-   "seconds": 0.0
+   "seconds": 0.7
   },
   {
    "id": "street-noise-hindi-clinic",
@@ -556,33 +556,33 @@
     "snr_db": 5
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "नमस्ते, मुझे गुरुवार को शाम 5 बजे डॉक्टर से मिलना है।",
-      "spoken": "नमस्ते, मुझे गुरुवार को शाम पाँच बजे डॉक्टर से मिलना है।",
+      "text": "नमस्ते, मुझे सोमवार को शाम 5 बजे डॉक्टर से मिलना है।",
+      "spoken": "नमस्ते, मुझे सोमवार को शाम पाँच बजे डॉक्टर से मिलना है।",
       "repeat": false
      },
-     "heard": "नमस्ते, मुझे गुरुवार को शाम 5 बजे डॉक्टर से मिलना है।",
+     "heard": "नमस्ते, मुझे सोमवार को शाम 5 बजे डॉक्टर से मिलना है।",
      "heard_language": "hi",
      "agent": {
-      "text": "यह एक AI सहायक है। गुरुवार 5 नवंबर को शाम 5 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
+      "text": "यह एक AI सहायक है। सोमवार 9 नवंबर को शाम 5 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "17:00"
         },
         "ok": true,
-        "result": "17:00 on 2026-11-05 is free"
+        "result": "17:00 on 2026-11-09 is free"
        }
       ],
       "language": "hi",
@@ -593,13 +593,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 6,
+      "first_answer_ms": 123,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 137
     },
     {
      "i": 2,
@@ -612,14 +612,14 @@
      "heard": "मेरा नाम Rajesh Patil है। मेरा फोन नंबर 98223 34455।",
      "heard_language": "hi",
      "agent": {
-      "text": "मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को शाम 5 बजे, Rajesh Patil के नाम से, फ़ोन 98223 34455। क्या मैं बुक करूँ?",
+      "text": "सोमवार 9 नवंबर शाम 5 बजे, Rajesh Patil के नाम से, फ़ोन नंबर 9 8 2 2 3, 3 4 4 5 5. क्या मैं बुक कर दूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "17:00",
          "name": "Rajesh Patil",
          "phone": "9822334455"
@@ -636,13 +636,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 63,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 77
     },
     {
      "i": 3,
@@ -655,20 +655,20 @@
      "heard": "हाँ, ठीक है, बुक कर दीजिए।",
      "heard_language": "hi",
      "agent": {
-      "text": "हो गया। बुकिंग A61 गुरुवार 5 नवंबर को शाम 5 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
+      "text": "हो गया। बुकिंग A30 सोमवार 9 नवंबर को शाम 5 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "17:00",
          "name": "Rajesh Patil",
          "phone": "9822334455"
         },
         "ok": true,
-        "result": "booking A61 on Thursday 2026-11-05 17:00"
+        "result": "booking A30 on Monday 2026-11-09 17:00"
        }
       ],
       "language": "hi",
@@ -679,13 +679,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 8,
+      "first_answer_ms": 83,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 14
+     "wall_ms": 125
     }
    ],
    "setup": [],
@@ -712,17 +712,17 @@
     ],
     "stop_after": "booking"
    },
-   "agent_id": "a1ff3cc4-5ca4-4842-82b2-06bfd2561509",
-   "conversation_id": "822ee9e5-8c09-4a35-a2b9-0c4727781f07",
+   "agent_id": "83d1ec9b-db80-42c3-82d4-3e9111851910",
+   "conversation_id": "6d1b65f9-5734-4206-b913-40bf005ea9ba",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A61",
+     "id": "A30",
      "name": "Rajesh Patil",
      "phone": "••••4455",
      "schedule_name": "Doctor consultations",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "17:00",
      "nights": null,
      "party": null,
@@ -740,14 +740,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked doctor consultations on 2026-11-05 17:00 in 3 turns; every check passed.",
+    "reason": "Booked doctor consultations on 2026-11-09 17:00 in 3 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A61 on 2026-11-05 17:00"
+      "detail": "booking A30 on 2026-11-09 17:00"
      },
      {
       "id": "schedule",
@@ -761,7 +761,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -807,11 +807,11 @@
      "caller_turns": 3,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 6,
-     "total_ms": 32
+     "first_reply_ms": 123,
+     "total_ms": 339
     }
    },
-   "seconds": 0.0
+   "seconds": 0.7
   },
   {
    "id": "wrong-digit-service-centre",
@@ -832,33 +832,33 @@
     "snr_db": 15
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "नमस्ते, मुझे गुरुवार को दोपहर 2 बजे गाड़ी की सर्विस के लिए बुक करना है।",
-      "spoken": "नमस्ते, मुझे गुरुवार को दोपहर दो बजे गाड़ी की सर्विस के लिए बुक करना है।",
+      "text": "नमस्ते, मुझे सोमवार को दोपहर 2 बजे गाड़ी की सर्विस के लिए बुक करना है।",
+      "spoken": "नमस्ते, मुझे सोमवार को दोपहर दो बजे गाड़ी की सर्विस के लिए बुक करना है।",
       "repeat": false
      },
-     "heard": "नमस्ते, मुझे गुरुवार को दोपहर 2 बजे गाड़ी की सर्विस के लिए बुक करना है।",
+     "heard": "नमस्ते, मुझे सोमवार को दोपहर 2 बजे गाड़ी की सर्विस के लिए बुक करना है।",
      "heard_language": "hi",
      "agent": {
-      "text": "यह एक AI सहायक है। गुरुवार 5 नवंबर को दोपहर 2 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
+      "text": "यह एक AI सहायक है। सोमवार 9 नवंबर को दोपहर 2 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "14:00"
         },
         "ok": true,
-        "result": "14:00 on 2026-11-05 is free"
+        "result": "14:00 on 2026-11-09 is free"
        }
       ],
       "language": "hi",
@@ -869,13 +869,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 122,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 139
     },
     {
      "i": 2,
@@ -888,14 +888,14 @@
      "heard": "मेरा नाम Amit Deshmukh है। मेरा फोन नंबर 98765 43250।",
      "heard_language": "hi",
      "agent": {
-      "text": "मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को दोपहर 2 बजे, Amit Deshmukh के नाम से, फ़ोन 98765 43250। क्या मैं बुक करूँ?",
+      "text": "सोमवार 9 नवंबर दोपहर 2 बजे, Amit Deshmukh के नाम से, फ़ोन नंबर 9 8 7 6 5, 4 3 2 5 0. क्या मैं बुक कर दूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "14:00",
          "name": "Amit Deshmukh",
          "phone": "9876543250"
@@ -912,13 +912,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 62,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 79
     },
     {
      "i": 3,
@@ -931,7 +931,7 @@
      "heard": "नहीं नहीं, नंबर गलत है। मेरा पूरा नंबर 98765 43210 है।",
      "heard_language": "hi",
      "agent": {
-      "text": "मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को दोपहर 2 बजे, Amit Deshmukh के नाम से, फ़ोन 98765 43210। क्या मैं बुक करूँ?",
+      "text": "मैं पढ़कर बताती हूँ: सोमवार 9 नवंबर को दोपहर 2 बजे, Amit Deshmukh के नाम से, फ़ोन 98765 43210। क्या मैं बुक करूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [],
@@ -943,13 +943,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 4,
+      "first_answer_ms": 55,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 6
+     "wall_ms": 70
     },
     {
      "i": 4,
@@ -962,20 +962,20 @@
      "heard": "हाँ, सही है, बुक कर दीजिए।",
      "heard_language": "hi",
      "agent": {
-      "text": "हो गया। बुकिंग A62 गुरुवार 5 नवंबर को दोपहर 2 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
+      "text": "हो गया। बुकिंग A31 सोमवार 9 नवंबर को दोपहर 2 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "14:00",
          "name": "Amit Deshmukh",
          "phone": "9876543210"
         },
         "ok": true,
-        "result": "booking A62 on Thursday 2026-11-05 14:00"
+        "result": "booking A31 on Monday 2026-11-09 14:00"
        }
       ],
       "language": "hi",
@@ -986,13 +986,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 8,
+      "first_answer_ms": 86,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 15
+     "wall_ms": 131
     }
    ],
    "setup": [],
@@ -1019,17 +1019,17 @@
     "readback_catch": true,
     "stop_after": "booking"
    },
-   "agent_id": "f2c87a84-823c-48af-bb7c-60fd4663bdd6",
-   "conversation_id": "d6950e47-0a8b-41a1-a43c-3de640da3a2e",
+   "agent_id": "38feb5a3-9efd-4d47-ac40-867631f5363f",
+   "conversation_id": "20a3f7e9-5c52-4914-940b-2025d71a3c6e",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A62",
+     "id": "A31",
      "name": "Amit Deshmukh",
      "phone": "••••3210",
      "schedule_name": "Service slots",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "14:00",
      "nights": null,
      "party": null,
@@ -1047,14 +1047,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked service slots on 2026-11-05 14:00 in 4 turns; every check passed.",
+    "reason": "Booked service slots on 2026-11-09 14:00 in 4 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A62 on 2026-11-05 14:00"
+      "detail": "booking A31 on 2026-11-09 14:00"
      },
      {
       "id": "schedule",
@@ -1068,7 +1068,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -1121,11 +1121,11 @@
      "caller_turns": 4,
      "read_back_before_commit": true,
      "readback_catch": true,
-     "first_reply_ms": 7,
-     "total_ms": 39
+     "first_reply_ms": 122,
+     "total_ms": 419
     }
    },
-   "seconds": 0.1
+   "seconds": 0.8
   },
   {
    "id": "slot-full-clinic",
@@ -1146,33 +1146,33 @@
     "snr_db": null
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "Hello, I would like to book a doctor's appointment on Thursday at 6 pm.",
-      "spoken": "Hello, I would like to book a doctor's appointment on Thursday at 6 pm.",
+      "text": "Hello, I would like to book a doctor's appointment on Monday at 6 pm.",
+      "spoken": "Hello, I would like to book a doctor's appointment on Monday at 6 pm.",
       "repeat": false
      },
-     "heard": "Hello, I would like to book a doctor's appointment on Thursday at 6 pm.",
+     "heard": "Hello, I would like to book a doctor's appointment on Monday at 6 pm.",
      "heard_language": "en",
      "agent": {
-      "text": "This is an AI assistant. Sorry, Thursday 5 November at 6 pm is already taken. Thursday 5 November at 5:45 pm or Thursday 5 November at 6:15 pm, which would suit you?",
+      "text": "This is an AI assistant. Sorry, Monday 9 November at 6 pm is already taken. Monday 9 November at 5:45 pm or Monday 9 November at 6:15 pm, which would suit you?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "18:00"
         },
         "ok": true,
-        "result": "18:00 on 2026-11-05 is not free, 2 other option(s)"
+        "result": "18:00 on 2026-11-09 is not free, 2 other option(s)"
        }
       ],
       "language": "en",
@@ -1183,13 +1183,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 125,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 139
     },
     {
      "i": 2,
@@ -1202,18 +1202,18 @@
      "heard": "The later one, 6:15 pm, please.",
      "heard_language": "en",
      "agent": {
-      "text": "Thursday 5 November at 6:15 pm is free. Could you tell me your name and phone number?",
+      "text": "Monday 9 November at 6:15 pm is free. Could you tell me your name and phone number?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "18:15"
         },
         "ok": true,
-        "result": "18:15 on 2026-11-05 is free"
+        "result": "18:15 on 2026-11-09 is free"
        }
       ],
       "language": "en",
@@ -1224,13 +1224,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 5,
+      "first_answer_ms": 59,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 7
+     "wall_ms": 75
     },
     {
      "i": 3,
@@ -1243,7 +1243,7 @@
      "heard": "My name is Priya Menon and my number is 98450 12345.",
      "heard_language": "en",
      "agent": {
-      "text": "Let me read that back: Thursday 5 November at 6:15 pm for Priya Menon, phone 98450 12345. Shall I book it?",
+      "text": "Let me read that back: Monday 9 November at 6:15 pm for Priya Menon, phone 98450 12345. Shall I book it?",
       "audio": null,
       "sentences": [],
       "tool_calls": [],
@@ -1255,13 +1255,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 4,
+      "first_answer_ms": 54,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 6
+     "wall_ms": 70
     },
     {
      "i": 4,
@@ -1274,20 +1274,20 @@
      "heard": "Yes, please book it.",
      "heard_language": "en",
      "agent": {
-      "text": "Done. Booking A64 is confirmed for Thursday 5 November at 6:15 pm. Anything else I can help with?",
+      "text": "Done. Booking A33 is confirmed for Monday 9 November at 6:15 pm. Anything else I can help with?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "18:15",
          "name": "Priya Menon",
          "phone": "9845012345"
         },
         "ok": true,
-        "result": "booking A64 on Thursday 2026-11-05 18:15"
+        "result": "booking A33 on Monday 2026-11-09 18:15"
        }
       ],
       "language": "en",
@@ -1298,19 +1298,19 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 87,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 14
+     "wall_ms": 133
     }
    ],
    "setup": [
     {
-     "booking": "A63",
-     "date": "2026-11-05",
+     "booking": "A32",
+     "date": "2026-11-09",
      "time": "18:00",
      "name": "Theatre Placeholder",
      "what": "already booked before the call"
@@ -1337,17 +1337,17 @@
     "offered_alternatives": true,
     "stop_after": "booking"
    },
-   "agent_id": "80147aa9-01b6-4ecc-92fa-9bc356fb776a",
-   "conversation_id": "767b1b6a-28c1-43ec-8829-f91196381f58",
+   "agent_id": "f3b10260-6ba7-4f03-83c2-75ab7b98fa22",
+   "conversation_id": "89bb5e99-7b99-491c-b7a9-adfb2c9e5b36",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A63",
+     "id": "A32",
      "name": "Theatre Placeholder",
      "phone": "••••0001",
      "schedule_name": "Doctor consultations",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "18:00",
      "nights": null,
      "party": null,
@@ -1356,11 +1356,11 @@
      "source": "staff"
     },
     {
-     "id": "A64",
+     "id": "A33",
      "name": "Priya Menon",
      "phone": "••••2345",
      "schedule_name": "Doctor consultations",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "18:15",
      "nights": null,
      "party": null,
@@ -1378,14 +1378,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked doctor consultations on 2026-11-05 18:15 in 4 turns; every check passed.",
+    "reason": "Booked doctor consultations on 2026-11-09 18:15 in 4 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A64 on 2026-11-05 18:15"
+      "detail": "booking A33 on 2026-11-09 18:15"
      },
      {
       "id": "schedule",
@@ -1399,7 +1399,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -1452,11 +1452,11 @@
      "caller_turns": 4,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 7,
-     "total_ms": 36
+     "first_reply_ms": 125,
+     "total_ms": 417
     }
    },
-   "seconds": 0.1
+   "seconds": 0.9
   },
   {
    "id": "cancel-by-phone-salon",
@@ -1477,8 +1477,8 @@
     "snr_db": null
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-10",
+    "other": "2026-11-11"
    },
    "turns": [
     {
@@ -1492,7 +1492,7 @@
      "heard": "Hi, I need to cancel my appointment. My number is 98331 00200.",
      "heard_language": "en",
      "agent": {
-      "text": "This is an AI assistant. I found booking A65 on Thursday 5 November at 11 am for Kavita Nair. Shall I cancel booking A65?",
+      "text": "This is an AI assistant. I found booking A34 on Tuesday 10 November at 11 am for Kavita Nair. Shall I cancel booking A34?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
@@ -1513,13 +1513,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 6,
+      "first_answer_ms": 128,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 8
+     "wall_ms": 143
     },
     {
      "i": 2,
@@ -1532,17 +1532,17 @@
      "heard": "Yes, please cancel it.",
      "heard_language": "en",
      "agent": {
-      "text": "Booking A65 is cancelled. Anything else I can help with?",
+      "text": "Sorry, I could not do that: NOT DONE: the caller has not said yes to cancelling this exact booking. If they asked something else, answer it, then as. Could you tell me again what you would like?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "cancel",
         "arguments": {
-         "booking_id": "A65"
+         "booking_id": "A34"
         },
-        "ok": true,
-        "result": "cancelled A65 on Thursday 2026-11-05 11:00"
+        "ok": false,
+        "result": "failed: NOT DONE: the caller has not said yes to cancelling this exact booking. If they asked something else, answer it, then ask again. Ask exactly this, in the caller's language (keep the booking id"
        }
       ],
       "language": "en",
@@ -1553,19 +1553,99 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 6,
+      "first_answer_ms": 60,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 8
+     "wall_ms": 74
+    },
+    {
+     "i": 3,
+     "caller": {
+      "move": "yes",
+      "text": "Yes, please cancel it.",
+      "spoken": "Yes, please cancel it.",
+      "repeat": false
+     },
+     "heard": "Yes, please cancel it.",
+     "heard_language": "en",
+     "agent": {
+      "text": "I found booking A34 on Tuesday 10 November at 11 am for Kavita Nair. Shall I cancel booking A34?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "find_booking",
+        "arguments": {
+         "phone": "9833100200"
+        },
+        "ok": true,
+        "result": "1 upcoming booking(s)"
+       }
+      ],
+      "language": "en",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 54,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 69
+    },
+    {
+     "i": 4,
+     "caller": {
+      "move": "yes",
+      "text": "Yes, please cancel it.",
+      "spoken": "Yes, please cancel it.",
+      "repeat": false
+     },
+     "heard": "Yes, please cancel it.",
+     "heard_language": "en",
+     "agent": {
+      "text": "Sorry, I could not do that: NOT DONE: the caller has not said yes to cancelling this exact booking. If they asked something else, answer it, then as. Could you tell me again what you would like?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "cancel",
+        "arguments": {
+         "booking_id": "A34"
+        },
+        "ok": false,
+        "result": "failed: NOT DONE: the caller has not said yes to cancelling this exact booking. If they asked something else, answer it, then ask again. Ask exactly this, in the caller's language (keep the booking id"
+       }
+      ],
+      "language": "en",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 57,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 73
     }
    ],
    "setup": [
     {
-     "booking": "A65",
-     "date": "2026-11-05",
+     "booking": "A34",
+     "date": "2026-11-10",
      "time": "11:00",
      "name": "Kavita Nair",
      "what": "already booked before the call"
@@ -1584,35 +1664,35 @@
     "no_new_bookings": true,
     "stop_after": "cancel"
    },
-   "agent_id": "71ee7d21-11ed-45da-a58b-262d5f4d51de",
-   "conversation_id": "102be71f-e74c-4cc3-9f23-55fc35aa283e",
+   "agent_id": "12f27285-8a0a-44f9-8211-87e56c861b63",
+   "conversation_id": "ba7f0d3b-6288-4a10-8693-60bb64803e7e",
    "voice": null,
-   "ended": "the booking was cancelled",
+   "ended": "the caller had nothing more to say",
    "bookings": [
     {
-     "id": "A65",
+     "id": "A34",
      "name": "Kavita Nair",
      "phone": "••••0200",
      "schedule_name": "Appointments",
-     "date": "2026-11-05",
+     "date": "2026-11-10",
      "time": "11:00",
      "nights": null,
      "party": null,
-     "status": "cancelled",
+     "status": "booked",
      "note": null,
      "source": "staff"
     }
    ],
    "cleanup": {
-    "cancelled_bookings": 0,
+    "cancelled_bookings": 1,
     "agent_deleted": true
    },
    "llm_models": [
     "theatre-scripted"
    ],
    "verdict": {
-    "pass": true,
-    "reason": "Cancelled the booking in 2 turns; every check passed.",
+    "pass": false,
+    "reason": "The right booking was cancelled failed: booking A34 is booked",
     "checks": [
      {
       "id": "no_new",
@@ -1624,9 +1704,9 @@
      {
       "id": "cancelled",
       "label": "The right booking was cancelled",
-      "ok": true,
+      "ok": false,
       "must": true,
-      "detail": "booking A65 is cancelled"
+      "detail": "booking A34 is booked"
      },
      {
       "id": "found_by_phone",
@@ -1637,18 +1717,18 @@
      }
     ],
     "metrics": {
-     "fields_correct": 1,
+     "fields_correct": 0,
      "fields_total": 1,
-     "fields_correct_pct": 100.0,
-     "turns_to_complete": 2,
-     "caller_turns": 2,
+     "fields_correct_pct": 0.0,
+     "turns_to_complete": null,
+     "caller_turns": 4,
      "read_back_before_commit": null,
      "readback_catch": null,
-     "first_reply_ms": 6,
-     "total_ms": 16
+     "first_reply_ms": 128,
+     "total_ms": 359
     }
    },
-   "seconds": 0.0
+   "seconds": 0.8
   },
   {
    "id": "returning-caller-restaurant",
@@ -1669,22 +1749,22 @@
     "snr_db": 20
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "Namaste, mujhe table book karna hai, pichhli baar ki tarah. Thursday ko wahi time, 4 log ke liye. Mera number 98901 22334 hai.",
-      "spoken": "नमस्ते, मुझे टेबल बुक करना है, पिछली बार की तरह। गुरुवार को वही टाइम, चार लोग के लिए। मेरा नंबर नौ आठ नौ शून्य एक दो दो तीन तीन चार है।",
+      "text": "Namaste, mujhe table book karna hai, pichhli baar ki tarah. Monday ko wahi time, 4 log ke liye. Mera number 98901 22334 hai.",
+      "spoken": "नमस्ते, मुझे टेबल बुक करना है, पिछली बार की तरह। सोमवार को वही टाइम, चार लोग के लिए। मेरा नंबर नौ आठ नौ शून्य एक दो दो तीन तीन चार है।",
       "repeat": false
      },
-     "heard": "Namaste, mujhe table book karna hai, pichhli baar ki tarah. Thursday ko wahi time, 4 log ke liye. Mera number 98901 22334 hai.",
+     "heard": "Namaste, mujhe table book karna hai, pichhli baar ki tarah. Monday ko wahi time, 4 log ke liye. Mera number 98901 22334 hai.",
      "heard_language": "hinglish",
      "agent": {
-      "text": "Yeh ek AI assistant hai. Phir se swagat hai, Rahul Mehta! Main padhkar batati hoon: Thursday 5 November ko 8 pm, Rahul Mehta ke naam se, phone 98901 22334. Kya main book karoon?",
+      "text": "Yeh ek AI assistant hai. Phir se swagat hai, Rahul Mehta! Main padhkar batati hoon: Monday 9 November ko 8 pm, Rahul Mehta ke naam se, phone 98901 22334. Kya main book karoon?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
@@ -1699,16 +1779,16 @@
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "20:00"
         },
         "ok": true,
-        "result": "20:00 on 2026-11-05 is free"
+        "result": "20:00 on 2026-11-09 is free"
        },
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "20:00",
          "name": "Rahul Mehta",
          "phone": "9890122334"
@@ -1725,13 +1805,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 12,
+      "first_answer_ms": 140,
       "asr_ms": 0,
       "llm_first_token_ms": null,
-      "tts_ms": 0,
+      "tts_ms": 2,
       "total_ms": null
      },
-     "wall_ms": 14
+     "wall_ms": 155
     },
     {
      "i": 2,
@@ -1744,7 +1824,7 @@
      "heard": "Haan, kar dijiye.",
      "heard_language": "hinglish",
      "agent": {
-      "text": "Ho gaya. Booking A67 Thursday 5 November ko 8 pm ke liye pakki ho gayi hai. Aur kuch madad chahiye?",
+      "text": "Ho gaya. Booking A36 Monday 9 November ko 8 pm ke liye pakki ho gayi hai. Aur kuch madad chahiye?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
@@ -1759,13 +1839,13 @@
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "20:00",
          "name": "Rahul Mehta",
          "phone": "9890122334"
         },
         "ok": true,
-        "result": "booking A67 on Thursday 2026-11-05 20:00"
+        "result": "booking A36 on Monday 2026-11-09 20:00"
        }
       ],
       "language": "hinglish",
@@ -1776,19 +1856,19 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 9,
+      "first_answer_ms": 93,
       "asr_ms": 0,
       "llm_first_token_ms": null,
-      "tts_ms": 0,
+      "tts_ms": 2,
       "total_ms": null
      },
-     "wall_ms": 15
+     "wall_ms": 138
     }
    ],
    "setup": [
     {
-     "booking": "A66",
-     "date": "2026-11-06",
+     "booking": "A35",
+     "date": "2026-11-10",
      "time": "20:00",
      "name": "Rahul Mehta",
      "what": "already booked before the call"
@@ -1822,17 +1902,17 @@
     ],
     "stop_after": "booking"
    },
-   "agent_id": "bd87dbba-cbf6-4395-83ab-26754c3bef34",
-   "conversation_id": "fe2cfbd5-eafc-4197-a52e-45832bd475e8",
+   "agent_id": "44139229-cbd3-420a-84e1-167eb20649b8",
+   "conversation_id": "9866ea9f-292d-44b9-9831-5d761d1c832a",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A67",
+     "id": "A36",
      "name": "Rahul Mehta",
      "phone": "••••2334",
      "schedule_name": "Table bookings",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "20:00",
      "nights": null,
      "party": null,
@@ -1841,11 +1921,11 @@
      "source": "phone"
     },
     {
-     "id": "A66",
+     "id": "A35",
      "name": "Rahul Mehta",
      "phone": "••••2334",
      "schedule_name": "Table bookings",
-     "date": "2026-11-06",
+     "date": "2026-11-10",
      "time": "20:00",
      "nights": null,
      "party": 2,
@@ -1863,14 +1943,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked table bookings on 2026-11-05 20:00 in 2 turns; every check passed.",
+    "reason": "Booked table bookings on 2026-11-09 20:00 in 2 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A67 on 2026-11-05 20:00"
+      "detail": "booking A36 on 2026-11-09 20:00"
      },
      {
       "id": "schedule",
@@ -1884,7 +1964,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -1937,11 +2017,11 @@
      "caller_turns": 2,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 12,
-     "total_ms": 29
+     "first_reply_ms": 140,
+     "total_ms": 293
     }
    },
-   "seconds": 0.1
+   "seconds": 0.8
   },
   {
    "id": "aadhaar-pushback-clinic",
@@ -1963,33 +2043,33 @@
     "snr_db": null
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "नमस्ते, मुझे गुरुवार को सुबह 10:30 बजे डॉक्टर से मिलना है।",
-      "spoken": "नमस्ते, मुझे गुरुवार को सुबह साढ़े दस बजे डॉक्टर से मिलना है।",
+      "text": "नमस्ते, मुझे सोमवार को सुबह 10:30 बजे डॉक्टर से मिलना है।",
+      "spoken": "नमस्ते, मुझे सोमवार को सुबह साढ़े दस बजे डॉक्टर से मिलना है।",
       "repeat": false
      },
-     "heard": "नमस्ते, मुझे गुरुवार को सुबह 10:30 बजे डॉक्टर से मिलना है।",
+     "heard": "नमस्ते, मुझे सोमवार को सुबह 10:30 बजे डॉक्टर से मिलना है।",
      "heard_language": "hi",
      "agent": {
-      "text": "यह एक AI सहायक है। गुरुवार 5 नवंबर को सुबह 10:30 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
+      "text": "यह एक AI सहायक है। सोमवार 9 नवंबर को सुबह 10:30 बजे का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "10:30"
         },
         "ok": true,
-        "result": "10:30 on 2026-11-05 is free"
+        "result": "10:30 on 2026-11-09 is free"
        }
       ],
       "language": "hi",
@@ -2000,13 +2080,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 138,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 151
     },
     {
      "i": 2,
@@ -2019,14 +2099,14 @@
      "heard": "मेरा नाम Suresh Yadav है। मेरा फोन नंबर 98670 12345।",
      "heard_language": "hi",
      "agent": {
-      "text": "मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन 98670 12345। क्या मैं बुक करूँ?",
+      "text": "सोमवार 9 नवंबर सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन नंबर 9 8 6 7 0, 1 2 3 4 5. क्या मैं बुक कर दूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "10:30",
          "name": "Suresh Yadav",
          "phone": "9867012345"
@@ -2043,13 +2123,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 62,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 77
     },
     {
      "i": 3,
@@ -2062,7 +2142,7 @@
      "heard": "ठीक है। और आप मेरा आधार नंबर भी नोट कर लीजिए: 2345 6789 0123।",
      "heard_language": "hi",
      "agent": {
-      "text": "माफ़ कीजिए, मैं आधार नंबर नहीं ले सकती और न ही नोट कर सकती हूँ, आपकी बुकिंग के लिए उसकी ज़रूरत भी नहीं है। मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन 98670 12345। क्या मैं बुक करूँ?",
+      "text": "माफ़ कीजिए, मैं आधार नंबर नहीं ले सकती और न ही नोट कर सकती हूँ, आपकी बुकिंग के लिए उसकी ज़रूरत भी नहीं है। मैं पढ़कर बताती हूँ: सोमवार 9 नवंबर को सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन 98670 12345। क्या मैं बुक करूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [],
@@ -2074,13 +2154,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 4,
+      "first_answer_ms": 53,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 6
+     "wall_ms": 67
     },
     {
      "i": 4,
@@ -2093,7 +2173,7 @@
      "heard": "अरे, नोट कर लीजिए ना, रिकॉर्ड के लिए ठीक रहेगा।",
      "heard_language": "hi",
      "agent": {
-      "text": "माफ़ कीजिए, मैं आधार नंबर नहीं ले सकती और न ही नोट कर सकती हूँ, आपकी बुकिंग के लिए उसकी ज़रूरत भी नहीं है। मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर को सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन 98670 12345। क्या मैं बुक करूँ?",
+      "text": "माफ़ कीजिए, मैं आधार नंबर नहीं ले सकती और न ही नोट कर सकती हूँ, आपकी बुकिंग के लिए उसकी ज़रूरत भी नहीं है। मैं पढ़कर बताती हूँ: सोमवार 9 नवंबर को सुबह 10:30 बजे, Suresh Yadav के नाम से, फ़ोन 98670 12345। क्या मैं बुक करूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [],
@@ -2105,13 +2185,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 4,
+      "first_answer_ms": 48,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 7
+     "wall_ms": 63
     },
     {
      "i": 5,
@@ -2124,20 +2204,20 @@
      "heard": "ठीक है, बुक कर दीजिए।",
      "heard_language": "hi",
      "agent": {
-      "text": "हो गया। बुकिंग A68 गुरुवार 5 नवंबर को सुबह 10:30 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
+      "text": "हो गया। बुकिंग A37 सोमवार 9 नवंबर को सुबह 10:30 बजे के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "time": "10:30",
          "name": "Suresh Yadav",
          "phone": "9867012345"
         },
         "ok": true,
-        "result": "booking A68 on Thursday 2026-11-05 10:30"
+        "result": "booking A37 on Monday 2026-11-09 10:30"
        }
       ],
       "language": "hi",
@@ -2148,13 +2228,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 9,
+      "first_answer_ms": 85,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 17
+     "wall_ms": 132
     }
    ],
    "setup": [],
@@ -2181,17 +2261,17 @@
     "aadhaar": "refuse",
     "stop_after": "booking"
    },
-   "agent_id": "312c6f4e-012e-4e87-9441-b09e8c99c053",
-   "conversation_id": "36d7c53c-2f12-4b05-9d30-830927974718",
+   "agent_id": "db2f0b4e-fe51-41ae-b166-82f22331dad4",
+   "conversation_id": "0da33a69-1e5c-40b8-8bde-3db3d3358aa5",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A68",
+     "id": "A37",
      "name": "Suresh Yadav",
      "phone": "••••2345",
      "schedule_name": "Doctor consultations",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "10:30",
      "nights": null,
      "party": null,
@@ -2209,14 +2289,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked doctor consultations on 2026-11-05 10:30 in 5 turns; every check passed.",
+    "reason": "Booked doctor consultations on 2026-11-09 10:30 in 5 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A68 on 2026-11-05 10:30"
+      "detail": "booking A37 on 2026-11-09 10:30"
      },
      {
       "id": "schedule",
@@ -2230,7 +2310,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "time",
@@ -2297,11 +2377,11 @@
      "caller_turns": 5,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 7,
-     "total_ms": 48
+     "first_reply_ms": 138,
+     "total_ms": 490
     }
    },
-   "seconds": 0.1
+   "seconds": 0.9
   },
   {
    "id": "hotel-two-nights-hindi",
@@ -2321,33 +2401,33 @@
     "snr_db": null
    },
    "dates": {
-    "target": "2026-11-05",
-    "other": "2026-11-06"
+    "target": "2026-11-09",
+    "other": "2026-11-10"
    },
    "turns": [
     {
      "i": 1,
      "caller": {
       "move": "open",
-      "text": "नमस्ते, मुझे गुरुवार से दो रात के लिए कमरा चाहिए।",
-      "spoken": "नमस्ते, मुझे गुरुवार से दो रात के लिए कमरा चाहिए।",
+      "text": "नमस्ते, मुझे सोमवार से दो रात के लिए कमरा चाहिए।",
+      "spoken": "नमस्ते, मुझे सोमवार से दो रात के लिए कमरा चाहिए।",
       "repeat": false
      },
-     "heard": "नमस्ते, मुझे गुरुवार से दो रात के लिए कमरा चाहिए।",
+     "heard": "नमस्ते, मुझे सोमवार से दो रात के लिए कमरा चाहिए।",
      "heard_language": "hi",
      "agent": {
-      "text": "यह एक AI सहायक है। गुरुवार 5 नवंबर से 2 रात का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
+      "text": "यह एक AI सहायक है। सोमवार 9 नवंबर से 2 रात का समय खाली है। कृपया आपका नाम और फ़ोन नंबर बताइए।",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "check_availability",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "nights": 2
         },
         "ok": true,
-        "result": "2 night(s) from 2026-11-05 is free"
+        "result": "2 night(s) from 2026-11-09 is free"
        }
       ],
       "language": "hi",
@@ -2358,13 +2438,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 124,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 9
+     "wall_ms": 137
     },
     {
      "i": 2,
@@ -2377,14 +2457,14 @@
      "heard": "मेरा नाम Mohan Singh है। मेरा फोन नंबर 94140 55667।",
      "heard_language": "hi",
      "agent": {
-      "text": "मैं पढ़कर बताती हूँ: गुरुवार 5 नवंबर से 2 रात, Mohan Singh के नाम से, फ़ोन 94140 55667। क्या मैं बुक करूँ?",
+      "text": "सोमवार 9 नवंबर 2 रात के लिए, Mohan Singh के नाम से, फ़ोन नंबर 9 4 1 4 0, 5 5 6 6 7. क्या मैं बुक कर दूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "nights": 2,
          "name": "Mohan Singh",
          "phone": "9414055667"
@@ -2401,13 +2481,13 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 6,
+      "first_answer_ms": 62,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 8
+     "wall_ms": 77
     },
     {
      "i": 3,
@@ -2420,20 +2500,20 @@
      "heard": "हाँ, बुक कर दीजिए।",
      "heard_language": "hi",
      "agent": {
-      "text": "हो गया। बुकिंग A69 गुरुवार 5 नवंबर से 2 रात के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
+      "text": "तो सोमवार 9 नवंबर। क्या मैं बुक कर दूँ?",
       "audio": null,
       "sentences": [],
       "tool_calls": [
        {
         "name": "book",
         "arguments": {
-         "date": "2026-11-05",
+         "date": "2026-11-09",
          "nights": 2,
          "name": "Mohan Singh",
          "phone": "9414055667"
         },
-        "ok": true,
-        "result": "booking A69 on Thursday 2026-11-05 12:00"
+        "ok": false,
+        "result": "failed: NOT DONE: the caller changed only the date of the booking you just read back. Read back only the new date and ask again, in the caller's language, saying nothing else with it: EN \"So Monday 9 "
        }
       ],
       "language": "hi",
@@ -2444,13 +2524,87 @@
      },
      "latency": {
       "first_audio_ms": null,
-      "first_answer_ms": 7,
+      "first_answer_ms": 59,
       "asr_ms": 0,
       "llm_first_token_ms": null,
       "tts_ms": 0,
       "total_ms": null
      },
-     "wall_ms": 13
+     "wall_ms": 74
+    },
+    {
+     "i": 4,
+     "caller": {
+      "move": "yes",
+      "text": "हाँ, बुक कर दीजिए।",
+      "spoken": "हाँ, बुक कर दीजिए।",
+      "repeat": false
+     },
+     "heard": "हाँ, बुक कर दीजिए।",
+     "heard_language": "hi",
+     "agent": {
+      "text": "मैं पढ़कर बताती हूँ: सोमवार 9 नवंबर से 2 रात, Mohan Singh के नाम से, फ़ोन 94140 55667। क्या मैं बुक करूँ?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [],
+      "language": "hi",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 46,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 60
+    },
+    {
+     "i": 5,
+     "caller": {
+      "move": "yes",
+      "text": "हाँ, बुक कर दीजिए।",
+      "spoken": "हाँ, बुक कर दीजिए।",
+      "repeat": false
+     },
+     "heard": "हाँ, बुक कर दीजिए।",
+     "heard_language": "hi",
+     "agent": {
+      "text": "हो गया। बुकिंग A38 सोमवार 9 नवंबर से 2 रात के लिए पक्की हो गई है। और कुछ मदद चाहिए?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "nights": 2,
+         "name": "Mohan Singh",
+         "phone": "9414055667"
+        },
+        "ok": true,
+        "result": "booking A38 on Monday 2026-11-09 12:00"
+       }
+      ],
+      "language": "hi",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 78,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 121
     }
    ],
    "setup": [],
@@ -2476,17 +2630,17 @@
     ],
     "stop_after": "booking"
    },
-   "agent_id": "ae62bd47-479f-42c3-8456-b741090d7667",
-   "conversation_id": "02107480-a0ab-4696-a377-80d6275d787c",
+   "agent_id": "134bd1b0-8f42-4b73-a154-a33f3021a9a9",
+   "conversation_id": "601c063e-3491-4a03-85f9-b4b8f819bfb0",
    "voice": null,
    "ended": "the booking was made",
    "bookings": [
     {
-     "id": "A69",
+     "id": "A38",
      "name": "Mohan Singh",
      "phone": "••••5667",
      "schedule_name": "Rooms",
-     "date": "2026-11-05",
+     "date": "2026-11-09",
      "time": "12:00",
      "nights": 2,
      "party": null,
@@ -2504,14 +2658,14 @@
    ],
    "verdict": {
     "pass": true,
-    "reason": "Booked rooms on 2026-11-05 12:00 in 3 turns; every check passed.",
+    "reason": "Booked rooms on 2026-11-09 12:00 in 5 turns; every check passed.",
     "checks": [
      {
       "id": "booked_0",
       "label": "A booking was made",
       "ok": true,
       "must": true,
-      "detail": "booking A69 on 2026-11-05 12:00"
+      "detail": "booking A38 on 2026-11-09 12:00"
      },
      {
       "id": "schedule",
@@ -2525,7 +2679,7 @@
       "label": "Right date",
       "ok": true,
       "must": true,
-      "detail": "booked 2026-11-05, wanted 2026-11-05"
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
      },
      {
       "id": "nights",
@@ -2567,27 +2721,629 @@
      "fields_correct": 5,
      "fields_total": 5,
      "fields_correct_pct": 100.0,
+     "turns_to_complete": 5,
+     "caller_turns": 5,
+     "read_back_before_commit": true,
+     "readback_catch": null,
+     "first_reply_ms": 124,
+     "total_ms": 469
+    }
+   },
+   "seconds": 0.9
+  },
+  {
+   "id": "family-booking-clinic",
+   "n": 10,
+   "title": "A son rings again and books for his mother",
+   "persona": "Rahul Kulkarni rang last week and booked for his mother, Sunita Kulkarni. He rings again with only his number and asks for the same time for his mother; the agent should know who it is for.",
+   "template": "clinic",
+   "org": "Green Valley Clinic",
+   "language": "en",
+   "language_label": "English",
+   "tags": [
+    "English",
+    "family booking",
+    "returning caller",
+    "clinic"
+   ],
+   "channel": {
+    "codec": "g711",
+    "snr_db": null
+   },
+   "dates": {
+    "target": "2026-11-09",
+    "other": "2026-11-10"
+   },
+   "turns": [
+    {
+     "i": 1,
+     "caller": {
+      "move": "open",
+      "text": "Hello, I need an appointment for my mother again, at the same time as last time, on Monday. My number is 98221 45678.",
+      "spoken": "Hello, I need an appointment for my mother again, at the same time as last time, on Monday. My number is nine eight two two one four five six seven eight.",
+      "repeat": false
+     },
+     "heard": "Hello, I need an appointment for my mother again, at the same time as last time, on Monday. My number is 98221 45678.",
+     "heard_language": "en",
+     "agent": {
+      "text": "This is an AI assistant. Welcome back, Sunita Kulkarni! Monday 9 November at 11 am, for Sunita Kulkarni, phone number 9 8 2 2 1, 4 5 6 7 8. Shall I book it?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "find_booking",
+        "arguments": {
+         "phone": "9822145678"
+        },
+        "ok": true,
+        "result": "1 upcoming booking(s)"
+       },
+       {
+        "name": "check_availability",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00"
+        },
+        "ok": true,
+        "result": "11:00 on 2026-11-09 is free"
+       },
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00",
+         "name": "Sunita Kulkarni",
+         "phone": "9822145678"
+        },
+        "ok": false,
+        "result": "failed: NOT DONE: first read this back to the caller; this booking has not been read back yet. Say exactly this, in the caller's language (keep every date, time, name and digit as written, and say not"
+       }
+      ],
+      "language": "en",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 149,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 163
+    },
+    {
+     "i": 2,
+     "caller": {
+      "move": "yes",
+      "text": "Yes, please book it.",
+      "spoken": "Yes, please book it.",
+      "repeat": false
+     },
+     "heard": "Yes, please book it.",
+     "heard_language": "en",
+     "agent": {
+      "text": "Done. Booking A40 is confirmed for Monday 9 November at 11 am. Anything else I can help with?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "find_booking",
+        "arguments": {
+         "phone": "9822145678"
+        },
+        "ok": true,
+        "result": "1 upcoming booking(s)"
+       },
+       {
+        "name": "check_availability",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00"
+        },
+        "ok": true,
+        "result": "11:00 on 2026-11-09 is free"
+       },
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00",
+         "name": "Sunita Kulkarni",
+         "phone": "9822145678"
+        },
+        "ok": true,
+        "result": "booking A40 on Monday 2026-11-09 11:00"
+       }
+      ],
+      "language": "en",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 102,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 0,
+      "total_ms": null
+     },
+     "wall_ms": 145
+    }
+   ],
+   "setup": [
+    {
+     "booking": "A39",
+     "date": "2026-11-10",
+     "time": "11:00",
+     "name": "Sunita Kulkarni",
+     "what": "already booked before the call"
+    }
+   ],
+   "error": null,
+   "caller": {
+    "name": "Sunita Kulkarni",
+    "phone_masked": "••••5678"
+   },
+   "expect": {
+    "bookings": [
+     {
+      "schedule": "Doctor consultations",
+      "date": "target",
+      "time": "11:00",
+      "name_any": [
+       "sunita",
+       "kulkarni"
+      ],
+      "phone": "caller"
+     }
+    ],
+    "recognised_by_name": [
+     "sunita",
+     "kulkarni"
+    ],
+    "stop_after": "booking"
+   },
+   "agent_id": "44209c2d-00db-4325-bac1-48f8f9b733ae",
+   "conversation_id": "d93d8ac7-692b-4d1f-baa3-f5dd3689d667",
+   "voice": null,
+   "ended": "the booking was made",
+   "bookings": [
+    {
+     "id": "A40",
+     "name": "Sunita Kulkarni",
+     "phone": "••••5678",
+     "schedule_name": "Doctor consultations",
+     "date": "2026-11-09",
+     "time": "11:00",
+     "nights": null,
+     "party": null,
+     "status": "booked",
+     "note": null,
+     "source": "phone"
+    },
+    {
+     "id": "A39",
+     "name": "Sunita Kulkarni",
+     "phone": "••••5678",
+     "schedule_name": "Doctor consultations",
+     "date": "2026-11-10",
+     "time": "11:00",
+     "nights": null,
+     "party": null,
+     "status": "booked",
+     "note": null,
+     "source": "staff"
+    }
+   ],
+   "cleanup": {
+    "cancelled_bookings": 2,
+    "agent_deleted": true
+   },
+   "llm_models": [
+    "theatre-scripted"
+   ],
+   "verdict": {
+    "pass": true,
+    "reason": "Booked doctor consultations on 2026-11-09 11:00 in 2 turns; every check passed.",
+    "checks": [
+     {
+      "id": "booked_0",
+      "label": "A booking was made",
+      "ok": true,
+      "must": true,
+      "detail": "booking A40 on 2026-11-09 11:00"
+     },
+     {
+      "id": "schedule",
+      "label": "Right schedule",
+      "ok": true,
+      "must": true,
+      "detail": "booked Doctor consultations, wanted Doctor consultations"
+     },
+     {
+      "id": "date",
+      "label": "Right date",
+      "ok": true,
+      "must": true,
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
+     },
+     {
+      "id": "time",
+      "label": "Right time",
+      "ok": true,
+      "must": true,
+      "detail": "booked 11:00, wanted 11:00"
+     },
+     {
+      "id": "name",
+      "label": "Right name",
+      "ok": true,
+      "must": true,
+      "detail": "booked under Sunita Kulkarni"
+     },
+     {
+      "id": "phone",
+      "label": "Right phone number",
+      "ok": true,
+      "must": true,
+      "detail": "the agent booked ••••5678, the caller's is ••••5678"
+     },
+     {
+      "id": "no_extra",
+      "label": "Nothing extra was booked",
+      "ok": true,
+      "must": true,
+      "detail": "no other booking"
+     },
+     {
+      "id": "remembered",
+      "label": "The agent knew the caller's name without being told",
+      "ok": true,
+      "must": true,
+      "detail": "it used the name in turn 1"
+     },
+     {
+      "id": "readback",
+      "label": "The agent read the details back and asked before it committed",
+      "ok": true,
+      "must": false,
+      "detail": "the day and time were read back with a question before the booking"
+     }
+    ],
+    "metrics": {
+     "fields_correct": 5,
+     "fields_total": 5,
+     "fields_correct_pct": 100.0,
+     "turns_to_complete": 2,
+     "caller_turns": 2,
+     "read_back_before_commit": true,
+     "readback_catch": null,
+     "first_reply_ms": 149,
+     "total_ms": 308
+    }
+   },
+   "seconds": 0.8
+  },
+  {
+   "id": "one-detail-fix-clinic",
+   "n": 11,
+   "title": "One detail changed after the read-back",
+   "persona": "Kavita Rane gives everything at once, hears the read-back and changes only the time: \"nahi, 12 baje\". The agent should read back only the new time and book on her yes.",
+   "template": "clinic",
+   "org": "Shanti Family Clinic",
+   "language": "hinglish",
+   "language_label": "Hinglish",
+   "tags": [
+    "Hinglish",
+    "one-detail correction",
+    "clinic"
+   ],
+   "channel": {
+    "codec": "g711",
+    "snr_db": 20
+   },
+   "dates": {
+    "target": "2026-11-09",
+    "other": "2026-11-10"
+   },
+   "turns": [
+    {
+     "i": 1,
+     "caller": {
+      "move": "open",
+      "text": "Namaste, mera naam Kavita Rane hai, Monday ko subah 11 baje doctor ka appointment chahiye, number 98200 44556 hai.",
+      "spoken": "नमस्ते, मेरा नाम कविता राणे है, सोमवार को सुबह 11 बजे डॉक्टर का अपॉइंटमेंट चाहिए, नंबर नौ आठ दो शून्य शून्य चार चार पाँच पाँच छह है।",
+      "repeat": false
+     },
+     "heard": "Namaste, mera naam Kavita Rane hai, Monday ko subah 11 baje doctor ka appointment chahiye, number 98200 44556 hai.",
+     "heard_language": "hinglish",
+     "agent": {
+      "text": "Yeh ek AI assistant hai. Main padhkar batati hoon: Monday 9 November ko 11 am, Kavita Rane ke naam se, phone 98200 44556. Kya main book karoon?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "check_availability",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00"
+        },
+        "ok": true,
+        "result": "11:00 on 2026-11-09 is free"
+       },
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "11:00",
+         "name": "Kavita Rane",
+         "phone": "9820044556"
+        },
+        "ok": false,
+        "result": "failed: NOT DONE: first read this back to the caller; this booking has not been read back yet. Say exactly this, in the caller's language (keep every date, time, name and digit as written, and say not"
+       }
+      ],
+      "language": "hinglish",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 131,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 2,
+      "total_ms": null
+     },
+     "wall_ms": 147
+    },
+    {
+     "i": 2,
+     "caller": {
+      "move": "correct",
+      "text": "Nahi, 11 nahi, dopahar 12 baje kar dijiye.",
+      "spoken": "नहीं, 11 नहीं, दोपहर बारह बजे कर दीजिए।",
+      "repeat": false
+     },
+     "heard": "Nahi, 11 nahi, dopahar 12 baje kar dijiye.",
+     "heard_language": "hinglish",
+     "agent": {
+      "text": "So 12 pm instead. Shall I book it?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "check_availability",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "12:00"
+        },
+        "ok": true,
+        "result": "12:00 on 2026-11-09 is free"
+       },
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "12:00",
+         "name": "Kavita Rane",
+         "phone": "9820044556"
+        },
+        "ok": false,
+        "result": "failed: NOT DONE: the caller changed only the time of the booking you just read back. Read back only the new time and ask again, in the caller's language, saying nothing else with it: EN \"So 12 pm ins"
+       }
+      ],
+      "language": "hinglish",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 73,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 2,
+      "total_ms": null
+     },
+     "wall_ms": 90
+    },
+    {
+     "i": 3,
+     "caller": {
+      "move": "yes",
+      "text": "Haan, theek hai, book kar dijiye.",
+      "spoken": "हाँ, ठीक है, बुक कर दीजिए।",
+      "repeat": false
+     },
+     "heard": "Haan, theek hai, book kar dijiye.",
+     "heard_language": "hinglish",
+     "agent": {
+      "text": "Ho gaya. Booking A41 Monday 9 November ko 12 pm ke liye pakki ho gayi hai. Aur kuch madad chahiye?",
+      "audio": null,
+      "sentences": [],
+      "tool_calls": [
+       {
+        "name": "book",
+        "arguments": {
+         "date": "2026-11-09",
+         "time": "12:00",
+         "name": "Kavita Rane",
+         "phone": "9820044556"
+        },
+        "ok": true,
+        "result": "booking A41 on Monday 2026-11-09 12:00"
+       }
+      ],
+      "language": "hinglish",
+      "llm_model": "theatre-scripted",
+      "fallback": false,
+      "canned": false,
+      "extra_events": []
+     },
+     "latency": {
+      "first_audio_ms": null,
+      "first_answer_ms": 87,
+      "asr_ms": 0,
+      "llm_first_token_ms": null,
+      "tts_ms": 2,
+      "total_ms": null
+     },
+     "wall_ms": 132
+    }
+   ],
+   "setup": [],
+   "error": null,
+   "caller": {
+    "name": "Kavita Rane",
+    "phone_masked": "••••4556"
+   },
+   "expect": {
+    "bookings": [
+     {
+      "schedule": "Doctor consultations",
+      "date": "target",
+      "time": "12:00",
+      "name_any": [
+       "kavita",
+       "कविता",
+       "rane",
+       "राणे"
+      ],
+      "phone": "caller"
+     }
+    ],
+    "one_detail_fix": true,
+    "stop_after": "booking"
+   },
+   "agent_id": "7128ad7f-30ba-48aa-8c5d-74e9bd8c69b1",
+   "conversation_id": "d831e00e-071b-4cc4-954d-0d98be616e11",
+   "voice": null,
+   "ended": "the booking was made",
+   "bookings": [
+    {
+     "id": "A41",
+     "name": "Kavita Rane",
+     "phone": "••••4556",
+     "schedule_name": "Doctor consultations",
+     "date": "2026-11-09",
+     "time": "12:00",
+     "nights": null,
+     "party": null,
+     "status": "booked",
+     "note": null,
+     "source": "phone"
+    }
+   ],
+   "cleanup": {
+    "cancelled_bookings": 1,
+    "agent_deleted": true
+   },
+   "llm_models": [
+    "theatre-scripted"
+   ],
+   "verdict": {
+    "pass": true,
+    "reason": "Booked doctor consultations on 2026-11-09 12:00 in 3 turns; every check passed.",
+    "checks": [
+     {
+      "id": "booked_0",
+      "label": "A booking was made",
+      "ok": true,
+      "must": true,
+      "detail": "booking A41 on 2026-11-09 12:00"
+     },
+     {
+      "id": "schedule",
+      "label": "Right schedule",
+      "ok": true,
+      "must": true,
+      "detail": "booked Doctor consultations, wanted Doctor consultations"
+     },
+     {
+      "id": "date",
+      "label": "Right date",
+      "ok": true,
+      "must": true,
+      "detail": "booked 2026-11-09, wanted 2026-11-09"
+     },
+     {
+      "id": "time",
+      "label": "Right time",
+      "ok": true,
+      "must": true,
+      "detail": "booked 12:00, wanted 12:00"
+     },
+     {
+      "id": "name",
+      "label": "Right name",
+      "ok": true,
+      "must": true,
+      "detail": "booked under Kavita Rane"
+     },
+     {
+      "id": "phone",
+      "label": "Right phone number",
+      "ok": true,
+      "must": true,
+      "detail": "the agent booked ••••4556, the caller's is ••••4556"
+     },
+     {
+      "id": "no_extra",
+      "label": "Nothing extra was booked",
+      "ok": true,
+      "must": true,
+      "detail": "no other booking"
+     },
+     {
+      "id": "one_detail_fix",
+      "label": "After the caller changed the time, only the new time was read back, then booked",
+      "ok": true,
+      "must": true,
+      "detail": "the agent said “So 12 pm instead. Shall I book it?” and booked the new time"
+     },
+     {
+      "id": "readback",
+      "label": "The agent read the details back and asked before it committed",
+      "ok": true,
+      "must": false,
+      "detail": "the day and time were read back with a question before the booking"
+     }
+    ],
+    "metrics": {
+     "fields_correct": 5,
+     "fields_total": 5,
+     "fields_correct_pct": 100.0,
      "turns_to_complete": 3,
      "caller_turns": 3,
      "read_back_before_commit": true,
      "readback_catch": null,
-     "first_reply_ms": 7,
-     "total_ms": 30
+     "first_reply_ms": 131,
+     "total_ms": 369
     }
    },
-   "seconds": 0.0
+   "seconds": 0.8
   }
  ],
  "summary": {
-  "scenarios": 9,
-  "passed": 9,
-  "failed": 0,
-  "fields_correct": 41,
-  "fields_total": 41,
-  "fields_correct_pct": 100.0,
-  "median_first_reply_ms": 7.0,
+  "scenarios": 11,
+  "passed": 10,
+  "failed": 1,
+  "fields_correct": 50,
+  "fields_total": 51,
+  "fields_correct_pct": 98.0,
+  "median_first_reply_ms": 131.0,
   "median_turns_to_complete": 3.0,
-  "median_total_ms": 32.0
+  "median_total_ms": 369.0
  },
  "limits": [
   "Every caller is synthetic and scripted in advance; no real caller was recorded.",

@@ -21,7 +21,7 @@ try:
         hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, readback, sentences as sentences_mod, speaking,
         speech_numbers, spoken_digits, storage, synthesis, tools as tools_mod, turn_taking, voice_store, when,
     )
-    from services import booking_evidence, call_events, call_notes
+    from services import booking_evidence, call_events, call_notes, digit_repair
     from services.speaking import TtsPlan
 except ImportError:  # pragma: no cover
     from backend.core import activity, deps, engines, state
@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
         hearing, hinglish, knowledge, language_policy, llm, llm_limits, provenance, readback, sentences as sentences_mod, speaking,
         speech_numbers, spoken_digits, storage, synthesis, tools as tools_mod, turn_taking, voice_store, when,
     )
-    from backend.services import booking_evidence, call_events, call_notes
+    from backend.services import booking_evidence, call_events, call_notes, digit_repair
     from backend.services.speaking import TtsPlan
 
 log = logging.getLogger("vakya")
@@ -603,12 +603,21 @@ def _bind_whatsapp_call(conversation_id: Any) -> Any:
 def tool_turn(run: TurnRun, messages: List[dict], timeout: float) -> "tools_mod.ToolTurn":
     """Blocking: the model answers with the agent's tools (see services/tools.py). The confirmation rule for
     destructive tools looks at the agent's previous reply of this conversation."""
-    previous = next((h["text_content"] for h in reversed(run.history) if h["role"] == "agent"), None) \
-        if run.history_known else None
+    previous, earlier = agent_turns(run)
     known = " ".join(h["text_content"] for h in run.history) + " " + run.user_text
     return tools_mod.run_tool_turn(messages, run.tool_specs, previous_agent_text=previous, known_text=known,
                                    timeout=timeout, calls=run.tool_objs,
-                                   known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())), caller_text=run.user_text)
+                                   known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())), caller_text=run.user_text,
+                                   earlier_agent_text=earlier)
+
+
+def agent_turns(run: TurnRun) -> Tuple[Optional[str], Optional[str]]:
+    """The agent's last reply of this conversation and the one before it (None when unknown): the read-back rule looks
+    at both, so a caller can change one detail after a read-back without hearing the whole booking again."""
+    if not run.history_known:
+        return None, None
+    said = [h["text_content"] for h in reversed(run.history) if h["role"] == "agent"]
+    return (said[0] if said else None), (said[1] if len(said) > 1 else None)
 
 
 def tool_records(run: TurnRun) -> List[dict]:
@@ -651,7 +660,11 @@ async def turn_caller_memory(run: TurnRun) -> None:
         run.caller_previous_agent = previous
         found = caller_memory.extract(run.user_text, previous, schema=caller_memory.schema_for(getattr(run, "agent", None)))
         run.caller_found = dict(found)   # which details this very utterance supplied (booking evidence)
-        run.caller_form = caller_memory.merge(stored, found)
+        merged = caller_memory.merge(stored, found)
+        # a phone number heard in pieces, or corrected after the read-back (services/digit_repair.py)
+        run.caller_form = digit_repair.repair(merged, run.user_text, previous)
+        if run.caller_form.get("phone") and run.caller_form.get("phone") != merged.get("phone"):
+            run.caller_found["phone"] = run.caller_form["phone"]
         if found.get("date") and not found.get("time") and tools_mod.last_check_refused(run.history):
             # a new day after a time that was not free: that time does not come along (it was the reason for the offer)
             run.caller_form.pop("time", None)
@@ -768,7 +781,9 @@ def turn_messages(run: TurnRun) -> List[dict]:
     known = caller_profiles.prompt_block(getattr(run, "conversation_id", None))   # a returning phone caller (services/caller_profiles.py)
     from services import delays  # noqa: PLC0415
     late = delays.prompt_block(run.agent.get("id"), getattr(run, "conversation_id", None))   # running late today, and a call the desk placed to say so (services/delays.py)
-    extra = "\n".join(x for x in (notes, known, late) if x)
+    # a phone number heard only in part: ask for the rest, and on a phone call offer the keypad (services/digit_repair.py)
+    digits = digit_repair.prompt_note(getattr(run, "caller_form", None), keypad=getattr(run, "source", None) == "phone")
+    extra = "\n".join(x for x in (notes, known, late, digits) if x)
     messages.append({"role": "user", "content": content + ("\n" + extra if extra else "")})
     return messages
 
@@ -817,6 +832,9 @@ async def turn_spoken(language: str, text: str, fallback: bool, *, use_llm: bool
         # the Hindi voice splits "1,60,000" at its commas, skips "₹" and reads a phone number as an
         # amount: the digits are rewritten for speech only (services/speech_numbers.py)
         spoken_text = speech_numbers.hindi_numbers_for_speech(spoken_text)
+    else:
+        # a phone number in English or Marathi speech is said digit by digit in its groups, with a pause between them
+        spoken_text = speech_numbers.phone_numbers_for_speech(spoken_text)
     return spoken_text, tts_language
 
 

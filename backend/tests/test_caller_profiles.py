@@ -465,6 +465,25 @@ def test_an_unknown_number_gets_the_agents_own_greeting_and_no_block(rig, env, s
     assert [t for t, _ in rig.spoken][:2] == ["This is an AI assistant.", "Hi, I'm Ria."]
 
 
+def test_an_unknown_caller_is_offered_the_number_they_call_from(rig, env, sessions):
+    """A new caller is asked "Shall I book it on this number, ending ...?" instead of dictating ten digits: the number is
+    kept as an offer (never a known detail) and every turn's prompt says how to ask (services/digit_repair.py)."""
+    a = make_agent(rig.client)
+    time.sleep(0.3)                                   # the previous test's call may still be writing its profile
+    cp.delete("local-user", NUMBER)
+    seen = {}
+
+    def peek(sess):
+        seen["form"] = caller_memory.load(sess.conversation_id, env.local_db, "local-user")
+
+    sess = phone_call(rig, a, "I want to book an appointment.", then=peek)
+    assert sess.profile is None
+    assert seen["form"] == {"phone_offer": "9876543210"}
+    content = rig.asked[-1]["messages"][-1]["content"]
+    assert "calling from a mobile number ending 3 2 1 0" in content and "this number" in content
+    assert "phone 9876543210" not in content                                     # an offer is not a known detail
+
+
 def test_a_known_caller_is_greeted_by_name_in_their_language_and_the_clip_is_not_cached(rig, env, sessions):
     a = speaks(env, make_agent(rig.client), ["en", "hi"])
     seed(last_booking=BOOKING)

@@ -86,7 +86,15 @@ export interface TurnEndEvent extends Envelope {
   error?: string;
 }
 
-export type LiveEvent = CallerEvent | ToolEvent | AgentEvent | BookingEvent | TurnEndEvent;
+/** One phone turn's response time, measured on the call: the caller's last word to the first audio of the reply. */
+export interface LatencyEvent extends Envelope {
+  type: "latency";
+  turn?: number;
+  response_ms: number;
+  end_wait?: string;
+}
+
+export type LiveEvent = CallerEvent | ToolEvent | AgentEvent | BookingEvent | TurnEndEvent | LatencyEvent;
 
 export interface EventsResponse {
   events: LiveEvent[];
@@ -125,11 +133,14 @@ export interface LiveState {
   speakingUntil: number;
   /** Ended turns count, to know a call has gone quiet. */
   turnsEnded: number;
+  /** Response time of each answered phone turn, oldest first (ms, measured on the call). */
+  responses: number[];
 }
 
 export const emptyFocus = (): CalendarFocus => ({ scheduleId: null, date: null, checking: null, offered: [], holding: null, booked: null });
 export const initialLive = (): LiveState => ({
   lines: [], focus: emptyFocus(), conversationId: null, lastSeq: 0, justBooked: null, speakingUntil: 0, turnsEnded: 0,
+  responses: [],
 });
 
 const MAX_LINES = 80;
@@ -196,6 +207,9 @@ export function reduceLive(state: LiveState, events: LiveEvent[], now: number = 
         break;
       case "turn_end":
         s = { ...s, turnsEnded: s.turnsEnded + 1 };
+        break;
+      case "latency":
+        if (Number.isFinite(e.response_ms)) s = { ...s, responses: [...s.responses, e.response_ms].slice(-40) };
         break;
     }
   }

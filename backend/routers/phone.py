@@ -78,7 +78,7 @@ try:
     from core.errors import AppError
     from services import call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail
     from services import phone_audio as pa
-    from services import language_policy, phone_asr, phone_greeting, turn_taking
+    from services import digit_repair, language_policy, phone_asr, phone_greeting, turn_taking
     from services.auth import get_current_user_id
     from services.telephony import base as tbase
     from services.telephony import registry
@@ -91,7 +91,7 @@ except ImportError:  # pragma: no cover - imported as backend.routers.phone
         call_control, call_records, caller_memory, caller_profiles, gnani_hold_lines, missed_calls, voicemail,
     )
     from backend.services import phone_audio as pa
-    from backend.services import language_policy, phone_asr, phone_greeting, turn_taking
+    from backend.services import digit_repair, language_policy, phone_asr, phone_greeting, turn_taking
     from backend.services.auth import get_current_user_id
     from backend.services.telephony import base as tbase
     from backend.services.telephony import registry
@@ -518,6 +518,7 @@ class CallSession:
         self._utter_ms = 0                # speech length of the utterance the running turn answers
         self.dtmf_presses = 0
         self.human_requested = False
+        self.keypad: Optional[digit_repair.KeypadEntry] = None   # a number being typed, after the agent asked for it
         self.accepted_at = accepted_at if accepted_at is not None else time.monotonic()
         self._send_lock = asyncio.Lock()
         self.sent_audio_s = 0.0
@@ -551,6 +552,8 @@ class CallSession:
         self._conv_ready = asyncio.Event()
         self._conv_ready.set()                        # set again once `start` has opened the conversation
         self.party: Optional[str] = None              # the other party's number, E.164 (None: unknown); see on_start
+        self.own_number: Optional[str] = None         # the caller ID (inbound) or the number dialled: offered for bookings
+        self.response_ms: List[int] = []              # per answered turn: the caller's last word to the reply's first audio
         self.profile: Optional[Dict[str, Any]] = None   # services/caller_profiles.py profile of a known caller
         self.follow_ups: List[str] = []               # "ask again next time" notes the agent set on this call
         self._profile_task: Optional[asyncio.Task] = None
@@ -583,12 +586,34 @@ class CallSession:
         for key in ("start", "heard", "sentence", "audio"):
             if key in t:
                 row[key + "_ms"] = int((t[key] - base) * 1000)
+        if "audio_ms" in row:
+            # what the caller waited: the end silence the detector needed to call the turn over, then up to the first
+            # audio of the reply (a filler counts: it is what the caller hears first)
+            row["response_ms"] = max(0, row["audio_ms"] + (self._wait_ms or self.end_silence_ms))
+            self._note_response(n, row["response_ms"], row.get("end_wait"))
         self.log.append(row)
         log.info("phone turn %d latency (ms after the end-of-speech event): %s | speculative start: %s | end_wait=%s | "
                  "first audio %s ms after the caller's last word", n,
                  ", ".join(f"{k[:-3]}={v}" for k, v in row.items() if k.endswith("_ms")),
                  "yes" if self.turn_speculative else "no", self._wait_label or "?",
                  row["audio_ms"] + (self._wait_ms or self.end_silence_ms) if "audio_ms" in row else "?")
+
+    def _note_response(self, n: int, ms: int, end_wait: Optional[str]) -> None:
+        """Keep one turn's response time: on the call record (median and slowest), on the live call card
+        (GET /api/phone/live) and as a Watch it think event. Measured on this call, from the end of the caller's speech
+        to the first audio of the reply."""
+        self.response_ms.append(int(ms))
+        ordered = sorted(self.response_ms)
+        mid = len(ordered) // 2
+        median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) // 2
+        call_records.upsert(self.call_sid, response_ms_median=median, response_ms_max=ordered[-1],
+                            response_turns=len(ordered))
+        try:
+            from services import call_events  # noqa: PLC0415
+        except ImportError:  # pragma: no cover
+            from backend.services import call_events  # noqa: PLC0415
+        call_events.emit(self.agent.get("id"), self.conversation_id, None, "latency", turn=n, response_ms=int(ms),
+                         end_wait=end_wait or "")
 
     def tap(self, msg: dict) -> None:
         for m in list(self.monitors):
@@ -748,15 +773,20 @@ class CallSession:
 
     async def _greet_known_caller(self) -> None:
         """The conversation exists: the caller details form starts with the known caller's name and number (the agent does
-        not ask again) and every turn's prompt gets "what we know about this caller"."""
+        not ask again) and every turn's prompt gets "what we know about this caller". A caller we do not know is offered
+        the number they are calling from (services/digit_repair.offer_own_number)."""
         profile = await self._known_caller()
-        if not profile or not self.conversation_id:
+        if not self.conversation_id:
             return
         agent_id = self.agent.get("id")
-        caller_profiles.set_context(self.conversation_id, profile, agent_id)
-        known = bool(await asyncio.to_thread(caller_profiles.live_bookings, profile.get("number"), agent_id)
-                     or profile.get("last_booking"))
+        if profile:
+            caller_profiles.set_context(self.conversation_id, profile, agent_id)
+        known = bool(profile) and bool(
+            await asyncio.to_thread(caller_profiles.live_bookings, profile.get("number"), agent_id)
+            or profile.get("last_booking"))
         form = caller_profiles.prefill_form(profile, confirmed=known)
+        # a caller we do not know yet is asked "Shall I book it on this number?" instead of dictating ten digits
+        form = digit_repair.offer_own_number(form, getattr(self, "own_number", None))
         if form and caller_memory.enabled():
             db = self.b.local_db if self.claims["m"] == "local" else None
             await asyncio.to_thread(caller_memory.save, self.conversation_id, form, db, self.claims["u"])
@@ -823,7 +853,8 @@ class CallSession:
                    pieces: Optional[List[bytes]] = None, asr_pre: Optional["asyncio.Future"] = None,
                    text: Optional[str] = None) -> None:
         """Start a turn on `wav` (the caller's audio for speech recognition). `pieces` are the PCM pieces that make
-        it up (see _Inflight): kept so that the turn, when it is cancelled before it is stored, hands them on."""
+        it up (see _Inflight): kept so that the turn, when it is cancelled before it is stored, hands them on. `text` is
+        what the caller gave when it is not speech (a number typed on the keypad): no speech recognition."""
         self.turn_audio = False
         self.turns += 1
         self.tm = {"end": end} if end is not None else {}
@@ -964,6 +995,8 @@ class CallSession:
             run.asr_previous_user_text = self.last_user_text     # for Gnani's previous_text hint
             run.asr_pre = asr_pre     # this recording's speech recognition, when the call already started it
             run.asr_conversation_id = self.conversation_id   # the caller's known names and the request id (services/hearing.py)
+            if text is not None:
+                run.text_input = text   # typed on the keypad: no speech recognition, the same turn otherwise
             if inflight is not None:
                 inflight.run = run
             b.remember_stream_turn(turn_id, run.user_id)
@@ -1490,7 +1523,8 @@ class CallSession:
         self.turn_speculative = False
         self.tm = {}
         self._conv_ready.clear()
-        self.party = self._party_number(ev) if caller_profiles.enabled() else None
+        self.own_number = self._party_number(ev)    # the caller ID: offered as the booking's number (digit_repair)
+        self.party = self.own_number if caller_profiles.enabled() else None
         if self.party:
             self._profile_task = asyncio.ensure_future(self._lookup_profile())
         if not self.text_mode and self.rec is None and phone_asr.enabled():
@@ -1535,21 +1569,45 @@ class CallSession:
             pass
 
     async def on_dtmf(self, ev: "tbase.Event") -> None:
-        """A key press on the callee's phone. The digit itself is never stored or logged (it may be a card number or a
-        code); only how many keys were pressed is. Pressing 0 asks for a person: the conversation is flagged
-        `needs_human`, which shows on the Calls page. (Vobiz does not document its dtmf event: the codec reads the digit
-        from `dtmf.digit` or `dtmf`, which is unverified.)"""
+        """A key press on the callee's phone. The digit itself is never logged or kept in the call record (it may be a card
+        number or a code); only how many keys were pressed is. Pressing 0 asks for a person: the conversation is flagged
+        `needs_human`, which shows on the Calls page.
+
+        Once the agent has asked for the number on the keypad (services/digit_repair.asks_for_keypad), the keys type a
+        number instead: 0 is a digit, * asks for a person, and # (or ten digits of a mobile number) ends it. The number
+        then becomes the caller's next turn, as if they had said it, so it is read back and booked only on a yes like any
+        other. (Vobiz does not document its dtmf event: the codec reads the digit from `dtmf.digit` or `dtmf`, which is
+        unverified.)"""
         digit = (ev.digit or "").strip()
         if not digit or len(digit) > 2:
             return
         self.dtmf_presses += 1
         self.log.append({"event": "dtmf"})
-        if digit == "0" and not self.human_requested:
-            self.human_requested = True
-            self.log.append({"event": "human_requested"})
-            call_records.upsert(self.call_sid, outcome="human_requested")
-            await self._flag_human()
         call_records.upsert(self.call_sid, dtmf_presses=self.dtmf_presses)
+        if self.keypad is None and digit != "*" and digit != "#" and digit_repair.asks_for_keypad(self.last_agent_text):
+            self.keypad = digit_repair.KeypadEntry()
+        if self.keypad is not None:
+            action, number = self.keypad.press(digit)
+            if action == "human":
+                self.keypad = None
+                await self._ask_for_human()
+            elif action == "submit" and number:
+                self.keypad = None
+                self.log.append({"event": "keypad_number"})       # that a number was typed, never the number
+                await self.clear()
+                await self.stop_turn()
+                self.start_turn(b"", text=number)
+            return
+        if digit == "0":
+            await self._ask_for_human()
+
+    async def _ask_for_human(self) -> None:
+        if self.human_requested:
+            return
+        self.human_requested = True
+        self.log.append({"event": "human_requested"})
+        call_records.upsert(self.call_sid, outcome="human_requested")
+        await self._flag_human()
 
     async def _flag_human(self) -> None:
         if not self.conversation_id:
@@ -2343,7 +2401,9 @@ def _live_view(s: "CallSession") -> Dict[str, Any]:
     return {"conversation_id": s.conversation_id, "call_sid": s.call_sid, "agent_id": s.agent.get("id"),
             "agent_name": s.agent.get("name") or "Agent", "direction": rec.get("direction") or ("outbound" if s.outbound else "inbound"),
             "started_at": int(s.started_at), "seconds": int(time.time() - s.started_at), "human_active": s.human_active,
-            "listeners": len(s.monitors)}
+            "listeners": len(s.monitors),
+            # measured on this call: the caller's last word to the first audio of each reply, oldest first (last 20)
+            "response_ms": list(getattr(s, "response_ms", []) or [])[-20:]}
 
 
 @router.get("/api/phone/live")

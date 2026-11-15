@@ -62,6 +62,7 @@ From the end state, in `backend/bench/theatre/scorer.py`. A scenario passes when
 * scenario 4: the agent read the wrong number back **and** the booking has the corrected one ("read-back catch");
 * scenario 5: the agent offered two times;
 * scenario 7: the agent said the caller's name though the caller never did;
+* scenario 11: after the caller changed only the time ("nahi, 11 nahi, 12 baje"), the agent's next reply read back the new time without the name and number again, and the booking has the new time ("one-detail fix");
 * scenario 8: the agent declined, and the number is in none of its replies, tool calls, the bookings or the caller details. Advisory: the caller's own transcript keeps the number as spoken (see "Findings");
 * advisory: the agent read the day and time back and asked before it committed.
 
@@ -70,19 +71,21 @@ Reported per scenario: fields correct (of the booking fields the scenario names)
 ## Results
 
 <!-- theatre:results:begin -->
-**Scripted model, text run (audio run pending), run 20261104-052003.** Scripted model: the tools, bookings and rules are the real app; the model's wording and choice of tool come from a deterministic stand-in. 9 of 9 passed; fields correct 41/41 (100.0%); first reply and total time not measured (scripted model, latency not meaningful: it answers instantly).
+**Scripted model, text run (audio run pending), run 20261108-175340.** Scripted model: the tools, bookings and rules are the real app; the model's wording and choice of tool come from a deterministic stand-in. 10 of 11 passed; fields correct 50/51 (98.0%); first reply and total time not measured (scripted model, latency not meaningful: it answers instantly).
 
 | # | Scenario | Language | Line | Result | Fields | Turns | First reply | Total | Why |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | Elderly caller, slow Marathi | Marathi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked doctor consultations on 2026-11-05 11:00 in 3 turns; every check passed. |
-| 2 | Rushed Hinglish caller, everything in one breath | Hinglish | 8 kHz G.711, 20 dB (planned) | PASS | 5/5 | 2 / 2 | n/m | n/m | Booked appointments on 2026-11-05 17:00 in 2 turns; every check passed. |
-| 3 | Street noise at 5 dB, Hindi | Hindi | 8 kHz G.711, 5 dB (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked doctor consultations on 2026-11-05 17:00 in 3 turns; every check passed. |
-| 4 | One wrong phone digit, caught by the read-back | Hindi | 8 kHz G.711, 15 dB (planned) | PASS | 5/5 | 4 / 4 | n/m | n/m | Booked service slots on 2026-11-05 14:00 in 4 turns; every check passed. |
-| 5 | Requested slot is full, caller takes the later one | English | 8 kHz G.711, clean (planned) | PASS | 5/5 | 4 / 4 | n/m | n/m | Booked doctor consultations on 2026-11-05 18:15 in 4 turns; every check passed. |
-| 6 | Cancellation by phone | English | 8 kHz G.711, clean (planned) | PASS | 1/1 | 2 / 2 | n/m | n/m | Cancelled the booking in 2 turns; every check passed. |
-| 7 | Returning caller, the desk remembers him | Hinglish | 8 kHz G.711, 20 dB (planned) | PASS | 5/5 | 2 / 2 | n/m | n/m | Booked table bookings on 2026-11-05 20:00 in 2 turns; every check passed. |
-| 8 | Edge case: asks the agent to note an Aadhaar number | Hindi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 5 / 5 | n/m | n/m | Booked doctor consultations on 2026-11-05 10:30 in 5 turns; every check passed. |
-| 9 | Hotel: two nights from next week | Hindi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked rooms on 2026-11-05 12:00 in 3 turns; every check passed. |
+| 1 | Elderly caller, slow Marathi | Marathi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked doctor consultations on 2026-11-09 11:00 in 3 turns; every check passed. |
+| 2 | Rushed Hinglish caller, everything in one breath | Hinglish | 8 kHz G.711, 20 dB (planned) | PASS | 5/5 | 2 / 2 | n/m | n/m | Booked appointments on 2026-11-10 17:00 in 2 turns; every check passed. |
+| 3 | Street noise at 5 dB, Hindi | Hindi | 8 kHz G.711, 5 dB (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked doctor consultations on 2026-11-09 17:00 in 3 turns; every check passed. |
+| 4 | One wrong phone digit, caught by the read-back | Hindi | 8 kHz G.711, 15 dB (planned) | PASS | 5/5 | 4 / 4 | n/m | n/m | Booked service slots on 2026-11-09 14:00 in 4 turns; every check passed. |
+| 5 | Requested slot is full, caller takes the later one | English | 8 kHz G.711, clean (planned) | PASS | 5/5 | 4 / 4 | n/m | n/m | Booked doctor consultations on 2026-11-09 18:15 in 4 turns; every check passed. |
+| 6 | Cancellation by phone | English | 8 kHz G.711, clean (planned) | FAIL | 0/1 | - / 4 | n/m | n/m | The right booking was cancelled failed: booking A34 is booked |
+| 7 | Returning caller, the desk remembers him | Hinglish | 8 kHz G.711, 20 dB (planned) | PASS | 5/5 | 2 / 2 | n/m | n/m | Booked table bookings on 2026-11-09 20:00 in 2 turns; every check passed. |
+| 8 | Edge case: asks the agent to note an Aadhaar number | Hindi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 5 / 5 | n/m | n/m | Booked doctor consultations on 2026-11-09 10:30 in 5 turns; every check passed. |
+| 9 | Hotel: two nights from next week | Hindi | 8 kHz G.711, clean (planned) | PASS | 5/5 | 5 / 5 | n/m | n/m | Booked rooms on 2026-11-09 12:00 in 5 turns; every check passed. |
+| 10 | A son rings again and books for his mother | English | 8 kHz G.711, clean (planned) | PASS | 5/5 | 2 / 2 | n/m | n/m | Booked doctor consultations on 2026-11-09 11:00 in 2 turns; every check passed. |
+| 11 | One detail changed after the read-back | Hinglish | 8 kHz G.711, 20 dB (planned) | PASS | 5/5 | 3 / 3 | n/m | n/m | Booked doctor consultations on 2026-11-09 12:00 in 3 turns; every check passed. |
 <!-- theatre:results:end -->
 
 `n/m` is not measured. The scripted model answers in a few milliseconds, so first-reply and total time say nothing about a real model and are not reported for a scripted run; they are reported only for a run with the live model.

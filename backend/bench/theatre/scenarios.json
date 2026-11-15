@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Nine synthetic callers. Every name, phone number and Aadhaar-style number is invented (the 12-digit number is not a valid Aadhaar). Callers are scripted: a move is used when its trigger matches what the agent just said, so the script branches on the reply. {placeholders} are filled per language by speech.fmt; dates are the first open days of the coming week, picked when the run starts.",
+  "note": "11 synthetic callers. Every name, phone number and Aadhaar-style number is invented (the 12-digit number is not a valid Aadhaar). Callers are scripted: a move is used when its trigger matches what the agent just said, so the script branches on the reply. {placeholders} are filled per language by speech.fmt; dates are the first open days of the coming week, picked when the run starts.",
   "vocab": {
     "asks_details": [
       "name",
@@ -1108,6 +1108,118 @@
           "sunita",
           "kulkarni"
         ],
+        "stop_after": "booking"
+      },
+      "max_turns": 6
+    },
+    {
+      "id": "one-detail-fix-clinic",
+      "n": 11,
+      "title": "One detail changed after the read-back",
+      "persona": "Kavita Rane gives everything at once, hears the read-back and changes only the time: \"nahi, 12 baje\". The agent should read back only the new time and book on her yes.",
+      "template": "clinic",
+      "org": "Shanti Family Clinic",
+      "city": "Pune",
+      "agent_languages": [
+        "en",
+        "hi"
+      ],
+      "language": "hinglish",
+      "language_label": "Hinglish",
+      "voice": {
+        "speed": 1.0
+      },
+      "channel": {
+        "codec": "g711",
+        "snr_db": 20
+      },
+      "tags": [
+        "Hinglish",
+        "one-detail correction",
+        "clinic"
+      ],
+      "caller": {
+        "name": "Kavita Rane",
+        "name_tts": "कविता राणे",
+        "phone": "9820044556"
+      },
+      "setup": {
+        "existing_bookings": [],
+        "full_slots": []
+      },
+      "target": {
+        "time": "12:00"
+      },
+      "moves": [
+        {
+          "id": "open",
+          "first": true,
+          "say": {
+            "text": "Namaste, mera naam {name} hai, {day} ko subah 11 baje doctor ka appointment chahiye, number {phone} hai.",
+            "tts": "नमस्ते, मेरा नाम {name} है, {day} को सुबह 11 बजे डॉक्टर का अपॉइंटमेंट चाहिए, नंबर {phone} है।"
+          }
+        },
+        {
+          "id": "details",
+          "max_uses": 2,
+          "when": {
+            "agent_any": [
+              "@asks_details"
+            ],
+            "agent_none": [
+              "@asks_confirm"
+            ]
+          },
+          "say": {
+            "text": "Mera naam {name} hai aur number {phone}.",
+            "tts": "मेरा नाम {name} है और नंबर {phone}।"
+          }
+        },
+        {
+          "id": "correct",
+          "max_uses": 1,
+          "when": {
+            "agent_any": [
+              "@asks_confirm"
+            ]
+          },
+          "say": {
+            "text": "Nahi, 11 nahi, {time} kar dijiye.",
+            "tts": "नहीं, 11 नहीं, {time} कर दीजिए।"
+          }
+        },
+        {
+          "id": "yes",
+          "max_uses": 3,
+          "when": {
+            "agent_any": [
+              "@asks_confirm",
+              "?"
+            ],
+            "after": "correct"
+          },
+          "say": {
+            "text": "Haan, theek hai, book kar dijiye.",
+            "tts": "हाँ, ठीक है, बुक कर दीजिए।"
+          }
+        }
+      ],
+      "expect": {
+        "bookings": [
+          {
+            "schedule": "Doctor consultations",
+            "date": "target",
+            "time": "12:00",
+            "name_any": [
+              "kavita",
+              "कविता",
+              "rane",
+              "राणे"
+            ],
+            "phone": "caller"
+          }
+        ],
+        "one_detail_fix": true,
         "stop_after": "booking"
       },
       "max_turns": 6

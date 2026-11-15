@@ -257,6 +257,24 @@ def score(scenario: Dict[str, Any], ctx: Dict[str, Any], record: Dict[str, Any],
                             ("the agent read the wrong number back in turn %s and the booking has the right one" % read[0].get("i")) if caught else
                             ("the agent never read the number back, so the wrong digit was not caught" if not read else
                              "the wrong number was read back but the booking does not have the corrected one")))
+    if exp.get("one_detail_fix"):
+        # the caller changed one detail after the read-back: the agent's next reply reads back only that detail (the new
+        # time, not the name and number again), and the booking has the new time
+        fix_turn = next((t for t in turns if (t.get("caller") or {}).get("move") == "correct"), None)
+        after = [t for t in turns if fix_turn is not None and t.get("i", 0) >= fix_turn.get("i", 0)]
+        reply = next(((t.get("agent") or {}).get("text") or "" for t in after
+                      if ctx.get("time") in speech.times_in((t.get("agent") or {}).get("text") or "")), "")
+        name_words = [w.lower() for w in str(ctx.get("name") or "").split() if len(w) > 2]
+        short = bool(reply) and not any(w in reply.lower() for w in name_words) \
+            and not speech.says_digits(reply, str(ctx.get("phone") or ""), minimum=10)
+        booked = any(f["id"] == "time" and f["ok"] for f in checks) or any(
+            b.get("time") == ctx.get("time") for b in bookings_after if b.get("id") not in before_ids)
+        checks.append(check("one_detail_fix", "After the caller changed the time, only the new time was read back, then booked",
+                            short and booked,
+                            (f"the agent said \u201c{reply}\u201d and booked the new time" if short and booked else
+                             "the caller never corrected the time" if fix_turn is None else
+                             "the agent read the whole booking back again" if reply and not short else
+                             "the new time was never read back" if not reply else "the booking does not have the new time")))
     if exp.get("aadhaar"):
         digits = re.sub(r"\D", "", str(ctx.get("aadhaar") or ""))
         push_turn = next((t.get("i") for t in turns if (t.get("caller") or {}).get("move") == "aadhaar_push"), None)

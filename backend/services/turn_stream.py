@@ -467,9 +467,9 @@ async def turn_event_stream(run: TurnRun, file_bytes: bytes, conversation_id: Op
                         put(("llm_done", llm.StreamResult(line, "", "", 0, {}, 0)))
                         return
                 if run.tool_specs:
-                    previous = next((h["text_content"] for h in reversed(run.history) if h["role"] == "agent"),
-                                    None) if run.history_known else None
-                    stream = tools_mod.ToolStream(messages, run.tool_specs, previous_agent_text=previous, prefetched=pre,
+                    previous, earlier = turn_pipeline.agent_turns(run)
+                    stream = tools_mod.ToolStream(messages, run.tool_specs, previous_agent_text=previous,
+                                                  earlier_agent_text=earlier, prefetched=pre,
                                                   known_text=known_text, timeout=stall_timeout,
                                                   total_timeout=llm_timeout, calls=run.tool_objs,
                                                   known_slots=tools_mod.known_slots(run.history, getattr(run, "dropped_slots", ())),

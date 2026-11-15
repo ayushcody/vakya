@@ -23,7 +23,7 @@ _CURRENCY = re.compile(r"(?:₹|\bRs\.?|\bINR\b)\s*(\d+(?:\.\d+)?)(?:\s*/-)?(?:\
 _PERIOD_BEFORE = re.compile(r"(?:सुबह|दोपहर|शाम|रात)\s*$")
 # a phone number: 7+ digits, in one block or in groups joined by ONE space or hyphen ("020 5550 1210", "98765-43210"),
 # optionally with +91 ("500 - 1000", a range, has spaces around the hyphen and is left alone)
-_PHONE = re.compile(r"(?<![\d.:,])(?:\+\s?91[\s-]?)?\d(?:[ -]?\d){6,}(?![\d:,])")
+_PHONE = re.compile(r"(?<![\d.:,])(?:\+\s?91[\s-]?)?\d(?:[ -]?\d){6,}(?![\d:]|,\d)")   # "..., right?" may follow
 _TIME = re.compile(r"(?<![\d.:])(\d{1,2}):(\d{2})(?!\d)(?:\s*(am|pm|a\.m\.|p\.m\.)(?![a-z]))?(\s*बजे)?", re.IGNORECASE)
 _HOUR_AMPM = re.compile(r"(?<![\d.:])(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)(?![a-z])(\s*बजे)?", re.IGNORECASE)
 _HALF_MULT = re.compile(r"(?<![\d.])(\d+)\.5\s*(लाख|करोड़|करोड|हज़ार|हजार)")
@@ -93,9 +93,50 @@ def _phone(match: re.Match) -> str:
             or _AMOUNT_AFTER.match(after)):
         return raw  # a date (2026-10-20) or an amount written without commas (₹2500000): not a phone number
     digits = re.sub(r"\D", "", raw)
-    if raw.lstrip().startswith("+") and digits.startswith("91") and len(digits) > 10:
+    plus = raw.lstrip().startswith("+")
+    if plus and digits.startswith("91") and len(digits) > 10:
         digits = digits[2:]
-    return " ".join(digits)
+    # a number written in groups ("020 5550 1210") is said in those groups; one block is grouped as people say it
+    parts = [re.sub(r"\D", "", p) for p in re.split(r"[ -]+", raw.strip()) if re.sub(r"\D", "", p)]
+    if plus and parts and parts[0] == "91":
+        parts = parts[1:]
+    if len(parts) > 1 and all(len(p) >= 2 for p in parts) and "".join(parts) == digits:
+        return ", ".join(" ".join(p) for p in parts)
+    return spoken_phone(digits)
+
+
+def phone_groups(digits: str) -> List[str]:
+    """The groups a phone number is said in: a 10-digit mobile number 5-5 ("98765", "43210"), with a leading 0 or 91 said
+    on its own first; any other length in groups of four from the start, the last group at least two digits."""
+    digits = re.sub(r"\D", "", str(digits or ""))
+    head: List[str] = []
+    if len(digits) == 12 and digits.startswith("91"):
+        head, digits = ["91"], digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        head, digits = ["0"], digits[1:]
+    if len(digits) == 10:
+        return head + [digits[:5], digits[5:]]
+    if len(digits) <= 5:
+        return head + ([digits] if digits else [])
+    groups = [digits[i:i + 4] for i in range(0, len(digits), 4)]
+    if len(groups) > 1 and len(groups[-1]) < 2:
+        groups[-2:] = [groups[-2] + groups[-1]]
+    return head + groups
+
+
+def spoken_phone(digits: str) -> str:
+    """A phone number as the voice should say it: each digit on its own, the groups (`phone_groups`) apart with a comma,
+    which the voice reads as a short pause: "9 8 7 6 5, 4 3 2 1 0"."""
+    return ", ".join(" ".join(g) for g in phone_groups(digits))
+
+
+def phone_numbers_for_speech(text: str) -> str:
+    """`text` with every phone number written digit by digit in its spoken groups ("98765 43210" -> "9 8 7 6 5, 4 3 2 1 0"),
+    for the voice only, in any language: the comma is a short pause between the groups. Dates and amounts are left alone
+    (see `_phone`). The Hindi voice gets this as part of `hindi_numbers_for_speech`."""
+    if not text or sum(ch.isdigit() for ch in text) < 7:
+        return text
+    return _PHONE.sub(_phone, unicodedata.normalize("NFC", text).translate(_DEVA_DIGITS))
 
 
 def _half(match: re.Match) -> str:
@@ -106,7 +147,7 @@ def _half(match: re.Match) -> str:
 
 def hindi_numbers_for_speech(text: str) -> str:
     """`text` with its digits written for the Hindi voice: grouped amounts without their commas, a currency mark as
-    "रुपये" after the amount, phone numbers digit by digit, clock times as they are said, "1.5 लाख" as "डेढ़ लाख",
+    "रुपये" after the amount, phone numbers digit by digit in their spoken groups (`spoken_phone`), clock times as they are said, "1.5 लाख" as "डेढ़ लाख",
     other decimals with "दशमलव", "%" as "प्रतिशत". Text without digits comes back unchanged."""
     if not text or not any(ch.isdigit() for ch in text):
         return text

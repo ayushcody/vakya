@@ -14,6 +14,7 @@ import { CallLink } from "./CallLink";
 import { Composer } from "./Composer";
 import { useDelivery } from "./Delivery";
 import { LiveCalendar } from "./LiveCalendar";
+import { ResponseTime } from "./ResponseTime";
 import { Legend, LiveTranscript } from "./LiveTranscript";
 import { useLiveEvents } from "./useLiveEvents";
 
@@ -137,10 +138,13 @@ export function LiveCall({ agentId }: { agentId: string }) {
               </button>
             </motion.div>
           ) : (
-            <motion.p key="status" exit={{ opacity: 0 }} className="flex items-center gap-2.5 text-[15px] text-text-secondary" role="status">
-              <span aria-hidden className={cn("size-2.5 rounded-full", callOn ? "bg-accent-success" : "bg-border-3")} />
-              {callOn ? "On a call" : "No call in progress"}
-            </motion.p>
+            <motion.div key="status" exit={{ opacity: 0 }} className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <p className="flex items-center gap-2.5 text-[15px] text-text-secondary" role="status">
+                <span aria-hidden className={cn("size-2.5 rounded-full", callOn ? "bg-accent-success" : "bg-border-3")} />
+                {callOn ? "On a call" : "No call in progress"}
+              </p>
+              <ResponseTime ms={state.responses} />
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

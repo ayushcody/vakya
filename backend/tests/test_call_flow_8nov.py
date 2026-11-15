@@ -16,7 +16,7 @@ from services import (
 from services import llm  # noqa: E402
 from tests.test_tools_client import BOOKED, FakeHub
 
-FULL = ("Tuesday 10 November at 5 pm, for Ayush, phone number ending 6 2 9 5, and I'll send the confirmation on WhatsApp. "
+FULL = ("Tuesday 10 November at 5 pm, for Ayush, phone number 8 7 8 8 9, 9 6 2 9 5, and I'll send the confirmation on WhatsApp. "
         "Shall I book it?")
 SHORT = "Not yet. I still need your confirmation. Shall I book Tuesday 10 November at 5 PM for Ayush?"
 ARGS = {"name": "Ayush", "phone": "8788996295", "date": "2026-11-09", "time": "17:00"}
@@ -79,7 +79,7 @@ def test_the_prompt_says_to_ask_once_and_never_repeat_the_number_or_the_name():
 def test_the_read_back_is_one_sentence_with_day_date_time_name_number_and_whatsapp(hub):
     c = tools.execute(BOOK, ARGS, previous_agent_text="Would 5 pm on Monday suit you?", caller_text="Yeah, sure.")
     assert not c.ok and c.value.startswith("NOT DONE") and hub.calls == []
-    assert ("Monday 9 November at 5 pm, for Ayush, phone number ending 6 2 9 5, and I'll send the confirmation on WhatsApp. "
+    assert ("Monday 9 November at 5 pm, for Ayush, phone number 8 7 8 8 9, 9 6 2 9 5, and I'll send the confirmation on WhatsApp. "
             "Shall I book it?") in c.value
     spoken = rb.sentences(ARGS, whatsapp=True)["en"]
     assert rb.slot_readback_ok(spoken, date(2026, 11, 9), time(17, 0), "Ayush", "8788996295") and rb.mentions_whatsapp(spoken)

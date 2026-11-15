@@ -87,4 +87,6 @@ export interface LiveCall {
   seconds: number;
   human_active: boolean;
   listeners: number;
+  /** Measured on this call, per answered turn: the caller's last word to the first audio of the reply (ms). */
+  response_ms?: number[];
 }
