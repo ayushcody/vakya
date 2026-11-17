@@ -4,7 +4,7 @@
 
 # Vakya: call once, it's booked
 
-**Clinics miss calls because the front desk is busy with the person in front of them. Vakya answers the phone in Hindi, Marathi or English, books a free slot, and sends the confirmation on WhatsApp.**
+**Clinics miss calls because the front desk is busy with the person in front of them. Vakya answers the phone in Hindi, Hinglish, Marathi or English (and can be set up in seven more Indian languages), books a free slot, reads it back, and sends the confirmation on WhatsApp.**
 
 Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech: **Gnani Prisma** (speech to text) and **Timbre** (voice). Replies: a hosted language model. Telephony: **Vobiz**.
 
@@ -17,18 +17,49 @@ Entry for Gnani AI's *Great Indian AI Internship Challenge*. Speech: **Gnani Pri
 | One-page pitch | [`Pitch.pdf`](Pitch.pdf) · [online](https://vakya.ayushchougula.in/vakya-pitch.pdf) · [`docs/PITCH.md`](docs/PITCH.md) |
 | All documentation | [`docs/README.md`](docs/README.md) |
 
-**Contents:** [What it does](#what-it-does-in-30-seconds) · [Try it](#try-it) · [Results](#measured-results) · [Safety](#safety-rules) · [Architecture](#architecture) · [Limitations](#limitations) · [Configuration](#configuration) · [Repository map](#repository-map) · [Team](#team)
+**Contents:** [What it does](#what-it-does-in-30-seconds) · [Languages](#language-support) · [Try it](#try-it) · [Results](#measured-results) · [Safety](#safety-rules) · [Architecture](#architecture) · [Limitations](#limitations) · [Configuration](#configuration) · [Repository map](#repository-map) · [Working on the code](#working-on-the-code) · [Team](#team)
 
 ## What it does in 30 seconds
 
 - Picks up a real phone call (Vobiz, Indian mobile) and says it is an AI.
 - Understands Hindi, Marathi, English and mixed speech through Gnani Prisma; speaks through Gnani Timbre.
-- Checks the schedule, offers a free time, reads the day, time and phone number back, and books only after the caller says yes.
-- Moves or cancels a booking the same way. Verified on 8 Nov: booking A28 created, moved from 5 to 6 PM, A27 cancelled, all in Hindi, each on the first "yes".
+- Checks the schedule, offers a free time, reads the day, time and whole phone number back in spoken groups, and books only after the caller says yes. A caller can change one detail without starting over, or type the number on the keypad.
+- Moves or cancels a booking the same way. Verified on live calls on 8 and 9 Nov: bookings made, moved and cancelled in Hindi and Hinglish, each on the first "yes" (the 9 Nov call is the demo video).
 - Creates, moves and deletes the Google Calendar event.
 - Sends a WhatsApp message from an approved template (confirmed, moved, cancelled) in English, Hindi or Marathi.
 - Remembers the caller by phone number: greets by name, mentions the upcoming appointment, tracks rescheduled and cancelled status.
 - Gives the owner a desk to watch calls live, take one over, edit schedules, and see every booking with its proof.
+
+## Language support
+
+Vakya mirrors the caller: it answers in the language **and script** of the caller's last turn, keeps that language through short replies like "ok" or a phone number, and switches when asked ("Marathi mein boliye", "please speak English"). A request for a language the desk is not set up for gets a polite refusal and the list of languages it does speak. Rules and tests: [`backend/services/language_policy.py`](backend/services/language_policy.py), `backend/tests/test_language_policy.py`.
+
+### By language
+
+| Language | Hears (Gnani Prisma) | Speaks (Gnani Timbre) | Status |
+| --- | --- | --- | --- |
+| Hindi | `hi-IN` | `hi-IN` (default voice Nalini) | **Tested on live phone calls** |
+| Hinglish (Hindi with English words, code-mixed) | `hi-IN` + `en-IN`, `codemix` format | `hi-en` (default voice Poorvi) | **Tested on live phone calls** |
+| English (Indian) | `en-IN` | `en-IN` (default voice Kaveri) | **Tested on live phone calls** |
+| Marathi | `mr-IN` | `mr-IN` | **Built and tested in code and on the noise report card**; not yet on a live call |
+| Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi | `bn-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `gu-IN`, `pa-IN` | same codes | **Selectable**: speech in and out goes through Gnani, replies mirror the script; booking phrases are not tuned yet (see below) |
+| Urdu, Odia, Assamese | auto-detect only | no Gnani voice | Listed in the desk, **not recommended** for calls |
+
+Up to four languages per desk are sent to Prisma together (`prisma-v3.0`); with none set, Prisma auto-detects. Voices are chosen per language from `GNANI_VOICES` (`Name:lang,...`).
+
+### By feature
+
+| Feature | English | Hindi | Hinglish | Marathi | Other Indian languages |
+| --- | --- | --- | --- | --- | --- |
+| Greeting, AI disclosure, missed-call callback line | Yes | Yes | Yes | Yes | English or Hindi fallback |
+| Days and times from speech ("बुधवार शाम 6 बजे", "गुरुवारी सकाळी") | Yes | Yes | Yes | Yes | Through the language model only |
+| Numbers, lakh amounts, phone digits read back in spoken groups | Yes | Yes | Yes | Yes | Not yet |
+| Read-back then commit on a spoken yes (हाँ, हो, चालेल, yes) | Yes | Yes | Yes | Yes | Not yet |
+| "Running late" and token-queue lines | Yes | Yes | Yes | Yes | Not yet |
+| WhatsApp templates (booked, moved, cancelled) | Yes | Yes | Sent as the Hindi template | Yes | Not yet |
+| Other Indian script in a reply mapped back to Devanagari | n/a | Yes | Yes | Yes | n/a |
+
+**Adding a language:** add its Gnani code in `backend/services/gnani.py` (`LANGUAGE_CODES`), day and time words in `backend/services/when.py`, number words in `backend/services/speech_numbers.py`, yes/no words in `backend/services/readback.py`, greetings in `backend/services/phone_greeting.py`, the name in `frontend/src/components/agents/languages.ts`, then add tests next to the existing Marathi ones.
 
 ## Try it
 
@@ -129,7 +160,7 @@ Settings live in `backend/.env`; [`backend/.env.example`](backend/.env.example) 
 | --- | --- |
 | `GNANI_API_KEY` | Gnani Prisma, Timbre and cloning |
 | `GNANI_CREDIT_BUDGET`, `GNANI_CREDIT_RESERVE_PCT` | Credit budget and the share kept for live calls (5000 and 20) |
-| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Replies from a hosted language model reached through an OpenAI-compatible endpoint; all three are set in `.env` |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Replies from a hosted language model reached through a standard chat-completions endpoint; all three are set in `.env` |
 | `EMBEDDINGS_API_KEY`, `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL` | Hosted embeddings for document search; search falls back to keywords without them |
 | `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_CALLER_ID` | Real phone calls; without them only the browser call works |
 | `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_FILE` | Calendar sync |
@@ -149,6 +180,43 @@ Settings live in `backend/.env`; [`backend/.env.example`](backend/.env.example) 
 | `vakya`, `vakya.ps1` | Set up, start, check and test |
 
 Project state: [`STATUS.md`](STATUS.md).
+
+## Working on the code
+
+For anyone, person or coding agent, picking this repository up.
+
+**Run and check**
+
+```bash
+./vakya setup          # backend venv, frontend packages, and the pre-push hook (.githooks/pre-push)
+./vakya start          # API :8020, web app :3010; ./vakya status, ./vakya stop, ./vakya restart
+./vakya test           # every backend and frontend test; also runs before each push
+cd backend && .venv/bin/python -m pytest -q tests/test_language_policy.py   # one backend file
+cd frontend && npm test -- languages                                       # one frontend suite (jest)
+```
+
+**Where things live**
+
+| Change | Start here |
+| --- | --- |
+| What the agent says and when | `backend/services/turn_pipeline.py`, `turn_stream.py`, `agent_prompt.py` |
+| Booking, moving, cancelling, read-back | `backend/services/tools.py`, `readback.py`, `schedule_tools.py`, `schedule_bookings.py` |
+| Dates, times, numbers, digits | `backend/services/when.py`, `speech_numbers.py`, `spoken_digits.py`, `digit_repair.py` |
+| Languages | `backend/services/language_policy.py`, `gnani.py`, `hinglish.py` |
+| Gnani calls, credits, retries | `backend/services/gnani_client.py`, `gnani_gateway.py`, `usage_ledger.py` |
+| Phone line | `backend/routers/phone.py`, `backend/services/telephony/`, `phone_audio.py` |
+| WhatsApp, Calendar | `backend/services/whatsapp.py`, `gcal.py`, `booking_notify.py` |
+| Front desk types | `backend/templates/agents/*.json` and `*.md` |
+| Owner's desk | `frontend/src/app/(app)/desk/` |
+| Public site | `frontend/src/components/site/`, read-only demo data in `frontend/public/demo-desk.json` |
+
+**Rules the code follows**
+
+- Days, times, slots and availability are worked out in code, never by the language model.
+- Nothing is booked, moved or cancelled before the details are read back and the caller says yes.
+- Tests run against fakes of Gnani, Vobiz, WhatsApp and Calendar; no test needs a key or the network. Tests that depend on today's date freeze the clock.
+- Secrets live only in `backend/.env` (ignored by git); `backend/.env.example` lists every setting.
+- Only call numbers whose owners agreed to an AI call (`PHONE_ALLOWED_NUMBERS`).
 
 ## Team
 
